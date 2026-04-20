@@ -1,0 +1,296 @@
+part of 'client_home_screen.dart';
+
+extension _ClientHomeActions on _ClientHomeScreenState {
+  void _listenToRealtime() {
+    _realtimeSubscription = ref.listenManual<ClientRealtimeState>(
+      clientRealtimeProvider,
+      (previous, next) {
+        final position = next.lastDriverPosition;
+        if (position != null && position != previous?.lastDriverPosition) {
+          ref
+              .read(mapControllerProvider(MapMode.client).notifier)
+              .applyDriverPositionUpdate(position);
+          ref.read(clientRealtimeProvider.notifier).consumeDriverPosition();
+        }
+
+        final message = next.lastMessage;
+        if (message == null || message == previous?.lastMessage || !mounted) {
+          return;
+        }
+        _showSnackBar(message);
+        _showNotification(message);
+        ref.read(clientRealtimeProvider.notifier).consumeMessage();
+      },
+    );
+  }
+
+  void _markPriceAsEdited() {
+    if (!_isApplyingSuggestedPrice) {
+      _priceManuallyEdited = true;
+    }
+  }
+
+  void _schedulePriceEstimate() {
+    _priceEstimateDebounce?.cancel();
+    final pickup = _pickupAddress;
+    final dropoff = _dropoffAddress;
+    if (pickup == null || dropoff == null) {
+      ref.read(clientHomeControllerProvider.notifier).clearPriceEstimate();
+      return;
+    }
+    _priceEstimateDebounce = Timer(const Duration(milliseconds: 600), () {
+      _estimateSuggestedPrice(pickup, dropoff);
+    });
+  }
+
+  Future<PriceEstimate?> _estimateSuggestedPrice(
+    AddressResult pickup,
+    AddressResult dropoff,
+  ) async {
+    final estimate =
+        await ref.read(clientHomeControllerProvider.notifier).estimatePrice(
+              pickupLat: pickup.latitude,
+              pickupLng: pickup.longitude,
+              dropoffLat: dropoff.latitude,
+              dropoffLng: dropoff.longitude,
+            );
+    if (!mounted || estimate == null) {
+      return estimate;
+    }
+    if (_priceController.text.trim().isEmpty || !_priceManuallyEdited) {
+      _isApplyingSuggestedPrice = true;
+      _priceController.text = estimate.estimatedPrice.round().toString();
+      _isApplyingSuggestedPrice = false;
+      _priceManuallyEdited = false;
+    }
+    return estimate;
+  }
+
+  Future<void> _openAddressSearch(AddressSearchMode mode) async {
+    final result = await context.push<AddressResult>(
+      AppRoutes.addressSearchFor(
+        mode == AddressSearchMode.pickup ? 'pickup' : 'dropoff',
+      ),
+    );
+    if (!mounted || result == null) {
+      return;
+    }
+    _updateUi(() {
+      if (mode == AddressSearchMode.pickup) {
+        _pickupAddress = result;
+      } else {
+        _pickupAddress ??= _currentPickupAddress();
+        _dropoffAddress = result;
+      }
+    });
+    if (mode == AddressSearchMode.dropoff) {
+      await _startSearchAfterDestinationSelected();
+      return;
+    }
+    _schedulePriceEstimate();
+  }
+
+  AddressResult _currentPickupAddress() {
+    final position =
+        ref.read(mapControllerProvider(MapMode.client)).currentPosition;
+    if (position != null) {
+      return AddressResult(
+        name: 'Ma position actuelle',
+        displayName: 'Position GPS actuelle',
+        latitude: position.latitude,
+        longitude: position.longitude,
+        type: 'current_location',
+      );
+    }
+    return const AddressResult(
+      name: 'Niamey centre',
+      displayName: 'Position approximative - GPS indisponible',
+      latitude: 13.5137,
+      longitude: 2.1098,
+      type: 'current_location',
+    );
+  }
+
+  Future<void> _startSearchAfterDestinationSelected() async {
+    final pickup = _pickupAddress;
+    final dropoff = _dropoffAddress;
+    if (pickup == null || dropoff == null) {
+      return;
+    }
+    _showSnackBar('Recherche des chauffeurs...', tone: AppSnackbarTone.info);
+    await _estimateSuggestedPrice(pickup, dropoff);
+    if (!mounted) {
+      return;
+    }
+    await _submitRide();
+  }
+
+  Future<void> _submitRide() async {
+    final input = _buildRideInput();
+    if (input == null) {
+      return;
+    }
+    final success =
+        await ref.read(clientHomeControllerProvider.notifier).createRide(input);
+    if (!mounted || !success) {
+      _showSnackBar(
+        ref.read(clientHomeControllerProvider).createError ??
+            'Creation de course impossible.',
+        tone: AppSnackbarTone.error,
+      );
+      return;
+    }
+    final createdRideId = ref.read(clientHomeControllerProvider).rides.first.id;
+    _resetForm();
+    _showSnackBar('Course creee avec succes.', tone: AppSnackbarTone.success);
+    context.push(AppRoutes.clientNegotiation(createdRideId));
+  }
+
+  RideRequestCreateInput? _buildRideInput() {
+    final pickup = _pickupAddress;
+    final dropoff = _dropoffAddress;
+    final price = double.tryParse(_priceController.text.trim());
+    if (pickup == null || dropoff == null) {
+      _showSnackBar(
+        'Choisis le depart et la destination.',
+        tone: AppSnackbarTone.error,
+      );
+      return null;
+    }
+    if (_priceController.text.trim().isNotEmpty &&
+        (price == null || price <= 0)) {
+      _showSnackBar('Entre un prix valide en FCFA.',
+          tone: AppSnackbarTone.error);
+      return null;
+    }
+    return RideRequestCreateInput(
+      pickupLocation: pickup.name,
+      dropoffLocation: dropoff.name,
+      clientLatitude: pickup.latitude,
+      clientLongitude: pickup.longitude,
+      dropoffLatitude: dropoff.latitude,
+      dropoffLongitude: dropoff.longitude,
+      estimatedPrice: price,
+    );
+  }
+
+  void _clearPickup() {
+    _updateUi(() => _pickupAddress = null);
+    _schedulePriceEstimate();
+  }
+
+  void _clearDropoff() {
+    _updateUi(() => _dropoffAddress = null);
+    _schedulePriceEstimate();
+  }
+
+  void _resetForm() {
+    _priceEstimateDebounce?.cancel();
+    _updateUi(() {
+      _pickupAddress = null;
+      _dropoffAddress = null;
+    });
+    _priceController.clear();
+    _priceManuallyEdited = false;
+    ref.read(clientHomeControllerProvider.notifier).clearPriceEstimate();
+  }
+
+  void _openRide(ClientRide? ride) {
+    if (ride == null) {
+      return;
+    }
+    if (ride.status == 'pending') {
+      context.push(AppRoutes.clientNegotiation(ride.id));
+    } else {
+      context.go(AppRoutes.clientMapWithRide(ride.id));
+    }
+  }
+
+  Future<void> _openGeneralReport() async {
+    _updateUi(() => _isMenuOpen = false);
+    final activeRide =
+        _activeRide(ref.read(clientHomeControllerProvider).rides);
+    final draft = await showRideReportBottomSheet(
+      context,
+      onSubmit: (draft) async {
+        if (activeRide == null) {
+          await Future<void>.delayed(const Duration(milliseconds: 350));
+          return;
+        }
+        await ref.read(trackingRemoteDatasourceProvider).reportRide(
+              rideId: activeRide.id,
+              reason: draft.reason,
+              description: draft.description,
+            );
+      },
+    );
+    if (mounted && draft != null) {
+      _showSnackBar('Signalement envoye.', tone: AppSnackbarTone.success);
+    }
+  }
+
+  ClientRide? _activeRide(List<ClientRide> rides) {
+    for (final ride in rides) {
+      if (ride.status == 'pending' ||
+          ride.status == 'accepted' ||
+          ride.status == 'started') {
+        return ride;
+      }
+    }
+    return null;
+  }
+
+  void _showSnackBar(String message, {AppSnackbarTone? tone}) {
+    AppSnackbar.show(
+      context,
+      message: message,
+      tone: tone ?? _snackbarToneForMessage(message),
+    );
+  }
+
+  void _showNotification(String message) {
+    _updateUi(() => _notificationMessage = message);
+    _notificationTimer?.cancel();
+    _notificationTimer = Timer(const Duration(seconds: 4), () {
+      _updateUi(() => _notificationMessage = null);
+    });
+  }
+
+  AppSnackbarTone _snackbarToneForMessage(String message) {
+    final value = message.toLowerCase();
+    if (value.contains('terminee') || value.contains('succes')) {
+      return AppSnackbarTone.success;
+    }
+    if (value.contains('annulee')) {
+      return AppSnackbarTone.error;
+    }
+    return AppSnackbarTone.info;
+  }
+
+  NotificationCardTone _notificationToneForMessage(String message) {
+    final value = message.toLowerCase();
+    if (value.contains('terminee')) {
+      return NotificationCardTone.success;
+    }
+    if (value.contains('annulee')) {
+      return NotificationCardTone.error;
+    }
+    return NotificationCardTone.info;
+  }
+
+  String _displayName(SessionState session) {
+    final name = session.name?.trim();
+    if (name != null && name.isNotEmpty) {
+      return name;
+    }
+    return session.phoneNumber ?? 'Client Noor';
+  }
+
+  String _initials(String value) {
+    final words = value.split(' ').where((part) => part.isNotEmpty).toList();
+    if (words.length >= 2) {
+      return '${words.first[0]}${words[1][0]}'.toUpperCase();
+    }
+    return value.substring(0, value.length >= 2 ? 2 : 1).toUpperCase();
+  }
+}

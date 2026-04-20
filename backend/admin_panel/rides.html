@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Courses - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <h2>Noor Admin</h2>
+    <a href="dashboard.html">Dashboard</a>
+    <a href="zones.html">Zones & tarifs</a>
+    <a class="active" href="rides.html">Courses</a>
+    <a href="users.html">Users</a>
+    <a href="drivers.html">Drivers a valider</a>
+    <button onclick="AdminApi.logout()">Logout</button>
+  </aside>
+  <main class="content">
+    <div class="page-head">
+      <h1>Courses</h1>
+      <select id="status-filter" onchange="AdminApi.renderRides()">
+        <option value="">Tous statuts</option>
+        <option value="pending">pending</option>
+        <option value="accepted">accepted</option>
+        <option value="started">started</option>
+        <option value="completed">completed</option>
+        <option value="cancelled">cancelled</option>
+      </select>
+    </div>
+    <section class="panel">
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Client</th><th>Driver</th><th>Depart</th><th>Destination</th><th>Prix</th><th>Statut</th><th>Signalements</th><th>Date</th></tr>
+        </thead>
+        <tbody id="rides-table"></tbody>
+      </table>
+    </section>
+  </main>
+  <dialog id="reports-modal">
+    <div class="modal-form">
+      <h2>Signalements de la course</h2>
+      <div id="reports-modal-content"></div>
+      <div class="actions">
+        <button class="ghost" onclick="AdminApi.closeReportsModal()">Fermer</button>
+      </div>
+    </div>
+  </dialog>
+  <script src="assets/api.js"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadRides();</script>
+</body>
+</html>

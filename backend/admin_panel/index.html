@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Noor Express Admin</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <h1>Noor Express</h1>
+    <p>Connexion administration</p>
+    <form id="login-form">
+      <label>Username</label>
+      <input id="username" autocomplete="username" required>
+      <label>Password</label>
+      <input id="password" type="password" autocomplete="current-password" required>
+      <button type="submit">Se connecter</button>
+    </form>
+    <button class="ghost" id="init-admin">Créer le premier admin</button>
+    <p class="hint">Dev uniquement : le bouton crée le compte si aucun admin n'existe.</p>
+    <p id="message" class="message"></p>
+  </main>
+  <script src="assets/api.js"></script>
+  <script>
+    AdminApi.showLoginMessage();
+    document.getElementById('login-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      await AdminApi.login(
+        document.getElementById('username').value,
+        document.getElementById('password').value
+      );
+    });
+    document.getElementById('init-admin').addEventListener('click', async () => {
+      await AdminApi.initAdmin(
+        document.getElementById('username').value || 'admin',
+        document.getElementById('password').value || 'admin123'
+      );
+    });
+  </script>
+</body>
+</html>

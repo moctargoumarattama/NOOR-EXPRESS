@@ -1,0 +1,206 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../app/app_routes.dart';
+import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/app_button.dart';
+import '../../data/models/driver_profile_model.dart';
+import '../controllers/onboarding_controller.dart';
+
+class DriverOnboardingStatusScreen extends ConsumerStatefulWidget {
+  const DriverOnboardingStatusScreen({super.key});
+
+  @override
+  ConsumerState<DriverOnboardingStatusScreen> createState() =>
+      _DriverOnboardingStatusScreenState();
+}
+
+class _DriverOnboardingStatusScreenState
+    extends ConsumerState<DriverOnboardingStatusScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      await ref.read(driverOnboardingControllerProvider.notifier).load();
+      if (!mounted) {
+        return;
+      }
+      final state = ref.read(driverOnboardingControllerProvider);
+      if (state.profile == null && state.errorMessage == null) {
+        context.go(AppRoutes.driverOnboarding);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(driverOnboardingControllerProvider);
+    final profile = state.profile;
+
+    return Scaffold(
+      backgroundColor: AppColors.cloud,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: state.isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _StatusCard(
+                      profile: profile,
+                      errorMessage: state.errorMessage,
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusCard extends StatelessWidget {
+  const _StatusCard({
+    required this.profile,
+    required this.errorMessage,
+  });
+
+  final DriverOnboardingProfileModel? profile;
+  final String? errorMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final content = _content(profile, errorMessage);
+    return Container(
+      padding: const EdgeInsets.all(26),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: const [
+          BoxShadow(
+            color: AppColors.shadow,
+            blurRadius: 28,
+            offset: Offset(0, 12),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 40,
+            backgroundColor: content.color.withValues(alpha: 0.12),
+            child: Icon(content.icon, color: content.color, size: 42),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            content.title,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            content.message,
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: AppColors.stone, height: 1.4),
+          ),
+          if (content.reason != null) ...[
+            const SizedBox(height: 14),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF1F0),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                content.reason!,
+                style: const TextStyle(
+                  color: AppColors.coral,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+          const SizedBox(height: 24),
+          AppButton(
+              label: content.primaryLabel,
+              onPressed: content.primaryTap(context)),
+          const SizedBox(height: 10),
+          AppButton.secondary(
+            label: 'Retour a l accueil',
+            onPressed: () => context.go(AppRoutes.driverHome),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _StatusContent _content(
+    DriverOnboardingProfileModel? profile,
+    String? errorMessage,
+  ) {
+    if (profile == null) {
+      return _StatusContent(
+        icon: Icons.assignment_rounded,
+        color: AppColors.emerald,
+        title: 'Dossier driver requis',
+        message: errorMessage ?? 'Completez votre dossier pour etre verifie.',
+        primaryLabel: 'Completer mon dossier',
+        primaryTap: (context) => () => context.go(AppRoutes.driverOnboarding),
+      );
+    }
+    switch (profile.verificationStatus) {
+      case DriverVerificationStatus.verified:
+        return _StatusContent(
+          icon: Icons.verified_rounded,
+          color: AppColors.emerald,
+          title: 'Compte verifie !',
+          message: 'Vous pouvez maintenant recevoir des courses.',
+          primaryLabel: 'Commencer',
+          primaryTap: (context) => () => context.go(AppRoutes.driverHome),
+        );
+      case DriverVerificationStatus.rejected:
+        return _StatusContent(
+          icon: Icons.cancel_rounded,
+          color: AppColors.coral,
+          title: 'Dossier non accepte',
+          message: 'Corrigez votre dossier et resoumettez-le.',
+          reason: profile.rejectionReason,
+          primaryLabel: 'Resoumettre',
+          primaryTap: (context) => () => context.go(AppRoutes.driverOnboarding),
+        );
+      case DriverVerificationStatus.pending:
+        return _StatusContent(
+          icon: Icons.hourglass_top_rounded,
+          color: AppColors.gold,
+          title: 'Dossier en verification',
+          message:
+              'Notre equipe examine vos documents. Vous serez notifie sous 24h.',
+          primaryLabel: 'Voir l accueil',
+          primaryTap: (context) => () => context.go(AppRoutes.driverHome),
+        );
+    }
+  }
+}
+
+class _StatusContent {
+  const _StatusContent({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.message,
+    required this.primaryLabel,
+    required this.primaryTap,
+    this.reason,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String message;
+  final String primaryLabel;
+  final String? reason;
+  final VoidCallback Function(BuildContext context) primaryTap;
+}

@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+httptools
+uvloop; sys_platform != "win32"
+pydantic
+websockets
+sqlalchemy
+asyncmy
+cryptography
+bcrypt
+python-dotenv
+pydantic-settings
+firebase-admin

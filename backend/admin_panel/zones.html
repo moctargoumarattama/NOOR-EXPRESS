@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pricing - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <h2>Noor Admin</h2>
+    <a href="dashboard.html">Dashboard</a>
+    <a class="active" href="zones.html">Pricing</a>
+    <a href="rides.html">Courses</a>
+    <a href="users.html">Users</a>
+    <a href="drivers.html">Drivers a valider</a>
+    <button onclick="AdminApi.logout()">Logout</button>
+  </aside>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Tarification Noor Express</h1>
+        <p class="hint">Les changements s'appliquent immediatement aux nouvelles courses.</p>
+      </div>
+      <button onclick="AdminApi.loadPricingAdmin()">Actualiser</button>
+    </div>
+    <p id="message" class="message"></p>
+
+    <section class="panel pricing-grid">
+      <article>
+        <h2>1. Mode actif</h2>
+        <div class="segmented">
+          <label><input type="radio" name="pricing-mode" value="distance"> Distance</label>
+          <label><input type="radio" name="pricing-mode" value="zone"> Zones</label>
+          <label><input type="radio" name="pricing-mode" value="mixed"> Mixte</label>
+        </div>
+      </article>
+      <article>
+        <h2>2. Parametres globaux</h2>
+        <div class="form-grid">
+          <label>Prix/km<input id="settings-km" type="number" step="0.01"></label>
+          <label>Prix minimum<input id="settings-min" type="number" step="0.01"></label>
+          <label>Commission %<input id="settings-commission" type="number" step="0.01"></label>
+          <label>Seuil longue course (min)<input id="settings-long-threshold" type="number"></label>
+          <label>Minimum longue course<input id="settings-long-min" type="number" step="0.01"></label>
+        </div>
+        <button onclick="AdminApi.savePricingSettings()">Sauvegarder les parametres</button>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="page-head">
+        <h2>3. Zones / quartiers</h2>
+        <button onclick="AdminApi.openZoneModal()">Ajouter une zone</button>
+      </div>
+      <table>
+        <thead><tr><th>Nom</th><th>Rayon</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="zones-table"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="page-head">
+        <h2>4. Tarifs fixes zone -> zone</h2>
+        <button onclick="AdminApi.openFareModal()">Ajouter un tarif</button>
+      </div>
+      <table>
+        <thead><tr><th>Depart</th><th>Arrivee</th><th>Prix fixe</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="fares-table"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <div class="page-head">
+        <h2>5. Regles horaires</h2>
+        <button onclick="AdminApi.openTimeRuleModal()">Ajouter une regle</button>
+      </div>
+      <table>
+        <thead><tr><th>Nom</th><th>Horaire</th><th>Surcharge</th><th>Actif</th><th></th></tr></thead>
+        <tbody id="time-rules-table"></tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>6. Simulation</h2>
+      <div class="form-grid">
+        <label>Distance km<input id="preview-distance" type="number" step="0.1" value="8.3"></label>
+        <label>Zone depart<select id="preview-origin"></select></label>
+        <label>Zone arrivee<select id="preview-destination"></select></label>
+        <label>Heure<input id="preview-time" type="datetime-local"></label>
+        <label>Duree estimee min<input id="preview-duration" type="number" value="15"></label>
+      </div>
+      <button onclick="AdminApi.previewPricing()">Simuler le prix</button>
+      <div id="preview-result" class="preview-card"></div>
+    </section>
+  </main>
+
+  <dialog id="zone-modal">
+    <form method="dialog" id="zone-form" class="modal-form">
+      <h2>Zone</h2>
+      <input type="hidden" id="zone-id">
+      <label>Nom<input id="zone-name" required></label>
+      <label>Description<input id="zone-description"></label>
+      <label>Latitude<input id="zone-lat" type="number" step="0.000001" required></label>
+      <label>Longitude<input id="zone-lng" type="number" step="0.000001" required></label>
+      <label>Rayon km<input id="zone-radius" type="number" step="0.1" required></label>
+      <div class="actions"><button type="button" class="ghost" onclick="AdminApi.closeZoneModal()">Annuler</button><button type="submit">Sauvegarder</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="fare-modal">
+    <form method="dialog" id="fare-form" class="modal-form">
+      <h2>Tarif fixe</h2>
+      <input type="hidden" id="fare-id">
+      <label>Depart<select id="fare-origin"></select></label>
+      <label>Arrivee<select id="fare-destination"></select></label>
+      <label>Prix fixe FCFA<input id="fare-price" type="number" step="0.01" required></label>
+      <div class="actions"><button type="button" class="ghost" onclick="AdminApi.closeFareModal()">Annuler</button><button type="submit">Sauvegarder</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="time-rule-modal">
+    <form method="dialog" id="time-rule-form" class="modal-form">
+      <h2>Regle horaire</h2>
+      <input type="hidden" id="time-rule-id">
+      <label>Nom<input id="time-rule-name" required></label>
+      <label>Debut<input id="time-rule-start" type="time" required></label>
+      <label>Fin<input id="time-rule-end" type="time" required></label>
+      <label>Type<select id="time-rule-type"><option value="percent">Pourcentage</option><option value="fixed">Montant fixe</option></select></label>
+      <label>Valeur<input id="time-rule-value" type="number" step="0.01" required></label>
+      <div class="actions"><button type="button" class="ghost" onclick="AdminApi.closeTimeRuleModal()">Annuler</button><button type="submit">Sauvegarder</button></div>
+    </form>
+  </dialog>
+
+  <script src="assets/api.js"></script>
+  <script>
+    AdminApi.requireAuth();
+    AdminApi.loadPricingAdmin();
+    document.getElementById('zone-form').addEventListener('submit', AdminApi.saveZone);
+    document.getElementById('fare-form').addEventListener('submit', AdminApi.saveFare);
+    document.getElementById('time-rule-form').addEventListener('submit', AdminApi.saveTimeRule);
+  </script>
+</body>
+</html>
