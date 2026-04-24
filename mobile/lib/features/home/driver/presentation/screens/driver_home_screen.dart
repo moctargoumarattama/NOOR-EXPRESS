@@ -111,7 +111,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'Mise a jour',
+                title: 'Nouvelle',
                 message: _notificationMessage!,
                 tone: NotificationCardTone.warning,
                 compact: true,
@@ -123,7 +123,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'GPS',
+                title: 'Position',
                 message: _humanizeMessage(
                   mapState.errorMessage,
                   fallback: RideUiCopy.gpsUnavailable,
@@ -216,7 +216,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             _pendingRidePayload = next.pendingRidePayload;
           });
           _showLiveNotification(
-            'Nouvelle demande recue. Repondez avant expiration.',
+            'Une nouvelle course vous attend.',
           );
           ref.read(driverRealtimeProvider.notifier).consumePendingRide();
         }
@@ -247,8 +247,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       message: _humanizeMessage(
         error,
         fallback: value
-            ? 'Vous etes visible pour les clients.'
-            : 'Vous n apparaissez plus dans les demandes.',
+            ? 'Vous recevez maintenant les demandes.'
+            : 'Vous ne recevez plus de demande pour le moment.',
       ),
       tone: error == null ? AppSnackbarTone.success : AppSnackbarTone.error,
     );
@@ -266,7 +266,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
     AppSnackbar.show(
       context,
-      message: _humanizeMessage(error, fallback: 'Demande ignoree.'),
+      message: _humanizeMessage(error, fallback: 'Cette course est ignoree.'),
       tone: error == null ? AppSnackbarTone.info : AppSnackbarTone.error,
     );
   }
@@ -279,7 +279,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   Future<void> _retryLocationAndRecenter() async {
     AppSnackbar.show(
       context,
-      message: 'Activation GPS en cours...',
+      message: 'On retrouve votre position...',
       tone: AppSnackbarTone.info,
     );
     await ref.read(mapControllerProvider(MapMode.driver).notifier).start();
@@ -292,7 +292,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
       context,
       message: _humanizeMessage(
         mapState.errorMessage,
-        fallback: 'Position GPS activee.',
+        fallback: 'Votre position est a jour.',
       ),
       tone: mapState.errorMessage == null
           ? AppSnackbarTone.success

@@ -10,7 +10,7 @@ void main() {
     await tester.pumpWidget(const _OfferCardHarness());
 
     expect(find.byType(AppInlineFeedback), findsOneWidget);
-    expect(find.text('Choisir ce chauffeur'), findsOneWidget);
+    expect(find.text('Choisir cette proposition'), findsOneWidget);
   });
 }
 

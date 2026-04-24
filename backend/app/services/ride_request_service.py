@@ -23,6 +23,7 @@ from app.schemas.ride_request import (
     TopDriverStatsRead,
 )
 from app.services.ride_policy import (
+    ACTIVE_RIDE_STATUSES,
     CLIENT_ACTIVE_RIDE_STATUSES,
     DRIVER_ACTIVE_RIDE_STATUSES,
     NEGOTIABLE_RIDE_STATUSES,

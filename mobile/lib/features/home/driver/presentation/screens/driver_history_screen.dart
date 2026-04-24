@@ -136,7 +136,7 @@ class _Header extends StatelessWidget {
           IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
           const SizedBox(width: 8),
           const Text(
-            'Historique driver',
+            'Mes trajets',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
         ],
@@ -154,7 +154,9 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: 80),
-      child: Center(child: Text(error ?? 'Aucune course pour le moment 🚗')),
+      child: Center(
+        child: Text(error ?? 'Vous n avez encore aucun trajet.'),
+      ),
     );
   }
 }
@@ -181,9 +183,9 @@ class _LoadMoreFooter extends StatelessWidget {
     if (!hasMore) {
       return const Padding(
         padding: EdgeInsets.all(20),
-        child: Center(child: Text('Tout est affiche')),
+        child: Center(child: Text('Vous avez tout vu')),
       );
     }
-    return TextButton(onPressed: onLoadMore, child: const Text('Charger plus'));
+    return TextButton(onPressed: onLoadMore, child: const Text('Voir plus'));
   }
 }

@@ -69,7 +69,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Une experience VTC premium, pensee mobile des le depart.',
+                      'Un trajet simple, clair et rassurant des les premiers instants.',
                       style: theme.textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 28),
@@ -78,19 +78,19 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Connexion',
+                            'Bienvenue',
                             style: theme.textTheme.titleLarge,
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Connecte-toi avec ton numero. Le role est recupere automatiquement depuis le backend.',
+                            'Entrez votre numero pour continuer. On s occupe du reste.',
                             style: theme.textTheme.bodyMedium,
                           ),
                           const SizedBox(height: 24),
                           AppTextField(
                             controller: _phoneController,
                             keyboardType: TextInputType.phone,
-                            label: 'Phone number',
+                            label: 'Numero de telephone',
                             hint: '+212600000000',
                           ),
                           if (sessionState.errorMessage != null) ...[
@@ -117,7 +117,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           const SizedBox(height: 24),
                           AppButton(
                             label: sessionState.isBusy
-                                ? 'Connexion en cours...'
+                                ? 'Un instant...'
                                 : 'Continuer',
                             onPressed: sessionState.isBusy ? null : _submit,
                           ),

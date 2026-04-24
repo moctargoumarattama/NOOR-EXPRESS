@@ -24,15 +24,15 @@ class Step2IdCardPhoto extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _PhotoStepCard(
-      title: "Carte d'identite",
-      subtitle: "Prenez en photo votre carte d'identite Niger.",
+      title: 'Votre piece d identite',
+      subtitle: 'Prenez une photo nette de votre piece d identite.',
       icon: Icons.badge_rounded,
       placeholderIcon: Icons.photo_camera_rounded,
-      placeholderText: 'Appuyez pour prendre la photo',
+      placeholderText: 'Touchez ici pour prendre la photo',
       photo: photo,
       checks: const ['Recto lisible', 'Bonne luminosite', 'Pas de reflet'],
-      primaryLabel: 'Prendre la photo',
-      secondaryLabel: 'Choisir depuis galerie',
+      primaryLabel: 'Prendre une photo',
+      secondaryLabel: 'Choisir dans la galerie',
       onCamera: onCamera,
       onGallery: onGallery,
       onBack: onBack,

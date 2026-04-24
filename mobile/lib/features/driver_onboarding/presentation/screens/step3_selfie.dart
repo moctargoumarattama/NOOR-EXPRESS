@@ -48,14 +48,14 @@ class Step3Selfie extends StatelessWidget {
               ),
               SizedBox(width: 12),
               Text(
-                'Votre photo',
+                'Votre selfie',
                 style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
               ),
             ],
           ),
           const SizedBox(height: 10),
           const Text(
-            'Prenez un selfie pour confirmer votre identite.',
+            'Prenez un selfie clair pour confirmer votre identite.',
             style: TextStyle(color: AppColors.stone),
           ),
           const SizedBox(height: 18),
@@ -81,7 +81,7 @@ class Step3Selfie extends StatelessWidget {
                         ),
                         SizedBox(height: 10),
                         Text(
-                          'Camera frontale',
+                          'Touchez pour prendre la photo',
                           style: TextStyle(fontWeight: FontWeight.w800),
                         ),
                       ],
@@ -97,10 +97,12 @@ class Step3Selfie extends StatelessWidget {
           const _CheckItem(label: 'Bonne luminosite'),
           const _CheckItem(label: 'Fond neutre'),
           const SizedBox(height: 18),
-          AppButton(label: 'Prendre le selfie', onPressed: onCamera),
+          AppButton(label: 'Prendre un selfie', onPressed: onCamera),
           const SizedBox(height: 10),
           AppButton.secondary(
-              label: 'Choisir depuis galerie', onPressed: onGallery),
+            label: 'Choisir dans la galerie',
+            onPressed: onGallery,
+          ),
           const SizedBox(height: 18),
           Row(
             children: [

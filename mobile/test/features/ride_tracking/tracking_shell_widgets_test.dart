@@ -22,8 +22,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Rafraichir l etat'), findsOneWidget);
-    await tester.tap(find.text('Rafraichir l etat'));
+    expect(find.text('Mettre a jour'), findsOneWidget);
+    await tester.tap(find.text('Mettre a jour'));
     expect(refreshes, 1);
   });
 }

@@ -2,7 +2,7 @@ from pathlib import Path
 import sys
 import unittest
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -15,6 +15,7 @@ from app.models.ride_offer import RideOffer, RideOfferStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
 from app.models.user import User, UserRole
 from app.services import ride_lifecycle_service
+from app.services import ride_request_service
 from app.services.ride_policy import (
     ACTIVE_RIDE_STATUSES,
     CORE_RIDE_FLOW_STATUSES,
@@ -245,6 +246,36 @@ class RideAcceptanceConcurrencyTest(unittest.IsolatedAsyncioTestCase):
         session.commit.assert_not_awaited()
         self.assertEqual(winning_offer.status, RideOfferStatus.ACCEPTED)
         self.assertEqual(losing_offer.status, RideOfferStatus.PENDING)
+
+
+class ActiveRideLookupTest(unittest.IsolatedAsyncioTestCase):
+    async def test_active_ride_lookup_keeps_valid_client_ride(self) -> None:
+        session = AsyncMock()
+        ride_request = RideRequest(
+            id=77,
+            client_id=56,
+            status=RideRequestStatus.ACCEPTED,
+        )
+        execute_result = Mock()
+        execute_result.scalar_one_or_none.return_value = ride_request
+        session.execute.return_value = execute_result
+        current_user = User(
+            id=56,
+            phone_number="+212600000056",
+            role=UserRole.CLIENT,
+        )
+
+        with patch(
+            "app.services.ride_lifecycle_service.expire_ride",
+            new=AsyncMock(return_value=ride_request),
+        ):
+            result = await ride_request_service.get_active_ride_request(
+                session,
+                current_user,
+            )
+
+        self.assertIs(result, ride_request)
+        session.execute.assert_awaited_once()
 
 
 if __name__ == "__main__":

@@ -35,27 +35,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             const _HeroCard(),
             const SizedBox(height: 18),
             _Section(
-              title: 'Alertes activees',
+              title: 'Ce que vous recevez',
               child: Column(
                 children: [
                   _NotificationSwitchTile(
                     icon: Icons.local_taxi_rounded,
-                    title: 'Courses et demandes',
-                    subtitle: 'Nouvelles courses, annulations et recherches.',
+                    title: 'Trajets et demandes',
+                    subtitle:
+                        'Nouvelles demandes, annulations et reponses utiles.',
                     value: _rideAlerts,
                     onChanged: (value) => _save('notif_rides', value),
                   ),
                   _NotificationSwitchTile(
                     icon: Icons.price_change_rounded,
-                    title: 'Offres et prix',
-                    subtitle: 'Offres drivers et reponses client.',
+                    title: 'Prix et propositions',
+                    subtitle: 'Prix proposes et reponses importantes.',
                     value: _offerAlerts,
                     onChanged: (value) => _save('notif_offers', value),
                   ),
                   _NotificationSwitchTile(
                     icon: Icons.route_rounded,
-                    title: 'Suivi de course',
-                    subtitle: 'Driver arrive, course demarree, terminee.',
+                    title: 'Suivi du trajet',
+                    subtitle: 'Arrivee, depart et fin du trajet.',
                     value: _statusAlerts,
                     onChanged: (value) => _save('notif_status', value),
                   ),
@@ -102,7 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     });
     AppSnackbar.show(
       context,
-      message: value ? 'Notification activee.' : 'Notification desactivee.',
+      message: value ? 'C est bien active.' : 'C est bien desactive.',
       tone: AppSnackbarTone.success,
     );
   }
@@ -167,7 +168,7 @@ class _HeroCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Centre d alertes Noor',
+                  'Vos nouvelles',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 17,
@@ -176,7 +177,7 @@ class _HeroCard extends StatelessWidget {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Les offres, courses et mises a jour importantes arrivent ici.',
+                  'Les nouvelles importantes de vos trajets arrivent ici.',
                   style: TextStyle(color: Colors.white70),
                 ),
               ],
@@ -286,7 +287,7 @@ class _EmptyState extends StatelessWidget {
           ),
           SizedBox(height: 6),
           Text(
-            'Quand une offre, une course ou un driver bouge, vous le verrez ici.',
+            'Quand quelque chose change sur votre trajet, vous le verrez ici.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.stone),
           ),

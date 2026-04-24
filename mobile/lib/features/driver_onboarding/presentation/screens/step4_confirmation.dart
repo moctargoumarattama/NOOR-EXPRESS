@@ -51,9 +51,11 @@ class Step4Confirmation extends StatelessWidget {
                     Icon(Icons.verified_user_rounded, color: AppColors.emerald),
               ),
               SizedBox(width: 12),
-              Text(
-                'Recapitulatif',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              Expanded(
+                child: Text(
+                  'Verifiez vos informations',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                ),
               ),
             ],
           ),
@@ -76,7 +78,7 @@ class Step4Confirmation extends StatelessWidget {
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Text(
-              'Vos documents seront verifies par notre equipe sous 24h.',
+              'Nous verifierons vos documents le plus vite possible.',
               style: TextStyle(
                 color: Color(0xFF8A5A00),
                 fontWeight: FontWeight.w800,
@@ -92,7 +94,7 @@ class Step4Confirmation extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: AppButton(
-                  label: isSubmitting ? 'Envoi...' : 'Soumettre',
+                  label: isSubmitting ? 'Envoi...' : 'Envoyer',
                   onPressed: isSubmitting ? null : onSubmit,
                 ),
               ),

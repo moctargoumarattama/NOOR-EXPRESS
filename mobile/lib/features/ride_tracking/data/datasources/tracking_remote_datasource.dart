@@ -92,10 +92,9 @@ class TrackingRemoteDatasource {
               .toList() ??
           const [];
     } on DioException catch (error) {
-      throw TrackingRemoteFailure(
-          ApiErrorPayload.messageOrFallback(
+      throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
         error,
-        fallbackMessage: 'Impossible de charger les rides.',
+        fallbackMessage: 'Impossible de charger vos trajets.',
       ));
     }
   }
@@ -106,7 +105,7 @@ class TrackingRemoteDatasource {
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
       throw TrackingRemoteFailure(_readError(error,
-          fallback: 'Impossible de charger les donnees de tracking.'));
+          fallback: 'Impossible de charger les informations du trajet.'));
     }
   }
 
@@ -121,10 +120,9 @@ class TrackingRemoteDatasource {
       );
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
-      throw TrackingRemoteFailure(
-          ApiErrorPayload.messageOrFallback(
+      throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
         error,
-        fallbackMessage: 'Action tracking impossible.',
+        fallbackMessage: 'Cette action n est pas disponible pour le moment.',
       ));
     }
   }

@@ -93,20 +93,20 @@ double? headingBetweenPoints(
 String trackingStatusToast(String? status) {
   switch (status) {
     case 'offered':
-      return 'Des offres sont arrivees.';
+      return 'Des chauffeurs vous ont repondu.';
     case 'accepted':
-      return 'Votre chauffeur a accepte la course.';
+      return 'Votre chauffeur arrive.';
     case 'arrived':
-      return 'Votre chauffeur est arrive.';
+      return 'Votre chauffeur est sur place.';
     case 'started':
-      return 'La course a commence.';
+      return 'Le trajet a commence.';
     case 'completed':
-      return 'La course est terminee.';
+      return 'Le trajet est termine.';
     case 'cancelled':
-      return 'La course a ete annulee.';
+      return 'Le trajet a ete annule.';
     case 'pending':
-      return 'La course redevient negotiable.';
+      return 'La demande repart en attente.';
     default:
-      return 'Statut de course mis a jour.';
+      return 'Le trajet vient d etre mis a jour.';
   }
 }

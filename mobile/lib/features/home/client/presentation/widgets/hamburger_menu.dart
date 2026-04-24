@@ -80,18 +80,22 @@ class HamburgerMenu extends StatelessWidget {
                               children: [
                                 _MenuItem(
                                   icon: Icons.history_rounded,
-                                  label: 'Historique courses',
+                                  label: 'Mes trajets',
                                   onTap: onHistoryTap,
                                 ),
                                 _MenuItem(
                                   icon: Icons.notifications_none_rounded,
                                   label: 'Notifications',
-                                  badge: '3',
                                   onTap: onNotificationsTap,
                                 ),
                                 _MenuItem(
+                                  icon: Icons.person_outline_rounded,
+                                  label: 'Mon profil',
+                                  onTap: onProfileTap,
+                                ),
+                                _MenuItem(
                                   icon: Icons.settings_outlined,
-                                  label: 'Parametres',
+                                  label: 'Reglages',
                                   onTap: onSettingsTap,
                                 ),
                                 _MenuItem(
@@ -101,7 +105,7 @@ class HamburgerMenu extends StatelessWidget {
                                 ),
                                 _MenuItem(
                                   icon: Icons.warning_amber_rounded,
-                                  label: 'Signaler probleme',
+                                  label: 'Parler d un probleme',
                                   color: const Color(0xFFE96962),
                                   onTap: onReportTap,
                                 ),
@@ -112,7 +116,7 @@ class HamburgerMenu extends StatelessWidget {
                                   child: ElevatedButton.icon(
                                     onPressed: onDriverModeTap,
                                     icon: const Icon(Icons.drive_eta_rounded),
-                                    label: const Text('Devenir Driver'),
+                                    label: const Text('Passer cote chauffeur'),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF1B8A5A),
                                       foregroundColor: Colors.white,
@@ -203,7 +207,7 @@ class _MenuHeader extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Voir profil',
+                    'Voir mon profil',
                     style: TextStyle(
                       color: Color(0xFF1B8A5A),
                       fontWeight: FontWeight.w900,
@@ -225,14 +229,12 @@ class _MenuItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.badge,
     this.color = const Color(0xFF1A1A1A),
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final String? badge;
   final Color color;
 
   @override
@@ -264,22 +266,6 @@ class _MenuItem extends StatelessWidget {
                     ),
               ),
             ),
-            if (badge != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE96962),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  badge!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
           ],
         ),
       ),

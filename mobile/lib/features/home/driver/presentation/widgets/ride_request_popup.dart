@@ -89,7 +89,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Nouvelle demande',
+                        'Une course vous attend',
                         style: TextStyle(
                           color: Color(0xFF1B8A5A),
                           fontSize: 22,
@@ -108,7 +108,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                           value: widget.ride.dropoffLocation),
                       const SizedBox(height: 18),
                       Text(
-                        'Prix client : ${widget.ride.estimatedPrice.toStringAsFixed(0)} FCFA',
+                        'Prix propose : ${widget.ride.estimatedPrice.toStringAsFixed(0)} FCFA',
                         style: const TextStyle(
                           color: Color(0xFFF5A623),
                           fontSize: 24,
@@ -120,7 +120,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                         controller: _priceController,
                         keyboardType: TextInputType.number,
                         decoration: InputDecoration(
-                          labelText: 'Proposer un prix',
+                          labelText: 'Votre prix',
                           suffixText: 'FCFA',
                           filled: true,
                           fillColor: const Color(0xFFF7F7F7),
@@ -133,8 +133,8 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                       const SizedBox(height: 14),
                       AppInlineFeedback(
                         message: widget.isSubmitting
-                            ? 'Envoi de l offre en cours...'
-                            : 'Vous avez $_remainingSeconds s pour proposer un prix.',
+                            ? 'Envoi de votre proposition...'
+                            : 'Il vous reste $_remainingSeconds s pour repondre.',
                         tone: _remainingSeconds <= 10
                             ? AppInlineFeedbackTone.warning
                             : AppInlineFeedbackTone.info,
@@ -145,7 +145,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                         children: [
                           Expanded(
                             child: AppButton(
-                              label: 'Envoyer mon offre',
+                              label: 'Envoyer ma proposition',
                               isLoading: widget.isSubmitting,
                               onPressed: widget.isSubmitting
                                   ? null
@@ -159,7 +159,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: AppButton.secondary(
-                              label: 'Passer',
+                              label: 'Pas maintenant',
                               onPressed:
                                   widget.isSubmitting ? null : widget.onSkip,
                             ),
@@ -169,7 +169,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                       const SizedBox(height: 16),
                       CountdownBar(progress: _remainingSeconds / _totalSeconds),
                       const SizedBox(height: 8),
-                      Text('Expire dans : ${_remainingSeconds}s'),
+                      Text('Plus que : ${_remainingSeconds}s'),
                     ],
                   ),
                 ),
@@ -195,12 +195,12 @@ class _AddressLine extends StatelessWidget {
         const Icon(Icons.place_rounded, color: Color(0xFF1B8A5A)),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            '$label : $value',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-          ),
+      child: Text(
+        '$label : $value',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+      ),
         ),
       ],
     );

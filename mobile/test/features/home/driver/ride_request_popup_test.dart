@@ -33,6 +33,6 @@ void main() {
 
     expect(find.byType(AppButton), findsNWidgets(2));
     expect(find.byType(AppInlineFeedback), findsOneWidget);
-    expect(find.text('Passer'), findsOneWidget);
+    expect(find.text('Pas maintenant'), findsOneWidget);
   });
 }

@@ -119,12 +119,12 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                       const Icon(Icons.arrow_back_rounded, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Proposer une offre',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          color: Colors.white,
-                        ),
+                  Expanded(
+                    child: Text(
+                      'Choisissez votre prix',
+                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                            color: Colors.white,
+                          ),
                   ),
                 ),
               ],
@@ -166,7 +166,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                   ),
                   const SizedBox(height: 10),
                   _DetailLine(
-                    label: 'Prix client',
+                    label: 'Prix propose',
                     value: _formatFcfa(ride?.clientPrice ?? 0),
                     emphasize: true,
                   ),
@@ -198,8 +198,8 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                   children: [
                     Text(
                       state.hasSubmittedOffer
-                          ? 'Offre envoyee'
-                          : 'Votre prix propose',
+                          ? 'Proposition envoyee'
+                          : 'Votre prix',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                             color: Colors.white,
                           ),
@@ -217,12 +217,12 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                     if (state.hasSubmittedOffer)
                       const AppInlineFeedback(
                         message:
-                            'Votre offre est bien partie. Nous vous prevenons des que le client repond.',
+                            'Votre proposition est bien envoyee. Nous vous prevenons des que le client repond.',
                         tone: AppInlineFeedbackTone.info,
                       )
                     else
                       AppButton.secondary(
-                        label: 'Modifier le prix',
+                        label: 'Changer le prix',
                         onPressed: () async {
                           final nextPrice = await showPriceProposalSheet(
                             context,
@@ -245,7 +245,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
             const SizedBox(height: 24),
             if (!state.hasSubmittedOffer) ...[
               AppButton(
-                label: 'Proposer ce prix',
+                label: 'Envoyer ma proposition',
                 isLoading: state.isSubmitting,
                 onPressed: state.isSubmitting || ride == null
                     ? null
@@ -263,7 +263,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
               ),
               const SizedBox(height: 14),
               AppButton.secondary(
-                label: 'Ignorer',
+                label: 'Pas maintenant',
                 onPressed: state.isSubmitting ? null : context.pop,
               ),
             ],
@@ -287,12 +287,12 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
       case NegotiationConnectionState.reconnecting:
         return RideUiCopy.reconnecting;
       case NegotiationConnectionState.connecting:
-        return 'Connexion a la demande en cours...';
+        return 'On remet la demande a jour...';
       case NegotiationConnectionState.disconnected:
         return RideUiCopy.networkError;
       case NegotiationConnectionState.connected:
         if (ride == null) {
-          return 'Cette demande est en cours de synchronisation.';
+          return 'Cette demande revient a jour.';
         }
         return null;
     }

@@ -126,7 +126,7 @@ class _ClientNegotiationScreenState
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Negociation en cours',
+                      'Choisissez votre chauffeur',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 color: Colors.white,
@@ -159,7 +159,7 @@ class _ClientNegotiationScreenState
               ),
               const SizedBox(height: 24),
               AppButton.danger(
-                label: 'Annuler la demande',
+                label: 'Arreter la recherche',
                 isLoading: state.isSubmitting,
                 onPressed: state.isSubmitting ? null : _confirmAndCancelRide,
               ),
@@ -229,7 +229,7 @@ class _ClientNegotiationScreenState
       case NegotiationConnectionState.reconnecting:
         return RideUiCopy.reconnecting;
       case NegotiationConnectionState.connecting:
-        return 'Connexion a la negotiation en cours...';
+        return 'On remet les propositions a jour...';
       case NegotiationConnectionState.disconnected:
         return RideUiCopy.negotiationRefreshHint;
       case NegotiationConnectionState.connected:
@@ -283,20 +283,20 @@ class _ClientNegotiationScreenState
       builder: (context) => AlertDialog(
         title: const Text('Annuler la demande ?'),
         content: const Text(
-          'La recherche de chauffeur sera arretee. Vous pourrez refaire une '
-          'demande juste apres.',
+          'Nous allons arreter la recherche. Vous pourrez relancer une demande '
+          'quand vous voulez.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Continuer a chercher'),
+            child: const Text('Continuer'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFD64545),
             ),
-            child: const Text('Oui, annuler'),
+            child: const Text('Oui, arreter'),
           ),
         ],
       ),
@@ -327,28 +327,27 @@ class _ClientNegotiationScreenState
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'La raison est optionnelle. Elle nous aide seulement a ameliorer '
-              'le service.',
+              'Ce message est facultatif. Il nous aide simplement a mieux vous servir.',
             ),
             const SizedBox(height: 14),
             TextField(
               controller: controller,
               minLines: 2,
               maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Ex: trop long, erreur de destination...',
-              ),
+                decoration: const InputDecoration(
+                  hintText: 'Par exemple : trop long, erreur sur l adresse...',
+                ),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Passer'),
+            child: const Text('Laisser vide'),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Envoyer et annuler'),
+            child: const Text('Envoyer'),
           ),
         ],
       ),
@@ -424,8 +423,8 @@ class _WaitingOffersCard extends StatelessWidget {
       children: [
         AppInlineFeedback(
           message: isSubmitting
-              ? 'Mise a jour de votre demande en cours...'
-              : 'Nous attendons les propositions des chauffeurs.',
+              ? 'On met votre demande a jour...'
+              : 'On attend les reponses des chauffeurs.',
           tone: AppInlineFeedbackTone.info,
           isLoading: !isSubmitting,
         ),
@@ -475,7 +474,7 @@ class _WaitingPulse extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Niamey',
+                      'Votre prix',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 color: Colors.white,

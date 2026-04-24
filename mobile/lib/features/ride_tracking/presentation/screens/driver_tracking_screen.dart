@@ -266,7 +266,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
       case TrackingConnectionState.reconnecting:
         return RideUiCopy.reconnecting;
       case TrackingConnectionState.connecting:
-        return 'Connexion au suivi en cours...';
+        return 'On remet le trajet a jour...';
       case TrackingConnectionState.disconnected:
         return RideUiCopy.networkError;
       case TrackingConnectionState.connected:

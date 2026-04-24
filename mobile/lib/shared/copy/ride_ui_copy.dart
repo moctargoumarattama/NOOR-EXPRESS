@@ -1,21 +1,21 @@
 abstract final class RideUiCopy {
-  static const refreshing = 'Mise a jour en cours...';
-  static const reconnecting = 'Reconnexion en cours...';
+  static const refreshing = 'On remet tout a jour...';
+  static const reconnecting = 'La connexion revient...';
   static const networkError =
-      'Connexion instable. Reessayez dans quelques instants.';
-  static const noDriverAvailable = 'Aucun chauffeur disponible pour le moment.';
-  static const offerExpired = 'Cette offre n est plus disponible.';
-  static const rideCancelled = 'La course a ete annulee.';
+      'La connexion est instable pour le moment. Reessayez dans un instant.';
+  static const noDriverAvailable = 'Aucun chauffeur n est disponible pour le moment.';
+  static const offerExpired = 'Cette proposition n est plus disponible.';
+  static const rideCancelled = 'Le trajet a ete annule.';
   static const driverUnavailable = 'Ce chauffeur n est plus disponible.';
   static const gpsUnavailable =
-      'Position GPS indisponible. Reessayez dans un endroit mieux couvert.';
+      'Votre position est difficile a retrouver pour le moment.';
   static const negotiationRefreshHint =
-      'Tire vers le bas pour resynchroniser avec le backend si les offres tardent.';
-  static const trackingRefreshAction = 'Rafraichir l etat';
+      'Tire vers le bas pour voir les dernieres nouvelles.';
+  static const trackingRefreshAction = 'Mettre a jour';
 
   static String rideCreated(String status) {
     return status.trim().isEmpty
-        ? 'Demande envoyee.'
-        : 'Demande envoyee. $status';
+        ? 'Votre demande est partie.'
+        : 'Votre demande est partie. $status';
   }
 }

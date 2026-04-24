@@ -210,7 +210,7 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
       _sendPosition,
       onError: (_) {
         state = state.copyWith(
-          lastMessage: 'Le tracking GPS driver a ete interrompu.',
+          lastMessage: 'Votre position ne s envoie plus pour le moment.',
         );
       },
     );
@@ -229,19 +229,19 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
   String _statusLabel(String status) {
     switch (status) {
       case 'accepted':
-        return 'Une ride a ete acceptee.';
+        return 'Vous avez une nouvelle course.';
       case 'arrived':
-        return 'Le client peut monter a bord.';
+        return 'Vous etes arrive chez le client.';
       case 'started':
-        return 'Une course est en cours.';
+        return 'Le trajet est en cours.';
       case 'completed':
-        return 'Une course a ete terminee.';
+        return 'Le trajet est termine.';
       case 'cancelled':
-        return 'Une ride a ete annulee.';
+        return 'Le trajet a ete annule.';
       case 'pending':
-        return 'La ride est de nouveau ouverte aux offres.';
+        return 'La demande revient dans la liste.';
       default:
-        return 'Statut de ride mis a jour.';
+        return 'Le trajet vient d etre mis a jour.';
     }
   }
 }

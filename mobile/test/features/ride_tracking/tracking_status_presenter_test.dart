@@ -26,7 +26,7 @@ void main() {
         _ride(status: RideTrackingStatus.pending),
       );
 
-      expect(presentation.title, 'Recherche de chauffeur');
+      expect(presentation.title, 'On cherche un chauffeur');
       expect(presentation.showSpinner, isTrue);
     });
 
@@ -35,10 +35,10 @@ void main() {
         _ride(status: RideTrackingStatus.offered),
       );
 
-      expect(presentation.title, 'Offres disponibles');
+      expect(presentation.title, 'Des chauffeurs vous ont repondu');
       expect(
         presentation.subtitle,
-        'Consultez les propositions recues avant de confirmer.',
+        'Choisissez la proposition qui vous convient.',
       );
       expect(presentation.showSpinner, isTrue);
     });
@@ -51,10 +51,10 @@ void main() {
         ),
       );
 
-      expect(presentation.title, 'Course annulee');
+      expect(presentation.title, 'Le trajet a ete annule');
       expect(
         presentation.subtitle,
-        'Raison: Client indisponible',
+        'Raison : Client indisponible',
       );
       expect(presentation.showSpinner, isFalse);
     });
@@ -65,10 +65,10 @@ void main() {
         _ride(status: RideTrackingStatus.expired),
       );
 
-      expect(presentation.title, 'Demande expiree');
+      expect(presentation.title, 'La demande est terminee');
       expect(
         presentation.subtitle,
-        'Aucun chauffeur n a confirme a temps. Vous pouvez relancer une demande.',
+        'Personne n a repondu a temps. Vous pouvez reessayer quand vous voulez.',
       );
       expect(presentation.showSpinner, isFalse);
     });
@@ -80,8 +80,8 @@ void main() {
         _ride(status: RideTrackingStatus.accepted),
       );
 
-      expect(presentation.title, 'Direction le client');
-      expect(presentation.subtitle, 'Rendez-vous a Grand Marche.');
+      expect(presentation.title, 'Allez vers le client');
+      expect(presentation.subtitle, 'Rejoignez Grand Marche.');
       expect(presentation.showSpinner, isFalse);
     });
   });

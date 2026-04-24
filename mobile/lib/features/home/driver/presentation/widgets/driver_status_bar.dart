@@ -101,14 +101,14 @@ class DriverStatusBar extends StatelessWidget {
         );
       case 'online':
         return const _StatusPalette(
-          label: 'En ligne',
+          label: 'Disponible',
           background: Color(0xFFEAF7F1),
           foreground: AppColors.emerald,
           border: Color(0xFFCFE9DC),
         );
       default:
         return const _StatusPalette(
-          label: 'Hors ligne',
+          label: 'En pause',
           background: Color(0xFFFFF1F0),
           foreground: AppColors.coral,
           border: Color(0xFFF2D0CD),

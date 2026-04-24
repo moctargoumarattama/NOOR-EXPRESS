@@ -68,7 +68,7 @@ class _BookingPanel extends StatelessWidget {
             controller: priceController,
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
-              labelText: 'Modifier le prix propose',
+              labelText: 'Votre prix',
               suffixText: 'FCFA',
               filled: true,
               fillColor: const Color(0xFFF8F9FA),
@@ -134,7 +134,7 @@ class _SearchingRidePanel extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'Prix actuel : ${ride.displayPrice.toStringAsFixed(0)} FCFA',
+          'Prix choisi : ${ride.displayPrice.toStringAsFixed(0)} FCFA',
           style: const TextStyle(
             color: Color(0xFF1B8A5A),
             fontWeight: FontWeight.w900,
@@ -144,8 +144,8 @@ class _SearchingRidePanel extends StatelessWidget {
           const SizedBox(height: 14),
           AppInlineFeedback(
             message: ride.status == 'offered'
-                ? 'Des offres sont disponibles. Ouvrez la liste pour choisir un chauffeur.'
-                : 'Nous contactons les chauffeurs proches de vous.',
+                ? 'Des chauffeurs vous ont repondu. Ouvrez la liste pour choisir.'
+                : 'On cherche un chauffeur pres de vous.',
             tone: AppInlineFeedbackTone.info,
             isLoading: ride.status == 'pending',
           ),
@@ -165,15 +165,15 @@ class _SearchingRidePanel extends StatelessWidget {
   String get _title {
     switch (ride.status) {
       case 'offered':
-        return 'Offres en attente de choix';
+        return 'Des chauffeurs vous ont repondu';
       case 'accepted':
-        return 'Chauffeur confirme';
+        return 'Votre chauffeur arrive';
       case 'arrived':
-        return 'Votre chauffeur est arrive';
+        return 'Votre chauffeur vous attend';
       case 'started':
-        return 'Course en cours';
+        return 'Votre trajet est en cours';
       default:
-        return 'Recherche de chauffeurs...';
+        return 'On cherche un chauffeur';
     }
   }
 
@@ -181,9 +181,9 @@ class _SearchingRidePanel extends StatelessWidget {
     switch (ride.status) {
       case 'pending':
       case 'offered':
-        return 'Voir les offres';
+        return 'Voir les reponses';
       default:
-        return 'Ouvrir le suivi';
+        return 'Voir le trajet';
     }
   }
 }
@@ -265,14 +265,14 @@ class _PriceHint extends StatelessWidget {
 
   String get _message {
     if (isLoading) {
-      return 'Calcul du prix en cours...';
+      return 'On calcule un prix pour vous...';
     }
     if (error != null && error!.trim().isNotEmpty) {
       return error!;
     }
     if (estimate == null) {
-      return 'Choisissez les deux adresses pour voir un prix suggere.';
+      return 'Choisissez vos deux adresses pour voir un prix conseille.';
     }
-    return 'Prix suggere : ${estimate!.estimatedPrice.round()} FCFA';
+    return 'Prix conseille : ${estimate!.estimatedPrice.round()} FCFA';
   }
 }

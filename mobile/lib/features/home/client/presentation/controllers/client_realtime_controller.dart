@@ -169,21 +169,21 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
   String _statusLabel(String status) {
     switch (status) {
       case 'offered':
-        return 'Des offres sont disponibles.';
+        return 'Des chauffeurs vous ont repondu.';
       case 'accepted':
-        return 'Ride acceptee.';
+        return 'Votre chauffeur arrive.';
       case 'arrived':
         return 'Le chauffeur est arrive.';
       case 'started':
-        return 'Ride demarree.';
+        return 'Le trajet a commence.';
       case 'completed':
-        return 'Ride terminee.';
+        return 'Le trajet est termine.';
       case 'cancelled':
-        return 'Ride annulee.';
+        return 'Le trajet a ete annule.';
       case 'pending':
-        return 'La ride redevient negotiable.';
+        return 'La demande repart en attente.';
       default:
-        return 'Statut de ride mis a jour.';
+        return 'Le trajet vient d etre mis a jour.';
     }
   }
 }

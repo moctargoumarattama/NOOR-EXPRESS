@@ -64,7 +64,7 @@ class OfferCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${offer.driverRating.toStringAsFixed(1)} * ${offer.vehicleLabel}',
+                      '${offer.driverRating.toStringAsFixed(1)} • ${offer.vehicleLabel}',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -82,7 +82,7 @@ class OfferCard extends StatelessWidget {
           const SizedBox(height: 14),
           if (offer.driverDistanceKm != null)
             Text(
-              'Chauffeur a ${offer.driverDistanceKm!.toStringAsFixed(1)} km',
+              'A environ ${offer.driverDistanceKm!.toStringAsFixed(1)} km de vous',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: AppColors.stone,
               ),
@@ -91,14 +91,14 @@ class OfferCard extends StatelessWidget {
               offer.plateNumber!.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              'Plaque : ${offer.plateNumber}',
+              'Plaque ${offer.plateNumber}',
               style: theme.textTheme.bodyMedium,
             ),
           ],
           const SizedBox(height: 16),
           if (isBusy) ...[
             const AppInlineFeedback(
-              message: 'Mise a jour de votre choix en cours...',
+              message: 'On enregistre votre choix...',
               tone: AppInlineFeedbackTone.info,
               isLoading: true,
             ),
@@ -109,7 +109,7 @@ class OfferCard extends StatelessWidget {
               if (onReject != null) ...[
                 Expanded(
                   child: AppButton.secondary(
-                    label: 'Refuser',
+                    label: 'Passer',
                     onPressed: isBusy ? null : onReject,
                   ),
                 ),
@@ -117,7 +117,7 @@ class OfferCard extends StatelessWidget {
               ],
               Expanded(
                 child: AppButton(
-                  label: 'Choisir ce chauffeur',
+                  label: 'Choisir cette proposition',
                   isLoading: isBusy,
                   onPressed: isBusy ? null : onSelect,
                 ),

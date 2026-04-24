@@ -29,7 +29,7 @@ class TrackingTopBar extends StatelessWidget {
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
         const Spacer(),
-        if (etaMinutes != null) EtaChip(label: 'ETA $etaMinutes min'),
+        if (etaMinutes != null) EtaChip(label: 'Dans $etaMinutes min'),
         const SizedBox(width: 10),
         ConnectionBadge(connectionState: connectionState),
       ],
@@ -70,28 +70,28 @@ class ConnectionBadge extends StatelessWidget {
     switch (state) {
       case TrackingConnectionState.connected:
         return const _ConnectionPalette(
-          label: 'Live',
+          label: 'En direct',
           background: Color(0x1A1B8A5A),
           border: Color(0x661B8A5A),
           foreground: Colors.white,
         );
       case TrackingConnectionState.reconnecting:
         return const _ConnectionPalette(
-          label: 'Reconnexion',
+          label: 'Ca revient',
           background: Color(0x1AF5A623),
           border: Color(0x66F5A623),
           foreground: Colors.white,
         );
       case TrackingConnectionState.connecting:
         return const _ConnectionPalette(
-          label: 'Connexion',
+          label: 'Mise en route',
           background: Color(0x1A8DB3FF),
           border: Color(0x668DB3FF),
           foreground: Colors.white,
         );
       case TrackingConnectionState.disconnected:
         return const _ConnectionPalette(
-          label: 'Hors ligne',
+          label: 'Sans connexion',
           background: Color(0x1AD94F4F),
           border: Color(0x66D94F4F),
           foreground: Colors.white,

@@ -79,21 +79,21 @@ class StatusBadge extends StatelessWidget {
   String _label(String value) {
     switch (value) {
       case 'pending':
-        return 'Recherche';
+        return 'On cherche';
       case 'offered':
-        return 'Offres recues';
+        return 'Des reponses arrivent';
       case 'accepted':
-        return 'Chauffeur confirme';
+        return 'Chauffeur en route';
       case 'arrived':
-        return 'Chauffeur arrive';
+        return 'Chauffeur sur place';
       case 'started':
-        return 'Course en cours';
+        return 'Trajet en cours';
       case 'completed':
-        return 'Terminee';
+        return 'Trajet termine';
       case 'cancelled':
-        return 'Annulee';
+        return 'Trajet annule';
       case 'expired':
-        return 'Expiree';
+        return 'Demande terminee';
       default:
         return value;
     }

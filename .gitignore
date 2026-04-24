@@ -3,3 +3,4 @@ tools/jdk17.zip
 "venv/" 
 "__pycache__/" 
 "*.pyc" 
+.worktrees/

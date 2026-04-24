@@ -8,7 +8,9 @@ Future<double?> showPriceProposalSheet(
   required double initialPrice,
 }) async {
   final controller = TextEditingController(
-    text: initialPrice.toStringAsFixed(initialPrice == initialPrice.roundToDouble() ? 0 : 2),
+    text: initialPrice.toStringAsFixed(
+      initialPrice == initialPrice.roundToDouble() ? 0 : 2,
+    ),
   );
 
   return showModalBottomSheet<double>(
@@ -30,18 +32,23 @@ Future<double?> showPriceProposalSheet(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Proposer un prix', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'Proposer un autre prix',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: 8),
             Text(
-              'Ajuste ton offre en FCFA avant de l envoyer.',
+              'Ajustez le prix qui vous convient avant de l envoyer.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 18),
             AppTextField(
               controller: controller,
-              label: 'Prix proposé',
+              label: 'Votre prix',
               hint: '2500',
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
             ),
             const SizedBox(height: 18),
             AppButton(

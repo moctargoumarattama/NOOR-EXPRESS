@@ -106,16 +106,16 @@ class _OfflinePanel extends StatelessWidget {
       children: [
         const _StatusTitle(
             icon: Icons.pause_circle,
-            text: 'Vous etes hors ligne',
+            text: 'Vous etes en pause',
             color: Color(0xFFE53935)),
         const SizedBox(height: 8),
         Text(
-          'Mettez-vous en ligne pour recevoir de nouvelles demandes.',
+          'Passez disponible pour recevoir les prochaines courses.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 18),
         AppButton(
-          label: 'Se mettre en ligne',
+          label: 'Recevoir des courses',
           icon: Icons.play_arrow_rounded,
           isLoading: isBusy,
           onPressed: isBusy ? null : onStart,
@@ -147,11 +147,11 @@ class _OnlinePanel extends StatelessWidget {
       children: [
         const _StatusTitle(
             icon: Icons.radio_button_checked,
-            text: 'En ligne',
+            text: 'Vous etes disponible',
             color: Color(0xFF1B8A5A)),
         const SizedBox(height: 8),
         Text(
-          'Vous recevez les demandes autour de vous en temps reel.',
+          'Nous vous prevenons des qu une course arrive.',
           style: Theme.of(context)
               .textTheme
               .bodyMedium
@@ -161,7 +161,7 @@ class _OnlinePanel extends StatelessWidget {
         _StatsRow(todayRides: todayRides, todayEarnings: todayEarnings),
         const SizedBox(height: 16),
         AppButton.danger(
-          label: 'Se mettre hors ligne',
+          label: 'Faire une pause',
           icon: Icons.stop_rounded,
           isLoading: isBusy,
           onPressed: isBusy ? null : onStop,
@@ -184,7 +184,7 @@ class _ActiveRidePanel extends StatelessWidget {
       children: [
         const _StatusTitle(
             icon: Icons.local_taxi,
-            text: 'Course active',
+            text: 'Votre trajet en cours',
             color: Color(0xFFF5A623)),
         const SizedBox(height: 12),
         Text('${ride.pickupLocation} -> ${ride.dropoffLocation}',
@@ -199,7 +199,7 @@ class _ActiveRidePanel extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         AppButton(
-          label: 'Ouvrir le suivi',
+          label: 'Ouvrir le trajet',
           icon: Icons.navigation_rounded,
           onPressed: onOpen,
         ),
@@ -221,14 +221,14 @@ class _StatsRow extends StatelessWidget {
         Expanded(
           child: DriverStatsCard(
             label: 'Aujourd hui',
-            value: '$todayRides courses',
+            value: '$todayRides trajets',
             icon: Icons.route_rounded,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: DriverStatsCard(
-            label: 'Gains',
+            label: 'Vos gains',
             value: '${todayEarnings.toStringAsFixed(0)} FCFA',
             icon: Icons.payments_rounded,
           ),

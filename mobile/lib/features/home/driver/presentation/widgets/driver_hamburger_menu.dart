@@ -94,12 +94,12 @@ class DriverHamburgerMenu extends StatelessWidget {
                           children: [
                             _MenuItem(
                               icon: Icons.query_stats_rounded,
-                              label: 'Mes statistiques',
+                              label: 'Mon activite',
                               onTap: onStatsTap,
                             ),
                             _MenuItem(
                               icon: Icons.history_rounded,
-                              label: 'Historique',
+                              label: 'Mes trajets',
                               onTap: onHistoryTap,
                             ),
                             _MenuItem(
@@ -110,12 +110,11 @@ class DriverHamburgerMenu extends StatelessWidget {
                             _MenuItem(
                               icon: Icons.notifications_rounded,
                               label: 'Notifications',
-                              badge: '3',
                               onTap: onNotificationsTap,
                             ),
                             _MenuItem(
                               icon: Icons.settings_outlined,
-                              label: 'Parametres',
+                              label: 'Reglages',
                               onTap: onSettingsTap,
                             ),
                             _MenuItem(
@@ -125,7 +124,7 @@ class DriverHamburgerMenu extends StatelessWidget {
                             ),
                             _MenuItem(
                               icon: Icons.warning_amber_rounded,
-                              label: 'Signaler probleme',
+                              label: 'Parler d un probleme',
                               color: const Color(0xFFE96962),
                               onTap: onReportTap,
                             ),
@@ -170,7 +169,7 @@ class _StatusSwitch extends StatelessWidget {
         onChanged: isBusy ? null : onChanged,
         activeThumbColor: const Color(0xFF1B8A5A),
         title: Text(
-          isOnline ? 'En ligne' : 'Hors ligne',
+          isOnline ? 'Disponible' : 'En pause',
           style: const TextStyle(fontWeight: FontWeight.w900),
         ),
         secondary: Icon(
@@ -187,14 +186,12 @@ class _MenuItem extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.onTap,
-    this.badge,
     this.color = const Color(0xFF1B8A5A),
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
-  final String? badge;
   final Color color;
 
   @override
@@ -227,22 +224,6 @@ class _MenuItem extends StatelessWidget {
                 ),
               ),
             ),
-            if (badge != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE96962),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  badge!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ),
           ],
         ),
       ),
@@ -263,7 +244,7 @@ class _PassengerButton extends StatelessWidget {
       child: ElevatedButton.icon(
         onPressed: onTap,
         icon: const Icon(Icons.person_rounded),
-        label: const Text('Mode passager'),
+        label: const Text('Passer cote client'),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF1B8A5A),
           foregroundColor: Colors.white,

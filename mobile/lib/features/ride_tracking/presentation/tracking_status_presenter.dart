@@ -17,8 +17,8 @@ TrackingStatusPresentation buildClientTrackingStatusPresentation(
 ) {
   if (ride == null) {
     return const TrackingStatusPresentation(
-      title: 'Suivi de course',
-      subtitle: 'Nous remettons votre course a jour.',
+      title: 'Votre trajet',
+      subtitle: 'On remet votre trajet a jour.',
       showSpinner: false,
     );
   }
@@ -26,60 +26,60 @@ TrackingStatusPresentation buildClientTrackingStatusPresentation(
   switch (ride.status) {
     case RideTrackingStatus.pending:
       return const TrackingStatusPresentation(
-        title: 'Recherche de chauffeur',
-        subtitle: 'Nous contactons les chauffeurs proches de vous.',
+        title: 'On cherche un chauffeur',
+        subtitle: 'Nous prevenons les chauffeurs autour de vous.',
         showSpinner: true,
       );
     case RideTrackingStatus.offered:
       return const TrackingStatusPresentation(
-        title: 'Offres disponibles',
-        subtitle: 'Consultez les propositions recues avant de confirmer.',
+        title: 'Des chauffeurs vous ont repondu',
+        subtitle: 'Choisissez la proposition qui vous convient.',
         showSpinner: true,
       );
     case RideTrackingStatus.accepted:
       return const TrackingStatusPresentation(
-        title: 'Chauffeur confirme',
-        subtitle: 'Votre chauffeur arrive vers le point de depart.',
+        title: 'Votre chauffeur arrive',
+        subtitle: 'Il se dirige vers votre point de depart.',
         showSpinner: false,
       );
     case RideTrackingStatus.arrived:
       return const TrackingStatusPresentation(
-        title: 'Chauffeur sur place',
-        subtitle: 'Rejoignez le point de prise en charge pour demarrer.',
+        title: 'Votre chauffeur est sur place',
+        subtitle: 'Vous pouvez maintenant le rejoindre.',
         showSpinner: false,
       );
     case RideTrackingStatus.started:
       return TrackingStatusPresentation(
-        title: 'Course en cours',
-        subtitle: 'Suivez le trajet jusqu a ${ride.dropoffLocation}.',
+        title: 'Le trajet a commence',
+        subtitle: 'Vous allez vers ${ride.dropoffLocation}.',
         showSpinner: false,
       );
     case RideTrackingStatus.completed:
       return const TrackingStatusPresentation(
-        title: 'Course terminee',
-        subtitle: 'Vous etes arrive a destination.',
+        title: 'Le trajet est termine',
+        subtitle: 'Vous etes bien arrive.',
         showSpinner: false,
       );
     case RideTrackingStatus.cancelled:
       final reason = ride.cancellationReason?.trim();
       return TrackingStatusPresentation(
-        title: 'Course annulee',
+        title: 'Le trajet a ete annule',
         subtitle: reason == null || reason.isEmpty
-            ? 'Cette course a ete annulee.'
-            : 'Raison: $reason',
+            ? 'Ce trajet a ete annule.'
+            : 'Raison : $reason',
         showSpinner: false,
       );
     case RideTrackingStatus.expired:
       return const TrackingStatusPresentation(
-        title: 'Demande expiree',
+        title: 'La demande est terminee',
         subtitle:
-            'Aucun chauffeur n a confirme a temps. Vous pouvez relancer une demande.',
+            'Personne n a repondu a temps. Vous pouvez reessayer quand vous voulez.',
         showSpinner: false,
       );
     case RideTrackingStatus.unknown:
       return const TrackingStatusPresentation(
-        title: 'Synchronisation du statut',
-        subtitle: 'Le suivi revient progressivement a jour.',
+        title: 'Un instant',
+        subtitle: 'Le trajet revient doucement a jour.',
         showSpinner: false,
       );
   }
@@ -90,8 +90,8 @@ TrackingStatusPresentation buildDriverTrackingStatusPresentation(
 ) {
   if (ride == null) {
     return const TrackingStatusPresentation(
-      title: 'Suivi de course',
-      subtitle: 'Nous remettons la course a jour.',
+      title: 'Votre trajet',
+      subtitle: 'On remet le trajet a jour.',
       showSpinner: false,
     );
   }
@@ -100,53 +100,53 @@ TrackingStatusPresentation buildDriverTrackingStatusPresentation(
     case RideTrackingStatus.pending:
     case RideTrackingStatus.offered:
       return const TrackingStatusPresentation(
-        title: 'Demande en attente',
-        subtitle: 'Cette demande n est pas encore confirmee.',
+        title: 'Cette demande attend encore',
+        subtitle: 'Le client n a pas encore choisi.',
         showSpinner: true,
       );
     case RideTrackingStatus.accepted:
       return TrackingStatusPresentation(
-        title: 'Direction le client',
-        subtitle: 'Rendez-vous a ${ride.pickupLocation}.',
+        title: 'Allez vers le client',
+        subtitle: 'Rejoignez ${ride.pickupLocation}.',
         showSpinner: false,
       );
     case RideTrackingStatus.arrived:
       return const TrackingStatusPresentation(
-        title: 'Client attendu',
-        subtitle: 'Le client peut maintenant confirmer qu il est pret.',
+        title: 'Vous etes arrive',
+        subtitle: 'Le client peut maintenant vous rejoindre.',
         showSpinner: false,
       );
     case RideTrackingStatus.started:
       return TrackingStatusPresentation(
-        title: 'Course en cours',
-        subtitle: 'Suivez le trajet jusqu a ${ride.dropoffLocation}.',
+        title: 'Le trajet a commence',
+        subtitle: 'Roulez vers ${ride.dropoffLocation}.',
         showSpinner: false,
       );
     case RideTrackingStatus.completed:
       return const TrackingStatusPresentation(
-        title: 'Course terminee',
-        subtitle: 'Vous pouvez finaliser le paiement et revenir a l accueil.',
+        title: 'Le trajet est termine',
+        subtitle: 'Vous pouvez maintenant revenir a l accueil.',
         showSpinner: false,
       );
     case RideTrackingStatus.cancelled:
       final reason = ride.cancellationReason?.trim();
       return TrackingStatusPresentation(
-        title: 'Course annulee',
+        title: 'Le trajet a ete annule',
         subtitle: reason == null || reason.isEmpty
-            ? 'Cette course a ete annulee.'
-            : 'Raison: $reason',
+            ? 'Ce trajet a ete annule.'
+            : 'Raison : $reason',
         showSpinner: false,
       );
     case RideTrackingStatus.expired:
       return const TrackingStatusPresentation(
-        title: 'Demande fermee',
-        subtitle: 'Cette demande n est plus active.',
+        title: 'Cette demande est terminee',
+        subtitle: 'Elle n est plus active.',
         showSpinner: false,
       );
     case RideTrackingStatus.unknown:
       return const TrackingStatusPresentation(
-        title: 'Synchronisation du statut',
-        subtitle: 'Le suivi revient progressivement a jour.',
+        title: 'Un instant',
+        subtitle: 'Le trajet revient doucement a jour.',
         showSpinner: false,
       );
   }

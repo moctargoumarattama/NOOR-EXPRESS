@@ -127,7 +127,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'Mise a jour',
+                title: 'Nouvelle',
                 message: _notificationMessage!,
                 tone: _notificationToneForMessage(_notificationMessage!),
                 compact: true,
@@ -139,7 +139,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'GPS',
+                title: 'Position',
                 message: _humanizeMessage(
                   mapState.errorMessage,
                   fallback: RideUiCopy.gpsUnavailable,
@@ -223,7 +223,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
   Future<void> _retryLocationAndRecenter() async {
     AppSnackbar.show(
       context,
-      message: 'Activation GPS en cours...',
+      message: 'On retrouve votre position...',
       tone: AppSnackbarTone.info,
     );
     await ref.read(mapControllerProvider(MapMode.client).notifier).start();
@@ -234,7 +234,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     final mapState = ref.read(mapControllerProvider(MapMode.client));
     AppSnackbar.show(
       context,
-      message: mapState.errorMessage ?? 'Position activee.',
+      message: mapState.errorMessage ?? 'Votre position est a jour.',
       tone: mapState.errorMessage == null
           ? AppSnackbarTone.success
           : AppSnackbarTone.error,

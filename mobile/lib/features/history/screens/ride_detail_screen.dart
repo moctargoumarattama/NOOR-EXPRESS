@@ -39,8 +39,7 @@ class _RideDetailScreenState extends ConsumerState<RideDetailScreen> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError || !snapshot.hasData) {
-              return const Center(
-                  child: Text('Detail de course indisponible.'));
+              return const Center(child: Text('Ce trajet est indisponible.'));
             }
             final ride = snapshot.data!;
             final price = _num(ride['final_price']) ??
@@ -58,7 +57,7 @@ class _RideDetailScreenState extends ConsumerState<RideDetailScreen> {
                     ),
                     const SizedBox(width: 8),
                     const Text(
-                      'Detail de la course',
+                      'Detail du trajet',
                       style:
                           TextStyle(fontSize: 23, fontWeight: FontWeight.w900),
                     ),
@@ -78,23 +77,23 @@ class _RideDetailScreenState extends ConsumerState<RideDetailScreen> {
                 _SectionCard(
                   title: 'Details',
                   children: [
-                    _Line('Prix paye', '${price.toStringAsFixed(0)} FCFA'),
+                    _Line('Prix', '${price.toStringAsFixed(0)} FCFA'),
                     _Line('Distance', _distanceLabel(ride)),
                     const _Line('Duree', '~15 min'),
                     _Line('Date', _dateLabel(ride['created_at'] as String?)),
                   ],
                 ),
                 const _SectionCard(
-                  title: 'Driver',
+                  title: 'Chauffeur',
                   children: [
-                    _Line('Conducteur', 'Driver Noor'),
-                    _Line('Vehicule', 'Noor Express · Cash'),
+                    _Line('Nom', 'Chauffeur Noor'),
+                    _Line('Vehicule', 'Noor Express - Paiement en especes'),
                   ],
                 ),
                 _SectionCard(
-                  title: 'Statut',
+                  title: 'Etat du trajet',
                   children: [
-                    _Line('Course', _statusLabel(ride['status'] as String?))
+                    _Line('Trajet', _statusLabel(ride['status'] as String?)),
                   ],
                 ),
               ],
@@ -149,20 +148,23 @@ class _RideDetailScreenState extends ConsumerState<RideDetailScreen> {
   String _statusLabel(String? status) {
     switch (status) {
       case 'completed':
-        return 'Course terminee';
+        return 'Trajet termine';
       case 'cancelled':
-        return 'Course annulee';
+        return 'Trajet annule';
       case 'expired':
-        return 'Course expiree';
+        return 'Demande terminee';
       default:
-        return status ?? 'En cours';
+        return status ?? 'Trajet en cours';
     }
   }
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard(
-      {required this.title, required this.icon, required this.value});
+  const _InfoCard({
+    required this.title,
+    required this.icon,
+    required this.value,
+  });
 
   final String title;
   final IconData icon;
@@ -240,7 +242,8 @@ class _Line extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-              child: Text(label, style: const TextStyle(color: Colors.grey))),
+            child: Text(label, style: const TextStyle(color: Colors.grey)),
+          ),
           Expanded(
             child: Text(
               value,

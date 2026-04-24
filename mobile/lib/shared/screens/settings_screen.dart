@@ -40,7 +40,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const SizedBox(width: 8),
                 const Text(
-                  'Parametres',
+                  'Reglages',
                   style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
                 ),
               ],
@@ -58,7 +58,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 SwitchListTile.adaptive(
                   value: _gpsUpdates,
                   onChanged: (value) => _saveBool('gps_updates', value),
-                  title: const Text('Mises a jour GPS'),
+                  title: const Text('Position pendant un trajet'),
                   secondary: const Icon(Icons.location_on_rounded),
                 ),
               ],
@@ -69,7 +69,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ListTile(
                   onTap: () => AppSnackbar.show(
                     context,
-                    message: 'Francais est deja active.',
+                    message: 'Le francais est deja active.',
                     tone: AppSnackbarTone.info,
                   ),
                   leading: const Icon(Icons.language_rounded),
@@ -84,12 +84,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 ListTile(
                   leading: const Icon(Icons.phone_android_rounded),
-                  title: Text('Version : $_version'),
+                  title: Text('Version $_version'),
                 ),
                 ListTile(
                   onTap: _clearCache,
                   leading: const Icon(Icons.cleaning_services_rounded),
-                  title: const Text('Vider le cache'),
+                  title: const Text('Effacer les donnees temporaires'),
                 ),
               ],
             ),
@@ -106,8 +106,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     'Supprimer mon compte',
                     style: TextStyle(color: Color(0xFFE53935)),
                   ),
-                  subtitle:
-                      const Text('Dev: deconnexion uniquement pour le moment.'),
+                  subtitle: const Text(
+                    'Cette action vous deconnectera pour le moment.',
+                  ),
                 ),
               ],
             ),
@@ -145,7 +146,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     });
     AppSnackbar.show(
       context,
-      message: value ? 'Option activee.' : 'Option desactivee.',
+      message: value ? 'C est enregistre.' : 'C est bien desactive.',
       tone: AppSnackbarTone.success,
     );
   }
@@ -159,7 +160,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     }
     AppSnackbar.show(
       context,
-      message: 'Cache vide.',
+      message: 'Les donnees temporaires ont ete effacees.',
       tone: AppSnackbarTone.success,
     );
   }
@@ -169,7 +170,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Supprimer le compte ?'),
-        content: const Text('En dev, cette action te deconnecte uniquement.'),
+        content: const Text(
+          'Pour le moment, cette action vous deconnecte simplement.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),

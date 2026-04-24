@@ -96,7 +96,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (position != null) {
       return AddressResult(
         name: 'Ma position actuelle',
-        displayName: 'Position GPS actuelle',
+        displayName: 'Ma position actuelle',
         latitude: position.latitude,
         longitude: position.longitude,
         type: 'current_location',
@@ -104,7 +104,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     }
     return const AddressResult(
       name: 'Niamey centre',
-      displayName: 'Position approximative - GPS indisponible',
+      displayName: 'Position approximative',
       latitude: 13.5137,
       longitude: 2.1098,
       type: 'current_location',
@@ -140,7 +140,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     final createdRideId = ref.read(clientHomeControllerProvider).rides.first.id;
     _resetForm();
     _showSnackBar(
-      'Demande envoyee. Nous cherchons un chauffeur.',
+      'Votre demande est envoyee. On cherche un chauffeur.',
       tone: AppSnackbarTone.success,
     );
     context.push(AppRoutes.clientNegotiation(createdRideId));
@@ -152,14 +152,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     final price = double.tryParse(_priceController.text.trim());
     if (pickup == null || dropoff == null) {
       _showSnackBar(
-        'Choisissez le depart et la destination.',
+        'Choisissez votre depart et votre arrivee.',
         tone: AppSnackbarTone.error,
       );
       return null;
     }
     if (_priceController.text.trim().isNotEmpty &&
         (price == null || price <= 0)) {
-      _showSnackBar('Entrez un prix valide en FCFA.',
+      _showSnackBar('Entrez un prix valide.',
           tone: AppSnackbarTone.error);
       return null;
     }
