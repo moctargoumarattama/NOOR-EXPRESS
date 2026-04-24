@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_error.dart';
 import 'models/driver_profile.dart';
 import 'models/driver_stats.dart';
 
@@ -30,7 +31,7 @@ class DriverRepository {
       return DriverProfile.fromJson(payload);
     } on DioException catch (error) {
       throw DriverFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de charger le profil driver.',
         ),
@@ -53,7 +54,7 @@ class DriverRepository {
       return DriverProfile.fromJson(payload);
     } on DioException catch (error) {
       throw DriverFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de mettre a jour la disponibilite.',
         ),
@@ -76,7 +77,7 @@ class DriverRepository {
       return DriverProfile.fromJson(payload);
     } on DioException catch (error) {
       throw DriverFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de mettre a jour le profil driver.',
         ),
@@ -98,28 +99,12 @@ class DriverRepository {
       return DriverStats.fromJson(payload);
     } on DioException catch (error) {
       throw DriverFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de charger les statistiques driver.',
         ),
       );
     }
-  }
-
-  String _readErrorMessage(
-    DioException error, {
-    required String fallbackMessage,
-  }) {
-    final data = error.response?.data;
-
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) {
-        return detail;
-      }
-    }
-
-    return fallbackMessage;
   }
 }
 

@@ -39,7 +39,6 @@ double driverTodayEarnings(List<DriverRide> rides) {
         ride.createdAt.month == now.month &&
         ride.createdAt.day == now.day;
   }).fold<double>(0, (sum, ride) {
-    return sum +
-        (ride.driverNetEarnings ?? ride.finalPrice ?? ride.estimatedPrice);
+    return sum + (ride.driverNetEarnings ?? ride.displayPrice);
   });
 }

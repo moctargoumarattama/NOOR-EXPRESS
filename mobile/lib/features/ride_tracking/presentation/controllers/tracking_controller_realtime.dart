@@ -12,9 +12,22 @@ Future<void> _bindRealtime(TrackingController controller) async {
   controller._connectionSubscription =
       controller._websocketDatasource.connectionStates.listen(
     (connectionState) {
+      final previousConnectionState = controller._currentState.connectionState;
       controller._currentState = controller._currentState.copyWith(
         connectionState: connectionState,
+        clearError: connectionState == TrackingConnectionState.connected,
       );
+      if (connectionState == TrackingConnectionState.connected &&
+          previousConnectionState == TrackingConnectionState.reconnecting) {
+        unawaited(_refreshSnapshot(controller));
+      }
+      if (connectionState == TrackingConnectionState.connected &&
+          controller.mode == TrackingMode.driver) {
+        final currentPosition = controller._currentState.currentPosition;
+        if (currentPosition != null) {
+          controller._websocketDatasource.sendLocationUpdate(currentPosition);
+        }
+      }
     },
   );
   controller._eventSubscription = controller._websocketDatasource.events.listen(
@@ -73,7 +86,6 @@ void _startLocationTracking(TrackingController controller) {
       .streamPosition(
     accuracy: LocationAccuracy.high,
     distanceFilter: 8,
-    timeout: const Duration(seconds: 20),
   )
       .listen((result) {
     if (result case LocationSuccess<Position>(value: final position)) {

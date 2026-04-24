@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/controllers/client_home_controller.dart';
 
 import '../../../../../app/app_routes.dart';
+import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_inline_feedback.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_offer_model.dart';
 import '../../domain/entities/negotiation_state.dart';
@@ -45,7 +47,10 @@ class _ClientNegotiationScreenState
 
         if (next.toastMessage != null &&
             next.toastMessage != previous?.toastMessage) {
-          AppSnackbar.show(context, message: next.toastMessage!);
+          AppSnackbar.show(
+            context,
+            message: _humanizeMessage(next.toastMessage!),
+          );
           ref
               .read(negotiationControllerProvider(_scope).notifier)
               .consumeToast();
@@ -59,7 +64,7 @@ class _ClientNegotiationScreenState
               ref.read(negotiationControllerProvider(_scope).notifier);
           notifier.consumeNavigation();
           notifier.stop();
-          context.push(AppRoutes.clientMapWithRide(rideId));
+          context.go(AppRoutes.clientMapWithRide(rideId));
         }
 
         if (next.shouldCloseToHome && !(previous?.shouldCloseToHome ?? false)) {
@@ -67,12 +72,7 @@ class _ClientNegotiationScreenState
               ref.read(negotiationControllerProvider(_scope).notifier);
           notifier.consumeCloseAction();
           notifier.stop();
-          await ref
-              .read(clientHomeControllerProvider.notifier)
-              .refreshRideStatus(
-                rideId: widget.rideId,
-                status: 'cancelled',
-              );
+          await ref.read(clientHomeControllerProvider.notifier).loadRides();
           if (!mounted) {
             return;
           }
@@ -100,6 +100,7 @@ class _ClientNegotiationScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(negotiationControllerProvider(_scope));
     final ride = state.ride;
+    final statusMessage = _statusMessage(state);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1523),
@@ -117,13 +118,15 @@ class _ClientNegotiationScreenState
                 children: [
                   IconButton(
                     onPressed: context.pop,
-                    icon: const Icon(Icons.arrow_back_rounded,
-                        color: Colors.white),
+                    icon: const Icon(
+                      Icons.arrow_back_rounded,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Négociation en cours',
+                      'Negociation en cours',
                       style:
                           Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 color: Colors.white,
@@ -133,49 +136,31 @@ class _ClientNegotiationScreenState
                 ],
               ),
               const SizedBox(height: 20),
+              if (statusMessage != null) ...[
+                AppInlineFeedback(
+                  message: statusMessage,
+                  tone: _statusTone(state),
+                  isLoading: _statusIsLoading(state),
+                ),
+                const SizedBox(height: 16),
+              ],
               _WaitingPulse(
                 waiting: state.offers.isEmpty,
                 priceLabel: _formatFcfa(ride?.clientPrice ?? 0),
               ),
               const SizedBox(height: 20),
-              _RideSummaryCard(ride: ride, errorMessage: state.errorMessage),
+              _RideSummaryCard(ride: ride),
               const SizedBox(height: 20),
-              if (state.isLoading && ride == null)
-                const Center(child: CircularProgressIndicator())
-              else if (state.offers.isEmpty)
-                _WaitingOffersCard(isSubmitting: state.isSubmitting)
-              else
-                ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: state.offers.length,
-                  separatorBuilder: (context, index) =>
-                      const SizedBox(height: 14),
-                  itemBuilder: (context, index) {
-                    final offer = state.offers[index];
-                    return OfferCard(
-                      key: ValueKey('offer-${offer.offerId}'),
-                      offer: offer,
-                      isBusy: state.isSubmitting,
-                      onSelect: () {
-                        ref
-                            .read(
-                                negotiationControllerProvider(_scope).notifier)
-                            .acceptOffer(offer.offerId);
-                      },
-                      onReject: () {
-                        ref
-                            .read(
-                                negotiationControllerProvider(_scope).notifier)
-                            .rejectOffer(offer.offerId);
-                      },
-                    );
-                  },
-                ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 220),
+                switchInCurve: Curves.easeOutCubic,
+                switchOutCurve: Curves.easeInCubic,
+                child: _buildOffersSection(state),
+              ),
               const SizedBox(height: 24),
-              AppButton.secondary(
-                label:
-                    state.isSubmitting ? 'Annulation...' : 'Annuler la demande',
+              AppButton.danger(
+                label: 'Annuler la demande',
+                isLoading: state.isSubmitting,
                 onPressed: state.isSubmitting ? null : _confirmAndCancelRide,
               ),
             ],
@@ -185,7 +170,112 @@ class _ClientNegotiationScreenState
     );
   }
 
+  Widget _buildOffersSection(NegotiationState state) {
+    if (state.isLoading && state.ride == null) {
+      return const AppInlineFeedback(
+        key: ValueKey('negotiation-loading'),
+        message: RideUiCopy.refreshing,
+        tone: AppInlineFeedbackTone.info,
+        isLoading: true,
+      );
+    }
+
+    if (state.offers.isEmpty) {
+      return _WaitingOffersCard(
+        key: const ValueKey('negotiation-waiting'),
+        isSubmitting: state.isSubmitting,
+      );
+    }
+
+    return ListView.separated(
+      key: const ValueKey('negotiation-offers'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: state.offers.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 14),
+      itemBuilder: (context, index) {
+        final offer = state.offers[index];
+        return OfferCard(
+          key: ValueKey('offer-${offer.offerId}'),
+          offer: offer,
+          isBusy: state.isSubmitting,
+          onSelect: () {
+            ref
+                .read(
+                  negotiationControllerProvider(_scope).notifier,
+                )
+                .acceptOffer(offer.offerId);
+          },
+          onReject: () {
+            ref
+                .read(
+                  negotiationControllerProvider(_scope).notifier,
+                )
+                .rejectOffer(offer.offerId);
+          },
+        );
+      },
+    );
+  }
+
   String _formatFcfa(double value) => '${value.round()} FCFA';
+
+  String? _statusMessage(NegotiationState state) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return _humanizeMessage(state.errorMessage!);
+    }
+
+    switch (state.connectionState) {
+      case NegotiationConnectionState.reconnecting:
+        return RideUiCopy.reconnecting;
+      case NegotiationConnectionState.connecting:
+        return 'Connexion a la negotiation en cours...';
+      case NegotiationConnectionState.disconnected:
+        return RideUiCopy.negotiationRefreshHint;
+      case NegotiationConnectionState.connected:
+        if (state.offers.isEmpty) {
+          return RideUiCopy.negotiationRefreshHint;
+        }
+        return null;
+    }
+  }
+
+  AppInlineFeedbackTone _statusTone(NegotiationState state) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return AppInlineFeedbackTone.error;
+    }
+    if (state.connectionState == NegotiationConnectionState.disconnected ||
+        state.connectionState == NegotiationConnectionState.reconnecting) {
+      return AppInlineFeedbackTone.warning;
+    }
+    return AppInlineFeedbackTone.info;
+  }
+
+  bool _statusIsLoading(NegotiationState state) {
+    return state.connectionState == NegotiationConnectionState.connecting ||
+        state.connectionState == NegotiationConnectionState.reconnecting ||
+        (state.isLoading && state.offers.isEmpty);
+  }
+
+  String _humanizeMessage(String message) {
+    final value = message.trim().toLowerCase();
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
+    }
+    if (value.contains('expire')) {
+      return RideUiCopy.offerExpired;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+    if (value.contains('indisponible') && value.contains('chauffeur')) {
+      return RideUiCopy.driverUnavailable;
+    }
+    return message;
+  }
 
   Future<void> _confirmAndCancelRide() async {
     final confirmed = await showDialog<bool>(
@@ -271,11 +361,9 @@ class _ClientNegotiationScreenState
 class _RideSummaryCard extends StatelessWidget {
   const _RideSummaryCard({
     required this.ride,
-    required this.errorMessage,
   });
 
   final NegotiationRideModel? ride;
-  final String? errorMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -288,17 +376,33 @@ class _RideSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Départ : ${ride?.pickup ?? 'En chargement...'}'),
-          const SizedBox(height: 8),
-          Text('Destination : ${ride?.dropoff ?? 'En chargement...'}'),
-          const SizedBox(height: 8),
           Text(
-              'Prix proposé : ${ride == null ? '--' : '${ride!.clientPrice.round()} FCFA'}'),
-          if (errorMessage != null) ...[
-            const SizedBox(height: 10),
-            Text(errorMessage!,
-                style: const TextStyle(color: Color(0xFFD64545))),
-          ],
+            'Depart',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(ride?.pickup ?? 'En chargement...'),
+          const SizedBox(height: 10),
+          Text(
+            'Destination',
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: const Color(0xFF6B7280),
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(ride?.dropoff ?? 'En chargement...'),
+          const SizedBox(height: 10),
+          Text(
+            'Prix propose : ${ride == null ? '--' : '${ride!.clientPrice.round()} FCFA'}',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: const Color(0xFF1B8A5A),
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
         ],
       ),
     );
@@ -306,28 +410,33 @@ class _RideSummaryCard extends StatelessWidget {
 }
 
 class _WaitingOffersCard extends StatelessWidget {
-  const _WaitingOffersCard({required this.isSubmitting});
+  const _WaitingOffersCard({
+    super.key,
+    required this.isSubmitting,
+  });
 
   final bool isSubmitting;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: const Color(0x141B8A5A),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: const Color(0x401B8A5A)),
-      ),
-      child: Text(
-        isSubmitting
-            ? 'Action en cours...'
-            : 'En attente des propositions des drivers...',
-        style: Theme.of(context)
-            .textTheme
-            .titleMedium
-            ?.copyWith(color: Colors.white),
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppInlineFeedback(
+          message: isSubmitting
+              ? 'Mise a jour de votre demande en cours...'
+              : 'Nous attendons les propositions des chauffeurs.',
+          tone: AppInlineFeedbackTone.info,
+          isLoading: !isSubmitting,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          RideUiCopy.negotiationRefreshHint,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: Colors.white.withValues(alpha: 0.78),
+              ),
+        ),
+      ],
     );
   }
 }

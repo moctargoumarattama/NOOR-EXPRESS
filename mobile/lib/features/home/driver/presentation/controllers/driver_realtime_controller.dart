@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/services/websocket_service.dart';
 import '../../../../../core/state/session_controller.dart';
@@ -68,6 +69,7 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
   StreamSubscription<LatLng>? _positionSubscription;
   Timer? _ridesRefreshTimer;
   int? _currentDriverId;
+  void Function()? _unregisterLifecycleResume;
 
   Future<void> start(int driverId) async {
     if (_currentDriverId == driverId &&
@@ -77,11 +79,16 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
 
     await stop();
     _currentDriverId = driverId;
+    _registerLifecycleResume();
 
     _statusSubscription = _websocketService.statuses.listen((status) {
+      final previousStatus = state.connectionStatus;
       state = state.copyWith(connectionStatus: status);
       if (status == WebSocketStatus.connected) {
         _startLocationSharing();
+        if (previousStatus == WebSocketStatus.reconnecting) {
+          _scheduleRidesRefresh();
+        }
       } else {
         _positionSubscription?.cancel();
         _positionSubscription = null;
@@ -126,6 +133,8 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
   }
 
   Future<void> stop() async {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = null;
     _ridesRefreshTimer?.cancel();
     _ridesRefreshTimer = null;
     await _positionSubscription?.cancel();
@@ -145,6 +154,35 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
 
   void consumePendingRide() {
     state = state.copyWith(clearPendingRide: true);
+  }
+
+  void _registerLifecycleResume() {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = _ref
+        .read(appLifecycleRecoveryServiceProvider)
+        .registerResumeHandler('home-driver-realtime', _resumeFromLifecycle);
+  }
+
+  Future<void> _resumeFromLifecycle() async {
+    final driverId = _currentDriverId;
+    if (driverId == null) {
+      return;
+    }
+
+    await _reconnectDriverSocket(driverId);
+    await _ref.read(rideDriverProvider.notifier).resumeFromLifecycle();
+  }
+
+  Future<void> _reconnectDriverSocket(int driverId) async {
+    final token = await _storageService.readToken();
+    await _websocketService.disconnect();
+    await _websocketService.connect(
+      buildWebSocketUrl(
+        _baseUrl,
+        '/ws/drivers/$driverId',
+        queryParameters: token == null ? null : {'token': token},
+      ),
+    );
   }
 
   void _scheduleRidesRefresh({
@@ -192,12 +230,16 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
     switch (status) {
       case 'accepted':
         return 'Une ride a ete acceptee.';
+      case 'arrived':
+        return 'Le client peut monter a bord.';
       case 'started':
         return 'Une course est en cours.';
       case 'completed':
         return 'Une course a ete terminee.';
       case 'cancelled':
         return 'Une ride a ete annulee.';
+      case 'pending':
+        return 'La ride est de nouveau ouverte aux offres.';
       default:
         return 'Statut de ride mis a jour.';
     }

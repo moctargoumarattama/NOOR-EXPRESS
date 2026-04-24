@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/app_routes.dart';
+import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 import '../controllers/tracking_controller.dart';
+import '../tracking_status_presenter.dart';
 import '../widgets/bottom_ride_sheet.dart';
 import '../widgets/map_view.dart';
 import '../widgets/rating_bottom_sheet.dart';
@@ -49,7 +52,7 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
 
         AppSnackbar.show(
           context,
-          message: message,
+          message: _humanizeMessage(message),
           tone: _snackbarTone(message),
         );
         ref.read(trackingControllerProvider(_scope).notifier).consumeToast();
@@ -72,6 +75,8 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     final state = ref.watch(trackingControllerProvider(_scope));
     final ride = state.ride;
     final pickup = ride?.pickupPosition ?? state.currentPosition;
+    final statusPresentation = buildClientTrackingStatusPresentation(ride);
+    final recoveryMessage = _recoveryMessage(state);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
@@ -111,26 +116,53 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
                   TrackingTopBar(
                     connectionState: state.connectionState,
                     etaMinutes: state.etaMinutes,
-                    onBack: context.pop,
+                    onBack: () {
+                      if (context.canPop()) {
+                        context.pop();
+                        return;
+                      }
+                      context.go(AppRoutes.clientHome);
+                    },
                   ),
+                  if (recoveryMessage != null) ...[
+                    const SizedBox(height: 14),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: TrackingRecoveryBanner(
+                        key: ValueKey(
+                          'client-recovery-${state.connectionState.name}-${state.errorMessage}',
+                        ),
+                        connectionState: state.connectionState,
+                        message: recoveryMessage,
+                        isLoading: _recoveryIsLoading(state),
+                        onRefresh: () => ref
+                            .read(trackingControllerProvider(_scope).notifier)
+                            .refresh(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
-                  RideStatusBanner(
-                    status: ride?.status ?? RideTrackingStatus.pending,
-                    title: _titleFor(ride?.status),
-                    subtitle: _subtitleFor(ride),
-                    showSpinner: ride == null || ride.isPending,
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: RideStatusBanner(
+                      key: ValueKey(
+                        'client-banner-${ride?.status.name ?? 'unknown'}-${statusPresentation.showSpinner}',
+                      ),
+                      status: ride?.status ?? RideTrackingStatus.unknown,
+                      title: statusPresentation.title,
+                      subtitle: statusPresentation.subtitle,
+                      showSpinner: ride == null
+                          ? state.isLoading
+                          : statusPresentation.showSpinner,
+                    ),
                   ),
                   if (ride == null && !state.isLoading) ...[
                     const SizedBox(height: 20),
                     const TrackingEmptyCard(
                       title: 'Aucune course active',
                       subtitle:
-                          'Cree une course depuis l accueil client pour lancer le tracking live.',
+                          'Creez une course depuis l accueil client pour relancer le suivi live.',
                     ),
-                  ],
-                  if (state.errorMessage != null) ...[
-                    const SizedBox(height: 16),
-                    TrackingErrorCard(message: state.errorMessage!),
                   ],
                 ],
               ),
@@ -160,6 +192,7 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     if (ride.isArrived) {
       return AppButton(
         label: 'Je suis pret',
+        isLoading: state.isActionLoading,
         onPressed: state.isActionLoading
             ? null
             : () {
@@ -172,12 +205,9 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
 
     if (ride.canRateDriver) {
       return AppButton(
-        label: 'Noter le driver',
-        onPressed: state.isActionLoading
-            ? null
-            : () {
-                _openRatingSheet();
-              },
+        label: 'Noter le chauffeur',
+        isLoading: state.isActionLoading,
+        onPressed: state.isActionLoading ? null : _openRatingSheet,
       );
     }
 
@@ -197,8 +227,9 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
         ),
       if (ride.canClientCancel) ...[
         if (_canReport(ride.status)) const SizedBox(height: 10),
-        AppButton.secondary(
+        AppButton.danger(
           label: 'Annuler la course',
+          isLoading: state.isActionLoading,
           onPressed: state.isActionLoading
               ? null
               : () {
@@ -243,43 +274,54 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
         status == RideTrackingStatus.completed;
   }
 
+  String? _recoveryMessage(TrackingState state) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return _humanizeMessage(state.errorMessage!);
+    }
+
+    switch (state.connectionState) {
+      case TrackingConnectionState.reconnecting:
+        return RideUiCopy.reconnecting;
+      case TrackingConnectionState.connecting:
+        return 'Connexion au suivi en cours...';
+      case TrackingConnectionState.disconnected:
+        return RideUiCopy.networkError;
+      case TrackingConnectionState.connected:
+        return null;
+    }
+  }
+
+  bool _recoveryIsLoading(TrackingState state) {
+    return state.connectionState == TrackingConnectionState.connecting ||
+        state.connectionState == TrackingConnectionState.reconnecting ||
+        state.isLoading;
+  }
+
+  String _humanizeMessage(String message) {
+    final value = message.toLowerCase();
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
+    }
+    if (value.contains('gps')) {
+      return RideUiCopy.gpsUnavailable;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+    return message;
+  }
+
   AppSnackbarTone _snackbarTone(String message) {
-    if (message.contains('annulee')) {
+    final value = message.toLowerCase();
+    if (value.contains('annulee')) {
       return AppSnackbarTone.error;
     }
-    if (message.contains('terminee') || message.contains('Merci')) {
+    if (value.contains('terminee') || value.contains('merci')) {
       return AppSnackbarTone.success;
     }
     return AppSnackbarTone.info;
-  }
-
-  String _titleFor(RideTrackingStatus? status) {
-    switch (status) {
-      case RideTrackingStatus.accepted:
-        return 'Driver accepte, il arrive';
-      case RideTrackingStatus.arrived:
-        return 'Votre driver est arrive';
-      case RideTrackingStatus.started:
-        return 'Course en cours';
-      case RideTrackingStatus.completed:
-        return 'Fin de course';
-      default:
-        return 'Recherche d un driver';
-    }
-  }
-
-  String _subtitleFor(RideTrackingModel? ride) {
-    switch (ride?.status) {
-      case RideTrackingStatus.accepted:
-        return 'Le chauffeur se dirige vers votre point de depart en direct.';
-      case RideTrackingStatus.arrived:
-        return 'Le chauffeur vous attend au point de prise en charge.';
-      case RideTrackingStatus.started:
-        return 'Le trajet vers ${ride?.dropoffLocation ?? 'la destination'} est lance.';
-      case RideTrackingStatus.completed:
-        return 'Le paiement cash se regle directement avec le chauffeur.';
-      default:
-        return 'Noor Express cherche le meilleur chauffeur disponible a Niamey.';
-    }
   }
 }

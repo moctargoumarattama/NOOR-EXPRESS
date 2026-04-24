@@ -51,7 +51,8 @@ class NegotiationRideModel {
     Map<String, dynamic> json,
   ) {
     return NegotiationRideModel(
-      rideId: ((json['ride_id'] ?? json['ride_request_id']) as num?)?.toInt() ?? 0,
+      rideId:
+          ((json['ride_id'] ?? json['ride_request_id']) as num?)?.toInt() ?? 0,
       pickup: (json['pickup'] ?? json['pickup_location']) as String? ?? '',
       dropoff: (json['dropoff'] ?? json['dropoff_location']) as String? ?? '',
       clientPrice: _asDouble(json['client_price']),
@@ -94,7 +95,7 @@ class RideOfferModel {
       vehicleModel,
       vehicleColor,
     ].whereType<String>().where((value) => value.trim().isNotEmpty).toList();
-    return parts.isEmpty ? 'Vehicule non renseigne' : parts.join(' • ');
+    return parts.isEmpty ? 'Vehicule non renseigne' : parts.join(' - ');
   }
 
   factory RideOfferModel.fromJson(Map<String, dynamic> json) {

@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../app/app_routes.dart';
+import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 import '../controllers/tracking_controller.dart';
+import '../tracking_status_presenter.dart';
 import '../widgets/bottom_ride_sheet.dart';
 import '../widgets/map_view.dart';
 import '../widgets/report_bottom_sheet.dart';
@@ -45,7 +48,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
         if (message == null || message == previous?.toastMessage || !mounted) {
           return;
         }
-        AppSnackbar.show(context, message: message);
+        AppSnackbar.show(context, message: _humanizeMessage(message));
         ref.read(trackingControllerProvider(_scope).notifier).consumeToast();
       },
     );
@@ -66,6 +69,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     final state = ref.watch(trackingControllerProvider(_scope));
     final ride = state.ride;
     final pickup = ride?.pickupPosition;
+    final statusPresentation = buildDriverTrackingStatusPresentation(ride);
+    final recoveryMessage = _recoveryMessage(state);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
@@ -105,25 +110,53 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                   TrackingTopBar(
                     connectionState: state.connectionState,
                     etaMinutes: state.etaMinutes,
-                    onBack: context.pop,
+                    onBack: () {
+                      if (context.canPop()) {
+                        context.pop();
+                        return;
+                      }
+                      context.go(AppRoutes.driverHome);
+                    },
                   ),
+                  if (recoveryMessage != null) ...[
+                    const SizedBox(height: 14),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      child: TrackingRecoveryBanner(
+                        key: ValueKey(
+                          'driver-recovery-${state.connectionState.name}-${state.errorMessage}',
+                        ),
+                        connectionState: state.connectionState,
+                        message: recoveryMessage,
+                        isLoading: _recoveryIsLoading(state),
+                        onRefresh: () => ref
+                            .read(trackingControllerProvider(_scope).notifier)
+                            .refresh(),
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 18),
-                  RideStatusBanner(
-                    status: ride?.status ?? RideTrackingStatus.accepted,
-                    title: _titleFor(ride?.status),
-                    subtitle: _subtitleFor(ride),
+                  AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 220),
+                    child: RideStatusBanner(
+                      key: ValueKey(
+                        'driver-banner-${ride?.status.name ?? 'unknown'}-${statusPresentation.showSpinner}',
+                      ),
+                      status: ride?.status ?? RideTrackingStatus.accepted,
+                      title: statusPresentation.title,
+                      subtitle: statusPresentation.subtitle,
+                      showSpinner: ride == null
+                          ? state.isLoading
+                          : statusPresentation.showSpinner,
+                    ),
                   ),
                   if (ride == null && !state.isLoading) ...[
                     const SizedBox(height: 20),
                     const TrackingEmptyCard(
                       title: 'Aucune course active',
                       subtitle:
-                          'Accepte une demande depuis l espace driver pour lancer le tracking live.',
+                          'Acceptez une demande depuis l espace chauffeur pour relancer le suivi.',
                     ),
-                  ],
-                  if (state.errorMessage != null) ...[
-                    const SizedBox(height: 16),
-                    TrackingErrorCard(message: state.errorMessage!),
                   ],
                 ],
               ),
@@ -153,6 +186,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     if (ride.isAccepted) {
       return AppButton(
         label: 'Je suis arrive',
+        isLoading: state.isActionLoading,
         onPressed: state.isActionLoading
             ? null
             : () {
@@ -166,6 +200,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     if (ride.isArrived) {
       return AppButton(
         label: 'Demarrer la course',
+        isLoading: state.isActionLoading,
         onPressed: state.isActionLoading
             ? null
             : () {
@@ -179,6 +214,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     if (ride.isStarted) {
       return AppButton(
         label: 'Terminer la course',
+        isLoading: state.isActionLoading,
         onPressed: state.isActionLoading
             ? null
             : () {
@@ -221,29 +257,43 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
         status == RideTrackingStatus.completed;
   }
 
-  String _titleFor(RideTrackingStatus? status) {
-    switch (status) {
-      case RideTrackingStatus.arrived:
-        return 'En attente du passager';
-      case RideTrackingStatus.started:
-        return 'Navigation vers la destination';
-      case RideTrackingStatus.completed:
-        return 'Course terminee';
-      default:
-        return 'Direction le client';
+  String? _recoveryMessage(TrackingState state) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return _humanizeMessage(state.errorMessage!);
+    }
+
+    switch (state.connectionState) {
+      case TrackingConnectionState.reconnecting:
+        return RideUiCopy.reconnecting;
+      case TrackingConnectionState.connecting:
+        return 'Connexion au suivi en cours...';
+      case TrackingConnectionState.disconnected:
+        return RideUiCopy.networkError;
+      case TrackingConnectionState.connected:
+        return null;
     }
   }
 
-  String _subtitleFor(RideTrackingModel? ride) {
-    switch (ride?.status) {
-      case RideTrackingStatus.arrived:
-        return 'Le client peut maintenant confirmer qu il est pret a monter.';
-      case RideTrackingStatus.started:
-        return 'Suis le trajet jusqu a ${ride?.dropoffLocation ?? 'la destination'}.';
-      case RideTrackingStatus.completed:
-        return 'Encaissement cash et fin de mission.';
-      default:
-        return 'Approche du point de depart ${ride?.pickupLocation ?? ''}.';
+  bool _recoveryIsLoading(TrackingState state) {
+    return state.connectionState == TrackingConnectionState.connecting ||
+        state.connectionState == TrackingConnectionState.reconnecting ||
+        state.isLoading;
+  }
+
+  String _humanizeMessage(String message) {
+    final value = message.toLowerCase();
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
     }
+    if (value.contains('gps')) {
+      return RideUiCopy.gpsUnavailable;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+    return message;
   }
 }

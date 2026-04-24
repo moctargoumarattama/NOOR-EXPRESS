@@ -1,21 +1,14 @@
 from datetime import date, datetime, timedelta
-from decimal import Decimal
-from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.firebase import notify_user
+from app.core.api_errors import ApiError
 from app.models.ride_request import RideRequest, RideRequestStatus
+from app.models.ride_offer import RideOffer
 from app.models.ride_request_rejection import RideRequestRejection
-from app.models.user import DriverStatus, User, UserRole
-from app.realtime.gateway import driver_locator, ride_notifier
-from app.realtime.schemas import (
-    NearbyDriverLocation,
-    NewRideRequestNotification,
-    RideStatusNotification,
-)
+from app.models.user import User, UserRole
 from app.schemas.ride_request import (
     ClientRideRequestStatsRead,
     ClientRideRatingCreate,
@@ -29,23 +22,15 @@ from app.schemas.ride_request import (
     RideRequestStatsRead,
     TopDriverStatsRead,
 )
-from app.services.pricing_service import (
-    calculate_ride_price,
-    get_platform_commission_percent,
-    money,
+from app.services.ride_policy import (
+    CLIENT_ACTIVE_RIDE_STATUSES,
+    DRIVER_ACTIVE_RIDE_STATUSES,
+    NEGOTIABLE_RIDE_STATUSES,
 )
-from app.services.user_service import get_drivers_by_status, update_driver_status
+from app.services.user_service import is_driver_verified
 
 
 class RideRequestNotFoundError(Exception):
-    pass
-
-
-class RideRequestInvalidClientError(Exception):
-    pass
-
-
-class RideRequestDriverNotFoundError(Exception):
     pass
 
 
@@ -57,35 +42,11 @@ class RideRequestNotPendingError(Exception):
     pass
 
 
-class RideRequestNotAcceptedError(Exception):
-    pass
-
-
-class RideRequestNotArrivedError(Exception):
-    pass
-
-
-class RideRequestNotStartedError(Exception):
-    pass
-
-
 class RideRequestNotCompletedError(Exception):
     pass
 
 
-class RideRequestDriverMismatchError(Exception):
-    pass
-
-
-class RideRequestCancellationNotAllowedError(Exception):
-    pass
-
-
 class RideRequestExpiredError(Exception):
-    pass
-
-
-class RideRequestDriverNotConnectedError(Exception):
     pass
 
 
@@ -96,112 +57,13 @@ class RideRequestRatingNotAllowedError(Exception):
 class RideRequestAlreadyRatedError(Exception):
     pass
 
-
-MATCHING_MAX_DISTANCE_KM = 10.0
-MATCHING_MAX_DRIVERS = 5
 RIDE_REQUEST_EXPIRATION_SECONDS = 300
 CLIENT_ACTIVE_STATUSES = (
-    RideRequestStatus.PENDING,
-    RideRequestStatus.ACCEPTED,
-    RideRequestStatus.ARRIVED,
-    RideRequestStatus.STARTED,
+    *CLIENT_ACTIVE_RIDE_STATUSES,
 )
 DRIVER_ACTIVE_STATUSES = (
-    RideRequestStatus.ACCEPTED,
-    RideRequestStatus.ARRIVED,
-    RideRequestStatus.STARTED,
+    *DRIVER_ACTIVE_RIDE_STATUSES,
 )
-
-
-def _calculate_distance_km(
-    latitude_1: float,
-    longitude_1: float,
-    latitude_2: float,
-    longitude_2: float,
-) -> float:
-    earth_radius_km = 6371.0
-
-    latitude_1_rad = radians(latitude_1)
-    longitude_1_rad = radians(longitude_1)
-    latitude_2_rad = radians(latitude_2)
-    longitude_2_rad = radians(longitude_2)
-
-    latitude_delta = latitude_2_rad - latitude_1_rad
-    longitude_delta = longitude_2_rad - longitude_1_rad
-
-    haversine = (
-        sin(latitude_delta / 2) ** 2
-        + cos(latitude_1_rad) * cos(latitude_2_rad) * sin(longitude_delta / 2) ** 2
-    )
-    arc = 2 * asin(sqrt(haversine))
-    return earth_radius_km * arc
-
-
-def _calculate_estimated_price(ride_request_in: RideRequestCreate) -> float:
-    distance_km = _calculate_distance_km(
-        latitude_1=ride_request_in.client_latitude,
-        longitude_1=ride_request_in.client_longitude,
-        latitude_2=ride_request_in.dropoff_latitude,
-        longitude_2=ride_request_in.dropoff_longitude,
-    )
-    return round(max(2.0, 2 + (distance_km * 1.5)), 2)
-
-
-def _round_currency(value: float | Decimal) -> float:
-    return round(float(value), 2)
-
-
-async def _calculate_ride_financials(
-    session: AsyncSession,
-    final_price: float | Decimal,
-) -> tuple[Decimal, Decimal, Decimal]:
-    normalized_final_price = money(final_price)
-    commission_percent = await get_platform_commission_percent(session)
-    platform_commission = money(
-        normalized_final_price * commission_percent / Decimal("100")
-    )
-    driver_net_earnings = money(normalized_final_price - platform_commission)
-    return normalized_final_price, platform_commission, driver_net_earnings
-
-
-async def _get_rejected_driver_ids(
-    session: AsyncSession,
-    ride_request_id: int,
-) -> set[int]:
-    result = await session.execute(
-        select(RideRequestRejection.driver_id).where(
-            RideRequestRejection.ride_request_id == ride_request_id
-        )
-    )
-    return set(result.scalars().all())
-
-
-async def _get_matching_drivers_for_ride(
-    session: AsyncSession,
-    ride_request: RideRequest,
-    latitude: float,
-    longitude: float,
-) -> list[NearbyDriverLocation]:
-    nearby_drivers = driver_locator.get_nearby_drivers(
-        latitude=latitude,
-        longitude=longitude,
-        max_distance_km=MATCHING_MAX_DISTANCE_KM,
-    )
-    online_drivers = await get_drivers_by_status(
-        session,
-        [driver.driver_id for driver in nearby_drivers],
-        DriverStatus.ONLINE,
-        is_available=True,
-    )
-    online_driver_ids = {driver.id for driver in online_drivers}
-    rejected_driver_ids = await _get_rejected_driver_ids(session, ride_request.id)
-
-    return [
-        driver
-        for driver in nearby_drivers
-        if driver.driver_id in online_driver_ids
-        and driver.driver_id not in rejected_driver_ids
-    ][:MATCHING_MAX_DRIVERS]
 
 
 async def create_ride_request(
@@ -209,71 +71,9 @@ async def create_ride_request(
     ride_request_in: RideRequestCreate,
     current_user: User,
 ) -> RideRequest:
-    if current_user.role != UserRole.CLIENT:
-        raise RideRequestInvalidClientError("User must have client role")
+    from app.services.ride_lifecycle_service import create_ride
 
-    estimated_price = ride_request_in.estimated_price
-    if estimated_price is None:
-        pricing_estimate = await calculate_ride_price(
-            session,
-            pickup_latitude=ride_request_in.client_latitude,
-            pickup_longitude=ride_request_in.client_longitude,
-            dropoff_latitude=ride_request_in.dropoff_latitude,
-            dropoff_longitude=ride_request_in.dropoff_longitude,
-        )
-        estimated_price = pricing_estimate["final_estimated_price"]
-
-    ride_request = RideRequest(
-        client_id=current_user.id,
-        pickup_location=ride_request_in.pickup_location,
-        dropoff_location=ride_request_in.dropoff_location,
-        pickup_latitude=ride_request_in.client_latitude,
-        pickup_longitude=ride_request_in.client_longitude,
-        dropoff_latitude=ride_request_in.dropoff_latitude,
-        dropoff_longitude=ride_request_in.dropoff_longitude,
-        estimated_price=money(estimated_price),
-        status=RideRequestStatus.PENDING,
-    )
-    session.add(ride_request)
-    await session.commit()
-    await session.refresh(ride_request)
-
-    matching_drivers = await _get_matching_drivers_for_ride(
-        session,
-        ride_request,
-        ride_request_in.client_latitude,
-        ride_request_in.client_longitude,
-    )
-    for nearby_driver in matching_drivers:
-        await ride_notifier.send_new_ride_request_notification(
-            driver_id=nearby_driver.driver_id,
-            notification=NewRideRequestNotification(
-                ride_id=ride_request.id,
-                ride_request_id=ride_request.id,
-                pickup=ride_request.pickup_location,
-                pickup_location=ride_request.pickup_location,
-                dropoff=ride_request.dropoff_location,
-                dropoff_location=ride_request.dropoff_location,
-                client_price=ride_request.estimated_price,
-                distance_km=nearby_driver.distance_km,
-            ),
-        )
-        await notify_user(
-            session,
-            nearby_driver.driver_id,
-            title="Nouvelle course",
-            body=(
-                f"{ride_request.pickup_location} -> "
-                f"{ride_request.dropoff_location} - "
-                f"{ride_request.estimated_price:.0f} FCFA"
-            ),
-            data={
-                "type": "new_ride_request",
-                "ride_id": ride_request.id,
-            },
-        )
-
-    return ride_request
+    return await create_ride(session, ride_request_in, current_user)
 
 
 async def get_ride_request_by_id(
@@ -392,7 +192,11 @@ async def get_active_ride_request(
     result = await session.execute(query)
     ride_request = result.scalar_one_or_none()
     if ride_request is not None:
-        await _expire_ride_request_if_needed(session, ride_request)
+        from app.services.ride_lifecycle_service import expire_ride
+
+        ride_request = await expire_ride(session, ride_request.id) or ride_request
+        if ride_request.status not in ACTIVE_RIDE_STATUSES:
+            return None
     return ride_request
 
 
@@ -404,16 +208,26 @@ async def get_available_ride_requests(
 ) -> list[RideRequest]:
     if current_user.role != UserRole.DRIVER:
         raise RideRequestInvalidDriverError("User must have driver role")
+    if not await is_driver_verified(session, current_user.id):
+        raise ApiError(
+            status_code=403,
+            code="driver_not_verified",
+            message="Driver verification is required.",
+        )
 
     rejected_ride_ids_query = select(RideRequestRejection.ride_request_id).where(
         RideRequestRejection.driver_id == current_user.id
     )
+    existing_offer_ride_ids_query = select(RideOffer.ride_request_id).where(
+        RideOffer.driver_id == current_user.id
+    )
     query: Select[tuple[RideRequest]] = (
         select(RideRequest)
         .where(
-            RideRequest.status == RideRequestStatus.PENDING,
+            RideRequest.status.in_(NEGOTIABLE_RIDE_STATUSES),
             RideRequest.driver_id.is_(None),
             RideRequest.id.not_in(rejected_ride_ids_query),
+            RideRequest.id.not_in(existing_offer_ride_ids_query),
         )
         .order_by(RideRequest.created_at.desc(), RideRequest.id.desc())
         .offset(offset)
@@ -423,7 +237,10 @@ async def get_available_ride_requests(
 
     available_ride_requests: list[RideRequest] = []
     for ride_request in result.scalars().all():
-        if await _expire_ride_request_if_needed(session, ride_request):
+        from app.services.ride_lifecycle_service import expire_ride
+
+        ride_request = await expire_ride(session, ride_request.id) or ride_request
+        if ride_request.status not in NEGOTIABLE_RIDE_STATUSES:
             continue
         available_ride_requests.append(ride_request)
 
@@ -453,6 +270,7 @@ async def get_ride_request_stats(session: AsyncSession) -> RideRequestStatsRead:
     return RideRequestStatsRead(
         total_rides=total_rides,
         pending=grouped_counts.get(RideRequestStatus.PENDING, 0),
+        offered=grouped_counts.get(RideRequestStatus.OFFERED, 0),
         accepted=grouped_counts.get(RideRequestStatus.ACCEPTED, 0),
         started=grouped_counts.get(RideRequestStatus.STARTED, 0),
         completed=grouped_counts.get(RideRequestStatus.COMPLETED, 0),
@@ -533,7 +351,15 @@ async def get_driver_earnings(
     driver_id: int,
 ) -> float:
     result = await session.execute(
-        select(func.sum(func.coalesce(RideRequest.final_price, RideRequest.estimated_price))).where(
+        select(
+            func.sum(
+                func.coalesce(
+                    RideRequest.final_price,
+                    RideRequest.agreed_price,
+                    RideRequest.estimated_price,
+                )
+            )
+        ).where(
             RideRequest.driver_id == driver_id,
             RideRequest.status == RideRequestStatus.COMPLETED,
         )
@@ -561,7 +387,15 @@ async def get_driver_average_completed_price(
     driver_id: int,
 ) -> float:
     result = await session.execute(
-        select(func.avg(func.coalesce(RideRequest.final_price, RideRequest.estimated_price))).where(
+        select(
+            func.avg(
+                func.coalesce(
+                    RideRequest.final_price,
+                    RideRequest.agreed_price,
+                    RideRequest.estimated_price,
+                )
+            )
+        ).where(
             RideRequest.driver_id == driver_id,
             RideRequest.status == RideRequestStatus.COMPLETED,
         )
@@ -634,7 +468,13 @@ async def get_top_drivers(
             User.phone_number,
             func.count(RideRequest.id).label("completed_rides"),
             func.coalesce(
-                func.sum(func.coalesce(RideRequest.final_price, RideRequest.estimated_price)),
+                func.sum(
+                    func.coalesce(
+                        RideRequest.final_price,
+                        RideRequest.agreed_price,
+                        RideRequest.estimated_price,
+                    )
+                ),
                 0.0,
             ).label("total_earnings"),
         )
@@ -646,7 +486,13 @@ async def get_top_drivers(
         .group_by(User.id, User.phone_number)
         .order_by(
             func.count(RideRequest.id).desc(),
-            func.sum(func.coalesce(RideRequest.final_price, RideRequest.estimated_price)).desc(),
+            func.sum(
+                func.coalesce(
+                    RideRequest.final_price,
+                    RideRequest.agreed_price,
+                    RideRequest.estimated_price,
+                )
+            ).desc(),
             User.id.asc(),
         )
         .limit(limit)
@@ -673,7 +519,13 @@ async def get_revenue_stats(
     query = select(
         func.count(RideRequest.id),
         func.coalesce(
-            func.sum(func.coalesce(RideRequest.final_price, RideRequest.estimated_price)),
+            func.sum(
+                func.coalesce(
+                    RideRequest.final_price,
+                    RideRequest.agreed_price,
+                    RideRequest.estimated_price,
+                )
+            ),
             0.0,
         ),
     ).where(RideRequest.status == RideRequestStatus.COMPLETED)
@@ -694,47 +546,6 @@ async def get_revenue_stats(
     )
 
 
-async def accept_ride_request(
-    session: AsyncSession,
-    ride_request_id: int,
-    current_user: User,
-) -> RideRequest:
-    ride_request = await session.get(RideRequest, ride_request_id)
-    if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
-
-    if await _expire_ride_request_if_needed(session, ride_request):
-        raise RideRequestExpiredError("Ride request is expired")
-
-    if ride_request.status != RideRequestStatus.PENDING:
-        raise RideRequestNotPendingError("Ride request is not pending")
-
-    if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
-
-    ride_request.driver_id = current_user.id
-    ride_request.status = RideRequestStatus.ACCEPTED
-    await session.commit()
-    await session.refresh(ride_request)
-    await update_driver_status(session, current_user.id, DriverStatus.BUSY)
-    await ride_notifier.send_ride_status_notification(
-        client_id=ride_request.client_id,
-        notification=RideStatusNotification(
-            ride_request_id=ride_request.id,
-            status=ride_request.status.value,
-        ),
-    )
-    driver_name = current_user.name or current_user.phone_number
-    await notify_user(
-        session,
-        ride_request.client_id,
-        title="Driver en route",
-        body=f"{driver_name} arrive vers vous.",
-        data={"type": "driver_en_route", "ride_id": ride_request.id},
-    )
-    return ride_request
-
-
 async def reject_ride_request(
     session: AsyncSession,
     ride_request_id: int,
@@ -748,7 +559,7 @@ async def reject_ride_request(
     if await _expire_ride_request_if_needed(session, ride_request):
         raise RideRequestExpiredError("Ride request is expired")
 
-    if ride_request.status != RideRequestStatus.PENDING:
+    if ride_request.status not in NEGOTIABLE_RIDE_STATUSES:
         raise RideRequestNotPendingError("Ride request is not pending")
 
     if current_user.role != UserRole.DRIVER:
@@ -782,49 +593,27 @@ async def cancel_ride_request(
     current_user: User,
     ride_request_cancel_in: RideRequestCancel,
 ) -> RideRequest:
-    ride_request = await session.get(RideRequest, ride_request_id)
-    if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
-
-    await _expire_ride_request_if_needed(session, ride_request)
+    from app.services.ride_lifecycle_service import cancel_by_client, cancel_by_driver
 
     if current_user.role == UserRole.CLIENT:
-        if ride_request.client_id != current_user.id:
-            raise RideRequestCancellationNotAllowedError("Client cannot cancel this ride request")
-        if ride_request.status not in {RideRequestStatus.PENDING, RideRequestStatus.ACCEPTED}:
-            raise RideRequestCancellationNotAllowedError("Ride request cannot be cancelled by client")
-    elif current_user.role == UserRole.DRIVER:
-        if ride_request.driver_id != current_user.id:
-            raise RideRequestCancellationNotAllowedError("Driver cannot cancel this ride request")
-        if ride_request.status != RideRequestStatus.ACCEPTED:
-            raise RideRequestCancellationNotAllowedError("Ride request cannot be cancelled by driver")
-    else:
-        raise RideRequestCancellationNotAllowedError("User cannot cancel this ride request")
-
-    ride_request.status = RideRequestStatus.CANCELLED
-    ride_request.cancellation_reason = ride_request_cancel_in.reason
-    ride_request.cancelled_by_role = current_user.role
-    await session.commit()
-    await session.refresh(ride_request)
-
-    notification = RideStatusNotification(
-        ride_request_id=ride_request.id,
-        status=ride_request.status.value,
+        return await cancel_by_client(
+            session,
+            ride_request_id,
+            current_user,
+            ride_request_cancel_in,
+        )
+    if current_user.role == UserRole.DRIVER:
+        return await cancel_by_driver(
+            session,
+            ride_request_id,
+            current_user,
+            ride_request_cancel_in,
+        )
+    raise ApiError(
+        status_code=403,
+        code="ride_cancellation_not_allowed",
+        message="User cannot cancel this ride request",
     )
-    if current_user.role == UserRole.CLIENT and ride_request.driver_id is not None:
-        await update_driver_status(session, ride_request.driver_id, DriverStatus.ONLINE)
-        await ride_notifier.send_ride_status_notification_to_driver(
-            driver_id=ride_request.driver_id,
-            notification=notification,
-        )
-    elif current_user.role == UserRole.DRIVER:
-        await update_driver_status(session, current_user.id, DriverStatus.ONLINE)
-        await ride_notifier.send_ride_status_notification(
-            client_id=ride_request.client_id,
-            notification=notification,
-        )
-
-    return ride_request
 
 
 async def start_ride_request(
@@ -832,40 +621,9 @@ async def start_ride_request(
     ride_request_id: int,
     current_user: User,
 ) -> RideRequest:
-    ride_request = await session.get(RideRequest, ride_request_id)
-    if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+    from app.services.ride_lifecycle_service import start_ride
 
-    if ride_request.status not in {
-        RideRequestStatus.ACCEPTED,
-        RideRequestStatus.ARRIVED,
-    }:
-        raise RideRequestNotArrivedError("Ride request is not ready to start")
-
-    if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
-
-    if ride_request.driver_id != current_user.id:
-        raise RideRequestDriverMismatchError("Driver is not assigned to this ride request")
-
-    ride_request.status = RideRequestStatus.STARTED
-    await session.commit()
-    await session.refresh(ride_request)
-    await ride_notifier.send_ride_status_notification(
-        client_id=ride_request.client_id,
-        notification=RideStatusNotification(
-            ride_request_id=ride_request.id,
-            status=ride_request.status.value,
-        ),
-    )
-    await notify_user(
-        session,
-        ride_request.client_id,
-        title="Course demarree",
-        body="Bonne route !",
-        data={"type": "ride_started", "ride_id": ride_request.id},
-    )
-    return ride_request
+    return await start_ride(session, ride_request_id, current_user)
 
 
 async def arrive_ride_request(
@@ -873,37 +631,9 @@ async def arrive_ride_request(
     ride_request_id: int,
     current_user: User,
 ) -> RideRequest:
-    ride_request = await session.get(RideRequest, ride_request_id)
-    if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+    from app.services.ride_lifecycle_service import mark_arrived
 
-    if ride_request.status != RideRequestStatus.ACCEPTED:
-        raise RideRequestNotAcceptedError("Ride request is not accepted")
-
-    if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
-
-    if ride_request.driver_id != current_user.id:
-        raise RideRequestDriverMismatchError("Driver is not assigned to this ride request")
-
-    ride_request.status = RideRequestStatus.ARRIVED
-    await session.commit()
-    await session.refresh(ride_request)
-    await ride_notifier.send_ride_status_notification(
-        client_id=ride_request.client_id,
-        notification=RideStatusNotification(
-            ride_request_id=ride_request.id,
-            status=ride_request.status.value,
-        ),
-    )
-    await notify_user(
-        session,
-        ride_request.client_id,
-        title="Driver arrive",
-        body="Votre driver vous attend.",
-        data={"type": "driver_arrived", "ride_id": ride_request.id},
-    )
-    return ride_request
+    return await mark_arrived(session, ride_request_id, current_user)
 
 
 async def complete_ride_request(
@@ -912,60 +642,14 @@ async def complete_ride_request(
     current_user: User,
     ride_request_complete_in: RideRequestComplete | None = None,
 ) -> RideRequest:
-    ride_request = await session.get(RideRequest, ride_request_id)
-    if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+    from app.services.ride_lifecycle_service import complete_ride
 
-    if ride_request.status != RideRequestStatus.STARTED:
-        raise RideRequestNotStartedError("Ride request is not started")
-
-    if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
-
-    if ride_request.driver_id != current_user.id:
-        raise RideRequestDriverMismatchError("Driver is not assigned to this ride request")
-
-    final_price_input = (
-        ride_request_complete_in.final_price
-        if ride_request_complete_in is not None
-        else None
-    )
-    final_price_base = (
-        final_price_input if final_price_input is not None else ride_request.estimated_price
-    )
-    final_price, platform_commission, driver_net_earnings = (
-        await _calculate_ride_financials(session, final_price_base)
-    )
-
-    ride_request.status = RideRequestStatus.COMPLETED
-    ride_request.final_price = final_price
-    ride_request.platform_commission = platform_commission
-    ride_request.driver_net_earnings = driver_net_earnings
-    await session.commit()
-    await session.refresh(ride_request)
-    await update_driver_status(session, current_user.id, DriverStatus.ONLINE)
-    await ride_notifier.send_ride_status_notification(
-        client_id=ride_request.client_id,
-        notification=RideStatusNotification(
-            ride_request_id=ride_request.id,
-            status=ride_request.status.value,
-        ),
-    )
-    await notify_user(
+    return await complete_ride(
         session,
-        ride_request.client_id,
-        title="Course terminee",
-        body="Merci d'avoir utilise Noor Express.",
-        data={"type": "ride_completed", "ride_id": ride_request.id},
+        ride_request_id,
+        current_user,
+        ride_request_complete_in,
     )
-    await notify_user(
-        session,
-        current_user.id,
-        title="Course terminee",
-        body="Merci d'avoir utilise Noor Express.",
-        data={"type": "ride_completed", "ride_id": ride_request.id},
-    )
-    return ride_request
 
 
 async def rate_driver_for_ride(

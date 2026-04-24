@@ -43,8 +43,10 @@ class _RideDetailScreenState extends ConsumerState<RideDetailScreen> {
                   child: Text('Detail de course indisponible.'));
             }
             final ride = snapshot.data!;
-            final price =
-                _num(ride['final_price']) ?? _num(ride['estimated_price']) ?? 0;
+            final price = _num(ride['final_price']) ??
+                _num(ride['agreed_price']) ??
+                _num(ride['estimated_price']) ??
+                0;
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
               children: [

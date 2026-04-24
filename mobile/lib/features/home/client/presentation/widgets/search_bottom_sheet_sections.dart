@@ -40,7 +40,10 @@ class _BookingPanel extends StatelessWidget {
         if (pickup == null && dropoff == null) ...[
           _SearchLauncher(onTap: onDropoffTap),
           const SizedBox(height: 18),
-          Text('Recents', style: Theme.of(context).textTheme.titleSmall),
+          Text(
+            'Adresses recentes',
+            style: Theme.of(context).textTheme.titleSmall,
+          ),
           const SizedBox(height: 10),
           const _RecentAddress(label: 'Grand Marche'),
           const _RecentAddress(label: 'Aeroport Diori Hamani'),
@@ -76,11 +79,11 @@ class _BookingPanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 16),
-          _PrimaryButton(
-            label: isCreating ? 'Creation...' : 'Chercher un driver',
+          AppButton(
+            label: 'Chercher un chauffeur',
             icon: Icons.local_taxi_rounded,
-            onPressed: canSubmit ? onSubmit : null,
             isLoading: isCreating,
+            onPressed: canSubmit ? onSubmit : null,
           ),
         ],
       ],
@@ -104,19 +107,21 @@ class _SearchingRidePanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const SizedBox(
-              width: 32,
-              height: 32,
-              child: CircularProgressIndicator(strokeWidth: 3),
-            ),
-            const SizedBox(width: 14),
             Expanded(
-              child: Text(
-                'Recherche de drivers...',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _title,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  StatusBadge(status: ride.status),
+                ],
               ),
             ),
           ],
@@ -129,20 +134,57 @@ class _SearchingRidePanel extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         Text(
-          'Prix propose : ${ride.estimatedPrice.toStringAsFixed(0)} FCFA',
+          'Prix actuel : ${ride.displayPrice.toStringAsFixed(0)} FCFA',
           style: const TextStyle(
             color: Color(0xFF1B8A5A),
             fontWeight: FontWeight.w900,
           ),
         ),
+        if (_showSpinner) ...[
+          const SizedBox(height: 14),
+          AppInlineFeedback(
+            message: ride.status == 'offered'
+                ? 'Des offres sont disponibles. Ouvrez la liste pour choisir un chauffeur.'
+                : 'Nous contactons les chauffeurs proches de vous.',
+            tone: AppInlineFeedbackTone.info,
+            isLoading: ride.status == 'pending',
+          ),
+        ],
         const SizedBox(height: 16),
-        _PrimaryButton(
-          label: 'Voir les offres',
+        AppButton(
+          label: _buttonLabel,
           icon: Icons.receipt_long_rounded,
           onPressed: onOpen,
         ),
       ],
     );
+  }
+
+  bool get _showSpinner => ride.status == 'pending' || ride.status == 'offered';
+
+  String get _title {
+    switch (ride.status) {
+      case 'offered':
+        return 'Offres en attente de choix';
+      case 'accepted':
+        return 'Chauffeur confirme';
+      case 'arrived':
+        return 'Votre chauffeur est arrive';
+      case 'started':
+        return 'Course en cours';
+      default:
+        return 'Recherche de chauffeurs...';
+    }
+  }
+
+  String get _buttonLabel {
+    switch (ride.status) {
+      case 'pending':
+      case 'offered':
+        return 'Voir les offres';
+      default:
+        return 'Ouvrir le suivi';
+    }
   }
 }
 
@@ -210,63 +252,27 @@ class _PriceHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = isLoading
-        ? 'Prix suggere : calcul en cours...'
-        : error ??
-            (estimate == null
-                ? 'Prix suggere disponible apres choix des adresses.'
-                : 'Prix suggere : ${estimate!.estimatedPrice.round()} FCFA');
-    return Text(
-      text,
-      style: TextStyle(
-        color: error == null ? const Color(0xFF1B8A5A) : Colors.red.shade700,
-        fontWeight: FontWeight.w800,
-      ),
+    return AppInlineFeedback(
+      message: _message,
+      tone: error == null
+          ? (estimate == null && !isLoading
+              ? AppInlineFeedbackTone.info
+              : AppInlineFeedbackTone.success)
+          : AppInlineFeedbackTone.error,
+      isLoading: isLoading,
     );
   }
-}
 
-class _PrimaryButton extends StatelessWidget {
-  const _PrimaryButton({
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-    this.isLoading = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: isLoading
-            ? const SizedBox(
-                width: 18,
-                height: 18,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Icon(icon),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF1B8A5A),
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFFBFD7CD),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          elevation: 0,
-        ),
-      ),
-    );
+  String get _message {
+    if (isLoading) {
+      return 'Calcul du prix en cours...';
+    }
+    if (error != null && error!.trim().isNotEmpty) {
+      return error!;
+    }
+    if (estimate == null) {
+      return 'Choisissez les deux adresses pour voir un prix suggere.';
+    }
+    return 'Prix suggere : ${estimate!.estimatedPrice.round()} FCFA';
   }
 }

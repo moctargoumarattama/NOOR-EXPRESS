@@ -52,7 +52,7 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
                   key: ValueKey(ride.id),
                   pickup: ride.pickupLocation,
                   dropoff: ride.dropoffLocation,
-                  price: ride.finalPrice ?? ride.estimatedPrice,
+                  price: ride.displayPrice,
                   status: ride.status,
                   createdAt: ride.createdAt,
                   onTap: () => context.push(
@@ -113,6 +113,7 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
       'pickup_location': ride.pickupLocation,
       'dropoff_location': ride.dropoffLocation,
       'estimated_price': ride.estimatedPrice,
+      'agreed_price': ride.agreedPrice,
       'final_price': ride.finalPrice,
       'driver_net_earnings': ride.driverNetEarnings,
       'status': ride.status,

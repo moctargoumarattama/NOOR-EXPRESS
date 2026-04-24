@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_inline_feedback.dart';
 import '../../data/models/driver_ride.dart';
 import 'countdown_bar.dart';
 
@@ -87,7 +89,7 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'NOUVELLE COURSE',
+                        'Nouvelle demande',
                         style: TextStyle(
                           color: Color(0xFF1B8A5A),
                           fontSize: 22,
@@ -128,13 +130,22 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 14),
+                      AppInlineFeedback(
+                        message: widget.isSubmitting
+                            ? 'Envoi de l offre en cours...'
+                            : 'Vous avez $_remainingSeconds s pour proposer un prix.',
+                        tone: _remainingSeconds <= 10
+                            ? AppInlineFeedbackTone.warning
+                            : AppInlineFeedbackTone.info,
+                        isLoading: widget.isSubmitting,
+                      ),
                       const SizedBox(height: 18),
                       Row(
                         children: [
                           Expanded(
-                            child: _PopupButton(
-                              label: 'Envoyer',
-                              color: const Color(0xFF1B8A5A),
+                            child: AppButton(
+                              label: 'Envoyer mon offre',
                               isLoading: widget.isSubmitting,
                               onPressed: widget.isSubmitting
                                   ? null
@@ -147,10 +158,8 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: _PopupButton(
-                              label: 'Skip',
-                              color: const Color(0xFFECEFF3),
-                              textColor: const Color(0xFF1A1A1A),
+                            child: AppButton.secondary(
+                              label: 'Passer',
                               onPressed:
                                   widget.isSubmitting ? null : widget.onSkip,
                             ),
@@ -194,50 +203,6 @@ class _AddressLine extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _PopupButton extends StatelessWidget {
-  const _PopupButton({
-    required this.label,
-    required this.color,
-    required this.onPressed,
-    this.textColor = Colors.white,
-    this.isLoading = false,
-  });
-
-  final String label;
-  final Color color;
-  final Color textColor;
-  final VoidCallback? onPressed;
-  final bool isLoading;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 56,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: textColor,
-          elevation: 0,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w900),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: Colors.white,
-                ),
-              )
-            : Text(label),
-      ),
     );
   }
 }

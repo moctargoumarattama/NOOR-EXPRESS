@@ -2,6 +2,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_errors import ApiError
+from app.models.driver_profile import DriverProfile, DriverVerificationStatus
 from app.models.user import DriverStatus, User, UserRole
 from app.models.ride_request import RideRequest, RideRequestStatus
 from app.schemas.user import (
@@ -138,6 +140,13 @@ async def update_driver_availability(
     if driver is None:
         return None
 
+    if availability_in.is_available and not await is_driver_verified(session, driver_id):
+        raise ApiError(
+            status_code=403,
+            code="driver_not_verified",
+            message="Driver verification is required.",
+        )
+
     driver.is_available = availability_in.is_available
     await session.commit()
     await session.refresh(driver)
@@ -203,3 +212,14 @@ def _client_profile_read(
         total_rides=total_rides,
         average_rating=average_rating,
     )
+
+
+async def is_driver_verified(
+    session: AsyncSession,
+    driver_id: int,
+) -> bool:
+    result = await session.execute(
+        select(DriverProfile.verification_status).where(DriverProfile.user_id == driver_id)
+    )
+    verification_status = result.scalar_one_or_none()
+    return verification_status == DriverVerificationStatus.VERIFIED

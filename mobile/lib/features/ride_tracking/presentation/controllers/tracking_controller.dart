@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 
+import '../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../data/datasources/tracking_remote_datasource.dart';
@@ -58,6 +59,7 @@ class TrackingController extends StateNotifier<TrackingState> {
   StreamSubscription<LocationResult<Position>>? _locationSubscription;
   DateTime? _lastDriverPingAt;
   bool _started = false;
+  void Function()? _unregisterLifecycleResume;
 
   TrackingState get _currentState => state;
   set _currentState(TrackingState value) => state = value;
@@ -68,6 +70,7 @@ class TrackingController extends StateNotifier<TrackingState> {
     }
 
     _started = true;
+    _registerLifecycleResume();
     state = state.copyWith(isLoading: true, clearError: true);
     await _refreshSnapshot(this);
     await _bindRealtime(this);
@@ -77,6 +80,8 @@ class TrackingController extends StateNotifier<TrackingState> {
 
   Future<void> stop() async {
     _started = false;
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = null;
     await _eventSubscription?.cancel();
     await _connectionSubscription?.cancel();
     await _locationSubscription?.cancel();
@@ -99,6 +104,16 @@ class TrackingController extends StateNotifier<TrackingState> {
   }
 
   Future<void> refresh() => _refreshSnapshot(this);
+
+  Future<void> resumeFromLifecycle() async {
+    if (!_started) {
+      return;
+    }
+
+    await _websocketDatasource.resumeFromLifecycle();
+    _startLocationTracking(this);
+    await _refreshSnapshot(this);
+  }
 
   Future<void> cancelRide() async {
     await _runRideAction(
@@ -192,7 +207,7 @@ class TrackingController extends StateNotifier<TrackingState> {
   void acknowledgePassengerReady() {
     state = state.copyWith(
       toastMessage:
-          'Parfait. Votre driver vous attend juste devant le point de depart.',
+          'Parfait. Votre chauffeur vous attend juste devant le point de depart.',
     );
   }
 
@@ -202,6 +217,15 @@ class TrackingController extends StateNotifier<TrackingState> {
 
   void consumeToast() {
     state = state.copyWith(clearToast: true);
+  }
+
+  void _registerLifecycleResume() {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume =
+        ref.read(appLifecycleRecoveryServiceProvider).registerResumeHandler(
+              'tracking-${mode.name}-${preferredRideId ?? 'active'}',
+              resumeFromLifecycle,
+            );
   }
 }
 

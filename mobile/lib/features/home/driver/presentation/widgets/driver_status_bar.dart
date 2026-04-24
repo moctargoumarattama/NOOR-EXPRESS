@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../../../core/theme/app_colors.dart';
+
 class DriverStatusBar extends StatelessWidget {
   const DriverStatusBar({
     super.key,
@@ -52,11 +54,12 @@ class DriverStatusBar extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
+                  horizontal: 14,
+                  vertical: 9,
                 ),
                 decoration: BoxDecoration(
                   color: palette.background,
+                  border: Border.all(color: palette.border),
                   borderRadius: BorderRadius.circular(999),
                 ),
                 child: Row(
@@ -91,21 +94,24 @@ class DriverStatusBar extends StatelessWidget {
     switch (value) {
       case 'busy':
         return const _StatusPalette(
-          label: 'BUSY',
-          background: Color(0xFFFFF4E0),
-          foreground: Color(0xFFF5A623),
+          label: 'En course',
+          background: Color(0xFFFFF6E3),
+          foreground: Color(0xFF9B6A00),
+          border: Color(0xFFF3DEB2),
         );
       case 'online':
         return const _StatusPalette(
-          label: 'EN LIGNE',
-          background: Color(0xFFE8F5E9),
-          foreground: Color(0xFF1B8A5A),
+          label: 'En ligne',
+          background: Color(0xFFEAF7F1),
+          foreground: AppColors.emerald,
+          border: Color(0xFFCFE9DC),
         );
       default:
         return const _StatusPalette(
-          label: 'OFFLINE',
-          background: Color(0xFFFFECEA),
-          foreground: Color(0xFFE53935),
+          label: 'Hors ligne',
+          background: Color(0xFFFFF1F0),
+          foreground: AppColors.coral,
+          border: Color(0xFFF2D0CD),
         );
     }
   }
@@ -116,9 +122,11 @@ class _StatusPalette {
     required this.label,
     required this.background,
     required this.foreground,
+    required this.border,
   });
 
   final String label;
   final Color background;
   final Color foreground;
+  final Color border;
 }

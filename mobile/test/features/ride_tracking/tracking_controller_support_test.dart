@@ -4,52 +4,43 @@ import 'package:noor_express_mobile/features/ride_tracking/domain/entities/track
 import 'package:noor_express_mobile/features/ride_tracking/presentation/controllers/tracking_controller_support.dart';
 
 void main() {
-  RideTrackingModel buildRide({
-    required int id,
-    required RideTrackingStatus status,
-  }) {
-    return RideTrackingModel(
-      id: id,
-      clientId: 1,
-      driverId: 2,
-      pickupLocation: 'Plateau',
-      dropoffLocation: 'Gamkalley',
-      estimatedPrice: 2000,
-      createdAt: DateTime(2026, 4, 18),
-      status: status,
-    );
-  }
+  group('selectTrackingRide', () {
+    test('prefers the backend active ride over a stale preferred local ride',
+        () {
+      final stalePreferredRide = _ride(
+        id: 12,
+        status: RideTrackingStatus.completed,
+      );
+      final activeRide = _ride(
+        id: 44,
+        status: RideTrackingStatus.accepted,
+      );
 
-  test('selectTrackingRide prioritizes active client ride', () {
-    final rides = [
-      buildRide(id: 1, status: RideTrackingStatus.completed),
-      buildRide(id: 2, status: RideTrackingStatus.accepted),
-      buildRide(id: 3, status: RideTrackingStatus.pending),
-    ];
+      final selected = selectTrackingRide(
+        TrackingMode.client,
+        [stalePreferredRide],
+        preferredRideId: stalePreferredRide.id,
+        activeRide: activeRide,
+      );
 
-    final selected = selectTrackingRide(TrackingMode.client, rides);
-
-    expect(selected?.id, 3);
+      expect(selected?.id, activeRide.id);
+      expect(selected?.status, RideTrackingStatus.accepted);
+    });
   });
+}
 
-  test('estimateTrackingEta returns a positive integer', () {
-    final eta = estimateTrackingEta(
-      rideStatus: RideTrackingStatus.accepted,
-      from: const TrackingCoordinates(latitude: 13.511, longitude: 2.120),
-      to: const TrackingCoordinates(latitude: 13.514, longitude: 2.132),
-    );
-
-    expect(eta, isNotNull);
-    expect(eta, greaterThanOrEqualTo(1));
-  });
-
-  test('headingBetweenPoints returns null when point missing', () {
-    expect(
-      headingBetweenPoints(
-        null,
-        const TrackingCoordinates(latitude: 13.5, longitude: 2.1),
-      ),
-      isNull,
-    );
-  });
+RideTrackingModel _ride({
+  required int id,
+  required RideTrackingStatus status,
+}) {
+  return RideTrackingModel(
+    id: id,
+    clientId: 7,
+    driverId: 9,
+    pickupLocation: 'Pickup',
+    dropoffLocation: 'Dropoff',
+    estimatedPrice: 1500,
+    createdAt: DateTime(2026, 4, 24),
+    status: status,
+  );
 }

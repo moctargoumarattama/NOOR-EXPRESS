@@ -4,7 +4,7 @@ import sys
 if __package__ in (None, ""):
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -23,6 +23,12 @@ from app.api.routing import router as routing_router
 from app.api.ride_offer import router as ride_offer_router
 from app.api.ride_request import router as ride_request_router
 from app.api.user import router as user_router
+from app.core.api_errors import (
+    ApiError,
+    api_error_response,
+    http_exception_response,
+)
+from app.db.schema_bootstrap import ensure_database_schema
 
 
 class RootResponse(BaseModel):
@@ -57,6 +63,21 @@ app.include_router(routing_router)
 app.include_router(ride_offer_router)
 app.include_router(ride_request_router)
 app.include_router(user_router)
+
+
+@app.on_event("startup")
+async def bootstrap_database_schema() -> None:
+    await ensure_database_schema()
+
+
+@app.exception_handler(ApiError)
+async def api_error_handler(_request: Request, exc: ApiError):
+    return api_error_response(exc)
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_request: Request, exc: HTTPException):
+    return http_exception_response(exc)
 
 
 @app.get("/")

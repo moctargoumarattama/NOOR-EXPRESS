@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_error.dart';
 import 'models/client_ride.dart';
 
 class ClientRideFailure implements Exception {
@@ -36,7 +37,7 @@ class ClientRidesRepository {
           .toList();
     } on DioException catch (error) {
       throw ClientRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de charger tes courses.',
         ),
@@ -59,7 +60,7 @@ class ClientRidesRepository {
       return ClientRide.fromJson(payload);
     } on DioException catch (error) {
       throw ClientRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Creation de course impossible pour le moment.',
         ),
@@ -90,28 +91,12 @@ class ClientRidesRepository {
       return PriceEstimate.fromJson(payload);
     } on DioException catch (error) {
       throw ClientRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Estimation du prix impossible pour le moment.',
         ),
       );
     }
-  }
-
-  String _readErrorMessage(
-    DioException error, {
-    required String fallbackMessage,
-  }) {
-    final data = error.response?.data;
-
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) {
-        return detail;
-      }
-    }
-
-    return fallbackMessage;
   }
 }
 

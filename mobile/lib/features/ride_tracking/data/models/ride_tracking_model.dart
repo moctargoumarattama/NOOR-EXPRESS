@@ -1,5 +1,6 @@
 enum RideTrackingStatus {
   pending,
+  offered,
   accepted,
   arrived,
   started,
@@ -75,7 +76,7 @@ class TrackingCounterpartModel {
       phoneNumber: phoneNumber,
       rating: rating,
       plateNumber: json['plate_number'] as String?,
-      vehicleLabel: vehicleParts.isEmpty ? null : vehicleParts.join(' • '),
+      vehicleLabel: vehicleParts.isEmpty ? null : vehicleParts.join(' - '),
     );
   }
 }
@@ -92,6 +93,7 @@ class RideTrackingModel {
     required this.status,
     this.pickupPosition,
     this.dropoffPosition,
+    this.agreedPrice,
     this.finalPrice,
     this.driverNetEarnings,
     this.cancellationReason,
@@ -108,6 +110,7 @@ class RideTrackingModel {
   final RideTrackingStatus status;
   final TrackingCoordinates? pickupPosition;
   final TrackingCoordinates? dropoffPosition;
+  final double? agreedPrice;
   final double? finalPrice;
   final double? driverNetEarnings;
   final String? cancellationReason;
@@ -115,17 +118,19 @@ class RideTrackingModel {
 
   bool get hasDriver => driverId != null;
   bool get isPending => status == RideTrackingStatus.pending;
+  bool get isOffered => status == RideTrackingStatus.offered;
   bool get isAccepted => status == RideTrackingStatus.accepted;
   bool get isArrived => status == RideTrackingStatus.arrived;
   bool get isStarted => status == RideTrackingStatus.started;
   bool get isCompleted => status == RideTrackingStatus.completed;
   bool get canClientCancel =>
       status == RideTrackingStatus.pending ||
+      status == RideTrackingStatus.offered ||
       status == RideTrackingStatus.accepted;
   bool get canRateDriver =>
       status == RideTrackingStatus.completed && clientRatingForDriver == null;
 
-  double get displayedPrice => finalPrice ?? estimatedPrice;
+  double get displayedPrice => finalPrice ?? agreedPrice ?? estimatedPrice;
 
   factory RideTrackingModel.fromJson(Map<String, dynamic> json) {
     return RideTrackingModel(
@@ -135,8 +140,10 @@ class RideTrackingModel {
       pickupLocation: json['pickup_location'] as String? ?? '',
       dropoffLocation: json['dropoff_location'] as String? ?? '',
       estimatedPrice: (json['estimated_price'] as num?)?.toDouble() ?? 0,
-      createdAt: DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
-          DateTime.fromMillisecondsSinceEpoch(0),
+      agreedPrice: (json['agreed_price'] as num?)?.toDouble(),
+      createdAt:
+          DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
+              DateTime.fromMillisecondsSinceEpoch(0),
       status: fromRawStatus(json['status'] as String?),
       pickupPosition: _readCoordinates(
         json,
@@ -151,7 +158,8 @@ class RideTrackingModel {
       finalPrice: (json['final_price'] as num?)?.toDouble(),
       driverNetEarnings: (json['driver_net_earnings'] as num?)?.toDouble(),
       cancellationReason: json['cancellation_reason'] as String?,
-      clientRatingForDriver: (json['client_rating_for_driver'] as num?)?.toDouble(),
+      clientRatingForDriver:
+          (json['client_rating_for_driver'] as num?)?.toDouble(),
     );
   }
 
@@ -160,6 +168,7 @@ class RideTrackingModel {
     RideTrackingStatus? status,
     TrackingCoordinates? pickupPosition,
     TrackingCoordinates? dropoffPosition,
+    double? agreedPrice,
     double? finalPrice,
     double? driverNetEarnings,
     String? cancellationReason,
@@ -176,6 +185,7 @@ class RideTrackingModel {
       status: status ?? this.status,
       pickupPosition: pickupPosition ?? this.pickupPosition,
       dropoffPosition: dropoffPosition ?? this.dropoffPosition,
+      agreedPrice: agreedPrice ?? this.agreedPrice,
       finalPrice: finalPrice ?? this.finalPrice,
       driverNetEarnings: driverNetEarnings ?? this.driverNetEarnings,
       cancellationReason: cancellationReason ?? this.cancellationReason,
@@ -188,6 +198,8 @@ class RideTrackingModel {
     switch (value) {
       case 'pending':
         return RideTrackingStatus.pending;
+      case 'offered':
+        return RideTrackingStatus.offered;
       case 'accepted':
         return RideTrackingStatus.accepted;
       case 'arrived':

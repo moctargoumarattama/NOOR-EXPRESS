@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
 import '../../../../../core/state/session_controller.dart';
+import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
 import '../../../../../shared/widgets/notification_card.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
@@ -126,9 +127,10 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'Mise a jour en direct',
+                title: 'Mise a jour',
                 message: _notificationMessage!,
                 tone: _notificationToneForMessage(_notificationMessage!),
+                compact: true,
               ),
             ),
           if (_notificationMessage == null && mapState.errorMessage != null)
@@ -138,8 +140,12 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               right: 16,
               child: NotificationCard(
                 title: 'GPS',
-                message: mapState.errorMessage!,
+                message: _humanizeMessage(
+                  mapState.errorMessage,
+                  fallback: RideUiCopy.gpsUnavailable,
+                ),
                 tone: NotificationCardTone.warning,
+                compact: true,
               ),
             ),
           if (_notificationMessage == null &&

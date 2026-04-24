@@ -89,6 +89,11 @@ class FcmService {
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    if (!shouldPresentForegroundLocalNotification(
+      message.data['type']?.toString(),
+    )) {
+      return;
+    }
     await _localNotificationService.showRemoteMessage(message);
   }
 
@@ -104,3 +109,26 @@ final fcmServiceProvider = Provider<FcmService>((ref) {
     notificationHandler: ref.watch(notificationHandlerProvider),
   );
 });
+
+bool shouldPresentForegroundLocalNotification(String? type) {
+  if (type == null || type.trim().isEmpty) {
+    return true;
+  }
+
+  return switch (type) {
+    'new_offer' ||
+    'offer_accepted' ||
+    'offer_rejected' ||
+    'offer_invalidated' ||
+    'new_ride_request' ||
+    'ride_accepted' ||
+    'driver_en_route' ||
+    'driver_arrived' ||
+    'ride_started' ||
+    'ride_completed' ||
+    'ride_cancelled' ||
+    'ride_reopened' =>
+      false,
+    _ => true,
+  };
+}

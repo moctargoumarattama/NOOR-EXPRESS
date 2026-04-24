@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     OTP_CODE_DEV: str = "1234"
     REDIS_URL: str = "redis://localhost:6379/0"
+    REALTIME_STORE_BACKEND: str = "memory"
+    UPSTASH_REDIS_REST_URL: str | None = None
+    UPSTASH_REDIS_REST_TOKEN: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
 
     class Config:

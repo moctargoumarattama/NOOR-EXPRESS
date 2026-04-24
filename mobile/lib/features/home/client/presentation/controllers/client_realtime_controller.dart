@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../../core/models/realtime_driver_position.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/services/websocket_service.dart';
@@ -60,6 +61,7 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
   StreamSubscription<WebSocketStatus>? _statusSubscription;
   int? _currentClientId;
+  void Function()? _unregisterLifecycleResume;
 
   Future<void> start(int clientId) async {
     if (_currentClientId == clientId &&
@@ -69,9 +71,15 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
 
     await stop();
     _currentClientId = clientId;
+    _registerLifecycleResume();
 
     _statusSubscription = _websocketService.statuses.listen((status) {
+      final previousStatus = state.connectionStatus;
       state = state.copyWith(connectionStatus: status);
+      if (status == WebSocketStatus.connected &&
+          previousStatus == WebSocketStatus.reconnecting) {
+        unawaited(_ref.read(clientHomeControllerProvider.notifier).loadRides());
+      }
     });
 
     _messageSubscription = _websocketService.messages.listen((message) async {
@@ -108,6 +116,8 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
   }
 
   Future<void> stop() async {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = null;
     await _messageSubscription?.cancel();
     await _statusSubscription?.cancel();
     _messageSubscription = null;
@@ -125,16 +135,53 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
     state = state.copyWith(clearLastDriverPosition: true);
   }
 
+  void _registerLifecycleResume() {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = _ref
+        .read(appLifecycleRecoveryServiceProvider)
+        .registerResumeHandler('home-client-realtime', _resumeFromLifecycle);
+  }
+
+  Future<void> _resumeFromLifecycle() async {
+    final clientId = _currentClientId;
+    if (clientId == null) {
+      return;
+    }
+
+    await _reconnectClientSocket(clientId);
+    await _ref
+        .read(clientHomeControllerProvider.notifier)
+        .resumeFromLifecycle();
+  }
+
+  Future<void> _reconnectClientSocket(int clientId) async {
+    final token = await _storageService.readToken();
+    await _websocketService.disconnect();
+    await _websocketService.connect(
+      buildWebSocketUrl(
+        _baseUrl,
+        '/ws/clients/$clientId',
+        queryParameters: token == null ? null : {'token': token},
+      ),
+    );
+  }
+
   String _statusLabel(String status) {
     switch (status) {
+      case 'offered':
+        return 'Des offres sont disponibles.';
       case 'accepted':
         return 'Ride acceptee.';
+      case 'arrived':
+        return 'Le chauffeur est arrive.';
       case 'started':
         return 'Ride demarree.';
       case 'completed':
         return 'Ride terminee.';
       case 'cancelled':
         return 'Ride annulee.';
+      case 'pending':
+        return 'La ride redevient negotiable.';
       default:
         return 'Statut de ride mis a jour.';
     }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../shared/copy/ride_ui_copy.dart';
+import '../../../../shared/widgets/app_inline_feedback.dart';
 import '../../domain/entities/tracking_state.dart';
 import 'eta_chip.dart';
 
@@ -45,26 +47,94 @@ class ConnectionBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = switch (connectionState) {
-      TrackingConnectionState.connected => 'Live',
-      TrackingConnectionState.reconnecting => 'Reco',
-      TrackingConnectionState.connecting => 'Connexion',
-      TrackingConnectionState.disconnected => 'Offline',
-    };
-    return Container(
+    final palette = _palette(connectionState);
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.34),
+        color: palette.background,
         borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: palette.border),
       ),
       child: Text(
-        label,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w700,
+        palette.label,
+        style: TextStyle(
+          color: palette.foreground,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
+  }
+
+  _ConnectionPalette _palette(TrackingConnectionState state) {
+    switch (state) {
+      case TrackingConnectionState.connected:
+        return const _ConnectionPalette(
+          label: 'Live',
+          background: Color(0x1A1B8A5A),
+          border: Color(0x661B8A5A),
+          foreground: Colors.white,
+        );
+      case TrackingConnectionState.reconnecting:
+        return const _ConnectionPalette(
+          label: 'Reconnexion',
+          background: Color(0x1AF5A623),
+          border: Color(0x66F5A623),
+          foreground: Colors.white,
+        );
+      case TrackingConnectionState.connecting:
+        return const _ConnectionPalette(
+          label: 'Connexion',
+          background: Color(0x1A8DB3FF),
+          border: Color(0x668DB3FF),
+          foreground: Colors.white,
+        );
+      case TrackingConnectionState.disconnected:
+        return const _ConnectionPalette(
+          label: 'Hors ligne',
+          background: Color(0x1AD94F4F),
+          border: Color(0x66D94F4F),
+          foreground: Colors.white,
+        );
+    }
+  }
+}
+
+class TrackingRecoveryBanner extends StatelessWidget {
+  const TrackingRecoveryBanner({
+    super.key,
+    required this.connectionState,
+    required this.message,
+    required this.onRefresh,
+    this.isLoading = false,
+  });
+
+  final TrackingConnectionState connectionState;
+  final String message;
+  final VoidCallback onRefresh;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppInlineFeedback(
+      message: message,
+      tone: _tone(connectionState),
+      isLoading: isLoading,
+      actionLabel: RideUiCopy.trackingRefreshAction,
+      onAction: onRefresh,
+    );
+  }
+
+  AppInlineFeedbackTone _tone(TrackingConnectionState state) {
+    switch (state) {
+      case TrackingConnectionState.disconnected:
+        return AppInlineFeedbackTone.error;
+      case TrackingConnectionState.reconnecting:
+        return AppInlineFeedbackTone.warning;
+      case TrackingConnectionState.connecting:
+      case TrackingConnectionState.connected:
+        return AppInlineFeedbackTone.info;
+    }
   }
 }
 
@@ -120,19 +190,23 @@ class TrackingErrorCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFEFEA),
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Text(
-        message,
-        style: const TextStyle(
-          color: Color(0xFFB84F3A),
-          fontWeight: FontWeight.w700,
-        ),
-      ),
+    return AppInlineFeedback(
+      message: message,
+      tone: AppInlineFeedbackTone.error,
     );
   }
+}
+
+class _ConnectionPalette {
+  const _ConnectionPalette({
+    required this.label,
+    required this.background,
+    required this.border,
+    required this.foreground,
+  });
+
+  final String label;
+  final Color background;
+  final Color border;
+  final Color foreground;
 }

@@ -32,15 +32,15 @@ class RealtimeConnectionManager:
     async def connect_driver(self, driver_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
         self._connection_registry.set_driver_connection(driver_id, websocket)
-        self._presence_store.set_driver_status(driver_id, "connected")
+        await self._presence_store.set_driver_status(driver_id, "connected")
 
     async def connect_client(self, client_id: int, websocket: WebSocket) -> None:
         await websocket.accept()
         self._connection_registry.set_client_connection(client_id, websocket)
 
-    def update_position(self, driver_id: int, location: DriverLocationUpdate) -> None:
-        self._presence_store.upsert_driver_position(driver_id, location)
-        self._presence_store.set_driver_status(driver_id, "connected")
+    async def update_position(self, driver_id: int, location: DriverLocationUpdate) -> None:
+        await self._presence_store.upsert_driver_position(driver_id, location)
+        await self._presence_store.set_driver_status(driver_id, "connected")
 
     async def send_driver_position_notification_to_clients(
         self,
@@ -57,62 +57,44 @@ class RealtimeConnectionManager:
         for client_id in disconnected_client_ids:
             self.disconnect_client(client_id)
 
-    def disconnect_driver(self, driver_id: int) -> None:
+    async def disconnect_driver(self, driver_id: int) -> None:
         self._connection_registry.remove_driver_connection(driver_id)
-        self._presence_store.remove_driver(driver_id)
+        await self._presence_store.remove_driver(driver_id)
 
     def disconnect_client(self, client_id: int) -> None:
         self._connection_registry.remove_client_connection(client_id)
 
-    def get_connected_drivers(self) -> list[ConnectedDriverLocation]:
-        self._cleanup_expired_drivers()
+    async def get_connected_drivers(self) -> list[ConnectedDriverLocation]:
+        await self._cleanup_expired_drivers()
         return [
             ConnectedDriverLocation(
                 driver_id=driver.driver_id,
                 latitude=driver.latitude,
                 longitude=driver.longitude,
             )
-            for driver in self._presence_store.list_driver_positions()
+            for driver in await self._presence_store.list_driver_positions()
         ]
 
     def is_driver_connected(self, driver_id: int) -> bool:
-        self._cleanup_expired_drivers()
         return self._connection_registry.has_driver_connection(driver_id)
 
-    def get_nearby_drivers(
+    async def get_nearby_drivers(
         self,
         latitude: float,
         longitude: float,
         max_distance_km: float,
         limit: int | None = None,
     ) -> list[NearbyDriverLocation]:
-        self._cleanup_expired_drivers()
-        nearby_drivers: list[NearbyDriverLocation] = []
+        await self._cleanup_expired_drivers()
+        return await self._presence_store.get_nearby_drivers(
+            latitude=latitude,
+            longitude=longitude,
+            max_distance_km=max_distance_km,
+            limit=limit,
+        )
 
-        for driver in self._presence_store.list_driver_positions():
-            distance_km = self._calculate_distance_km(
-                latitude_1=latitude,
-                longitude_1=longitude,
-                latitude_2=driver.latitude,
-                longitude_2=driver.longitude,
-            )
-            if distance_km <= max_distance_km:
-                nearby_drivers.append(
-                    NearbyDriverLocation(
-                        driver_id=driver.driver_id,
-                        latitude=driver.latitude,
-                        longitude=driver.longitude,
-                        distance_km=round(distance_km, 3),
-                    )
-                )
-
-        nearby_drivers.sort(key=lambda driver: driver.distance_km)
-        if limit is not None:
-            return nearby_drivers[:limit]
-        return nearby_drivers
-
-    def _cleanup_expired_drivers(self) -> None:
-        expired_driver_ids = self._presence_store.cleanup_expired_drivers(
+    async def _cleanup_expired_drivers(self) -> None:
+        expired_driver_ids = await self._presence_store.cleanup_expired_drivers(
             self.DRIVER_POSITION_EXPIRATION_SECONDS
         )
         for driver_id in expired_driver_ids:
@@ -144,7 +126,7 @@ class RealtimeConnectionManager:
         try:
             await websocket.send_json(notification.model_dump())
         except (RuntimeError, WebSocketDisconnect):
-            self.disconnect_driver(driver_id)
+            await self.disconnect_driver(driver_id)
 
     async def send_new_ride_request_notification(
         self,
@@ -158,7 +140,7 @@ class RealtimeConnectionManager:
         try:
             await websocket.send_json(notification.model_dump())
         except (RuntimeError, WebSocketDisconnect):
-            self.disconnect_driver(driver_id)
+            await self.disconnect_driver(driver_id)
 
     async def send_new_offer_notification(
         self,
@@ -186,7 +168,7 @@ class RealtimeConnectionManager:
         try:
             await websocket.send_json(notification.model_dump())
         except (RuntimeError, WebSocketDisconnect):
-            self.disconnect_driver(driver_id)
+            await self.disconnect_driver(driver_id)
 
     async def send_offer_rejected_notification(
         self,
@@ -200,7 +182,7 @@ class RealtimeConnectionManager:
         try:
             await websocket.send_json(notification.model_dump())
         except (RuntimeError, WebSocketDisconnect):
-            self.disconnect_driver(driver_id)
+            await self.disconnect_driver(driver_id)
 
     @staticmethod
     def _calculate_distance_km(

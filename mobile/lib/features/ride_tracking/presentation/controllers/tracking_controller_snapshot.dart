@@ -2,26 +2,25 @@ part of 'tracking_controller.dart';
 
 Future<void> _refreshSnapshot(TrackingController controller) async {
   try {
-    RideTrackingModel? ride;
-    if (controller.preferredRideId == null) {
-      final activeRideJson =
-          await controller._remoteDatasource.fetchActiveRide();
-      if (activeRideJson != null) {
-        ride = RideTrackingModel.fromJson(activeRideJson);
-      }
-    }
+    final activeRideJson = await controller._remoteDatasource.fetchActiveRide();
+    final activeRide = activeRideJson == null
+        ? null
+        : RideTrackingModel.fromJson(activeRideJson);
 
-    if (ride == null) {
+    List<RideTrackingModel> rides = const [];
+    if (activeRide == null) {
       final ridesJson = controller.mode == TrackingMode.client
           ? await controller._remoteDatasource.fetchClientRides()
           : await controller._remoteDatasource.fetchDriverRides();
-      final rides = ridesJson.map(RideTrackingModel.fromJson).toList();
-      ride = selectTrackingRide(
-        controller.mode,
-        rides,
-        preferredRideId: controller.preferredRideId,
-      );
+      rides = ridesJson.map(RideTrackingModel.fromJson).toList();
     }
+
+    final ride = selectTrackingRide(
+      controller.mode,
+      rides,
+      preferredRideId: controller.preferredRideId,
+      activeRide: activeRide,
+    );
 
     if (ride == null) {
       controller._currentState = controller._currentState.copyWith(

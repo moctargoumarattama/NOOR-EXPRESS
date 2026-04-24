@@ -52,7 +52,7 @@ class _ClientHistoryScreenState extends ConsumerState<ClientHistoryScreen> {
                   key: ValueKey(ride.id),
                   pickup: ride.pickupLocation,
                   dropoff: ride.dropoffLocation,
-                  price: ride.finalPrice ?? ride.estimatedPrice,
+                  price: ride.displayPrice,
                   status: ride.status,
                   createdAt: ride.createdAt,
                   onTap: () => context.push(
@@ -113,6 +113,7 @@ class _ClientHistoryScreenState extends ConsumerState<ClientHistoryScreen> {
       'pickup_location': ride.pickupLocation,
       'dropoff_location': ride.dropoffLocation,
       'estimated_price': ride.estimatedPrice,
+      'agreed_price': ride.agreedPrice,
       'final_price': ride.finalPrice,
       'status': ride.status,
       'created_at': ride.createdAt.toIso8601String(),

@@ -12,6 +12,8 @@ class RideOfferStatus(str, Enum):
     PENDING = "pending"
     ACCEPTED = "accepted"
     REJECTED = "rejected"
+    INVALIDATED = "invalidated"
+    EXPIRED = "expired"
 
 
 class RideOffer(Base):

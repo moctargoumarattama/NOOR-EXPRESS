@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../data/datasources/negotiation_datasource.dart';
 import '../../data/models/ride_offer_model.dart';
 import '../../domain/entities/negotiation_state.dart';
+import 'negotiation_resume_resolution.dart';
 
 class NegotiationScope {
   const NegotiationScope({
@@ -45,12 +47,14 @@ class NegotiationController extends StateNotifier<NegotiationState> {
   StreamSubscription<NegotiationSocketEvent>? _eventSubscription;
   StreamSubscription<WebSocketStatus>? _statusSubscription;
   bool _started = false;
+  void Function()? _unregisterLifecycleResume;
 
   Future<void> start() async {
     if (_started) {
       return;
     }
     _started = true;
+    _registerLifecycleResume();
     if (scope.initialRide != null) {
       state = state.copyWith(ride: scope.initialRide);
     }
@@ -66,6 +70,8 @@ class NegotiationController extends StateNotifier<NegotiationState> {
 
   Future<void> stop() async {
     _started = false;
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = null;
     await _eventSubscription?.cancel();
     await _statusSubscription?.cancel();
     _eventSubscription = null;
@@ -78,6 +84,26 @@ class NegotiationController extends StateNotifier<NegotiationState> {
     if (scope.mode == NegotiationMode.client) {
       await _loadOffers();
     }
+  }
+
+  Future<void> resumeFromLifecycle() async {
+    if (!_started) {
+      return;
+    }
+
+    final userId = ref.read(sessionControllerProvider).userId;
+    if (userId == null) {
+      return;
+    }
+
+    state = state.copyWith(clearError: true);
+    await _datasource.disconnect();
+    if (scope.mode == NegotiationMode.client) {
+      await _datasource.connectClient(userId);
+    } else {
+      await _datasource.connectDriver(userId);
+    }
+    await _resyncFromBackendTruth();
   }
 
   Future<void> submitOffer(double proposedPrice) async {
@@ -146,6 +172,15 @@ class NegotiationController extends StateNotifier<NegotiationState> {
   void consumeNavigation() => state = state.copyWith(clearNavigation: true);
   void consumeCloseAction() => state = state.copyWith(shouldCloseToHome: false);
 
+  void _registerLifecycleResume() {
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume =
+        ref.read(appLifecycleRecoveryServiceProvider).registerResumeHandler(
+              'negotiation-${scope.mode.name}-${scope.rideId}',
+              resumeFromLifecycle,
+            );
+  }
+
   Future<void> _bindRealtime() async {
     final userId = ref.read(sessionControllerProvider).userId;
     if (userId == null) {
@@ -153,7 +188,16 @@ class NegotiationController extends StateNotifier<NegotiationState> {
     }
 
     _statusSubscription = _datasource.statuses.listen((status) {
-      state = state.copyWith(connectionState: _mapConnectionStatus(status));
+      final previousConnectionState = state.connectionState;
+      final nextConnectionState = _mapConnectionStatus(status);
+      state = state.copyWith(
+        connectionState: nextConnectionState,
+        clearError: nextConnectionState == NegotiationConnectionState.connected,
+      );
+      if (nextConnectionState == NegotiationConnectionState.connected &&
+          previousConnectionState == NegotiationConnectionState.reconnecting) {
+        unawaited(refresh());
+      }
     });
     _eventSubscription = _datasource.events.listen(_handleSocketEvent);
 
@@ -226,6 +270,57 @@ class NegotiationController extends StateNotifier<NegotiationState> {
       state = state.copyWith(offers: offers, clearError: true);
     } on NegotiationFailure catch (error) {
       state = state.copyWith(errorMessage: error.message);
+    }
+  }
+
+  Future<void> _resyncFromBackendTruth() async {
+    try {
+      final activeRideJson = await _datasource.fetchActiveRide();
+      final activeRide = activeRideJson == null
+          ? null
+          : NegotiationRideModel.fromRideRequestJson(activeRideJson);
+
+      NegotiationRideModel? scopedRide;
+      if (activeRide == null || activeRide.rideId == scope.rideId) {
+        scopedRide = await _tryFetchScopedRide();
+      }
+
+      final resolution = resolveNegotiationResume(
+        mode: scope.mode,
+        scopedRideId: scope.rideId,
+        activeRide: activeRide,
+        scopedRide: scopedRide,
+      );
+
+      state = state.copyWith(
+        ride: resolution.ride,
+        clearRide: resolution.ride == null,
+        clearError: true,
+        navigateToTrackingRideId:
+            resolution.action == NegotiationResumeAction.navigateToTracking
+                ? resolution.targetRideId
+                : null,
+        clearNavigation:
+            resolution.action != NegotiationResumeAction.navigateToTracking,
+        shouldCloseToHome:
+            resolution.action == NegotiationResumeAction.closeToHome,
+      );
+
+      if (resolution.shouldReloadOffers) {
+        await _loadOffers();
+      }
+    } on NegotiationFailure catch (error) {
+      state = state.copyWith(errorMessage: error.message);
+    }
+  }
+
+  Future<NegotiationRideModel?> _tryFetchScopedRide() async {
+    try {
+      return scope.mode == NegotiationMode.client
+          ? await _datasource.fetchClientRide(scope.rideId)
+          : await _datasource.fetchDriverCandidateRide(scope.rideId);
+    } on NegotiationFailure {
+      return null;
     }
   }
 

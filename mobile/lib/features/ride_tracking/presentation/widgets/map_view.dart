@@ -34,9 +34,16 @@ class _MapViewState extends State<MapView> {
   @override
   void didUpdateWidget(covariant MapView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.driverPosition != widget.driverPosition ||
-        oldWidget.currentPosition != widget.currentPosition ||
-        oldWidget.destinationPosition != widget.destinationPosition) {
+    if (shouldRefitTrackingViewport(
+      previousDriverPosition: oldWidget.driverPosition,
+      nextDriverPosition: widget.driverPosition,
+      previousCurrentPosition: oldWidget.currentPosition,
+      nextCurrentPosition: widget.currentPosition,
+      previousPickupPosition: oldWidget.pickupPosition,
+      nextPickupPosition: widget.pickupPosition,
+      previousDestinationPosition: oldWidget.destinationPosition,
+      nextDestinationPosition: widget.destinationPosition,
+    )) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitMap());
     }
   }
@@ -245,13 +252,55 @@ class _MapViewState extends State<MapView> {
   }
 
   bool _samePoint(TrackingCoordinates? left, TrackingCoordinates? right) {
-    if (left == null || right == null) {
-      return false;
-    }
-    final latitudeDelta = (left.latitude - right.latitude).abs();
-    final longitudeDelta = (left.longitude - right.longitude).abs();
-    return latitudeDelta < 0.0001 && longitudeDelta < 0.0001;
+    return trackingCoordinatesEqual(left, right);
   }
+}
+
+bool shouldRefitTrackingViewport({
+  required TrackingCoordinates? previousDriverPosition,
+  required TrackingCoordinates? nextDriverPosition,
+  required TrackingCoordinates? previousCurrentPosition,
+  required TrackingCoordinates? nextCurrentPosition,
+  required TrackingCoordinates? previousPickupPosition,
+  required TrackingCoordinates? nextPickupPosition,
+  required TrackingCoordinates? previousDestinationPosition,
+  required TrackingCoordinates? nextDestinationPosition,
+}) {
+  if (_presenceChanged(previousDriverPosition, nextDriverPosition) ||
+      _presenceChanged(previousCurrentPosition, nextCurrentPosition) ||
+      _presenceChanged(previousPickupPosition, nextPickupPosition) ||
+      _presenceChanged(
+        previousDestinationPosition,
+        nextDestinationPosition,
+      )) {
+    return true;
+  }
+
+  return !trackingCoordinatesEqual(previousPickupPosition, nextPickupPosition) ||
+      !trackingCoordinatesEqual(
+        previousDestinationPosition,
+        nextDestinationPosition,
+      );
+}
+
+bool _presenceChanged(
+  TrackingCoordinates? previous,
+  TrackingCoordinates? next,
+) {
+  return (previous == null) != (next == null);
+}
+
+bool trackingCoordinatesEqual(
+  TrackingCoordinates? left,
+  TrackingCoordinates? right,
+) {
+  if (left == null || right == null) {
+    return false;
+  }
+
+  final latitudeDelta = (left.latitude - right.latitude).abs();
+  final longitudeDelta = (left.longitude - right.longitude).abs();
+  return latitudeDelta < 0.0001 && longitudeDelta < 0.0001;
 }
 
 class _ZoomButton extends StatelessWidget {

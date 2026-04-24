@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../../../core/config/app_config.dart';
+import '../../../../core/services/websocket_resilience.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../domain/entities/tracking_state.dart';
@@ -54,10 +55,15 @@ class TrackingWebSocketDatasource {
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _subscription;
   Timer? _reconnectTimer;
+  Timer? _watchdogTimer;
   String? _currentPath;
   bool _manualDisconnect = false;
   bool _disposed = false;
   int _reconnectAttempt = 0;
+  DateTime? _lastActivityAt;
+  Map<String, dynamic>? _pendingLocationPayload;
+  TrackingConnectionState _connectionState =
+      TrackingConnectionState.disconnected;
 
   Stream<TrackingSocketEvent> get events => _eventsController.stream;
   Stream<TrackingConnectionState> get connectionStates =>
@@ -76,6 +82,16 @@ class TrackingWebSocketDatasource {
     _reconnectTimer?.cancel();
     await _closeChannel();
     _emitConnection(TrackingConnectionState.disconnected);
+  }
+
+  Future<void> resumeFromLifecycle() async {
+    final path = _currentPath;
+    if (_disposed || path == null) {
+      return;
+    }
+
+    await disconnect();
+    await _connect(path);
   }
 
   Future<void> dispose() async {
@@ -97,10 +113,16 @@ class TrackingWebSocketDatasource {
       'longitude': point.longitude,
     };
 
+    _pendingLocationPayload = payload;
+    if (_connectionState != TrackingConnectionState.connected ||
+        _channel == null) {
+      return;
+    }
     try {
-      _channel?.sink.add(jsonEncode(payload));
+      _channel!.sink.add(jsonEncode(payload));
     } catch (error) {
       debugPrint('[$debugLabel] sendLocationUpdate failed: $error');
+      unawaited(_restartFromWatchdog());
     }
   }
 
@@ -132,7 +154,10 @@ class TrackingWebSocketDatasource {
         cancelOnError: true,
       );
       _reconnectAttempt = 0;
+      _recordActivity();
+      _startWatchdog();
       _emitConnection(TrackingConnectionState.connected);
+      _flushBufferedLocation();
     } catch (error) {
       debugPrint('[$debugLabel] websocket connect failed: $error');
       _handleDisconnect(error);
@@ -143,6 +168,7 @@ class TrackingWebSocketDatasource {
     if (_disposed || raw is! String) {
       return;
     }
+    _recordActivity();
 
     try {
       final payload = jsonDecode(raw);
@@ -151,6 +177,10 @@ class TrackingWebSocketDatasource {
       }
 
       final message = Map<String, dynamic>.from(payload);
+      if (message['type'] == 'ping') {
+        _sendProtocolPayload({'type': 'pong'});
+        return;
+      }
       if (message['status'] == 'ok') {
         return;
       }
@@ -196,6 +226,7 @@ class TrackingWebSocketDatasource {
       debugPrint('[$debugLabel] websocket disconnected: $error');
     }
 
+    _stopWatchdog();
     _subscription?.cancel();
     _subscription = null;
     _channel = null;
@@ -216,16 +247,16 @@ class TrackingWebSocketDatasource {
     }
 
     _reconnectTimer?.cancel();
-    final delayIndex = _reconnectAttempt.clamp(0, 4);
-    final seconds = [1, 2, 4, 8, 16][delayIndex];
+    final delay = websocketReconnectDelay(attempt: _reconnectAttempt);
     _reconnectAttempt += 1;
-    _reconnectTimer = Timer(Duration(seconds: seconds), () {
+    _reconnectTimer = Timer(delay, () {
       _connect(path);
     });
   }
 
   Future<void> _closeChannel() async {
     _reconnectTimer?.cancel();
+    _stopWatchdog();
     await _subscription?.cancel();
     _subscription = null;
     await _channel?.sink.close();
@@ -233,9 +264,76 @@ class TrackingWebSocketDatasource {
   }
 
   void _emitConnection(TrackingConnectionState state) {
+    _connectionState = state;
     if (!_connectionController.isClosed) {
       _connectionController.add(state);
     }
+  }
+
+  void _recordActivity() {
+    _lastActivityAt = DateTime.now();
+  }
+
+  void _flushBufferedLocation() {
+    final payload = _pendingLocationPayload;
+    if (payload == null) {
+      return;
+    }
+    final latitude = (payload['latitude'] ?? payload['lat']) as num?;
+    final longitude = (payload['longitude'] ?? payload['lng']) as num?;
+    if (latitude == null || longitude == null) {
+      return;
+    }
+    sendLocationUpdate(
+      TrackingCoordinates(
+        latitude: latitude.toDouble(),
+        longitude: longitude.toDouble(),
+      ),
+    );
+  }
+
+  void _sendProtocolPayload(Map<String, dynamic> payload) {
+    if (_connectionState != TrackingConnectionState.connected ||
+        _channel == null) {
+      return;
+    }
+    try {
+      _channel!.sink.add(jsonEncode(payload));
+    } catch (error) {
+      debugPrint('[$debugLabel] protocol send failed: $error');
+    }
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(websocketWatchdogInterval, (_) {
+      if (_connectionState != TrackingConnectionState.connected ||
+          _manualDisconnect) {
+        return;
+      }
+      if (!isWebSocketConnectionStale(
+        now: DateTime.now(),
+        lastActivityAt: _lastActivityAt,
+      )) {
+        return;
+      }
+      debugPrint('[$debugLabel] websocket stale, forcing reconnect');
+      unawaited(_restartFromWatchdog());
+    });
+  }
+
+  void _stopWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+  }
+
+  Future<void> _restartFromWatchdog() async {
+    if (_disposed || _manualDisconnect || _currentPath == null) {
+      return;
+    }
+    await _closeChannel();
+    _emitConnection(TrackingConnectionState.reconnecting);
+    _scheduleReconnect();
   }
 }
 

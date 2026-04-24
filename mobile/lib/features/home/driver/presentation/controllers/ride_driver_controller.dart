@@ -145,34 +145,25 @@ class RideDriverController extends StateNotifier<RideDriverState> {
     await Future.wait(tasks);
   }
 
-  Future<String?> acceptRide(int rideId) async {
-    state = state.copyWith(
-      isSubmittingAction: true,
-      activeRideId: rideId,
-      activeAction: 'accept',
-      clearAvailableErrorMessage: true,
-      clearHistoryErrorMessage: true,
-    );
+  Future<void> resumeFromLifecycle({
+    bool includeAvailableRides = true,
+    bool includeHistory = true,
+  }) async {
+    final tasks = <Future<void>>[];
 
-    try {
-      final ride = await _repository.acceptRide(rideId);
-      state = state.copyWith(
-        availableRides: _removeAvailableRide(rideId),
-        rides: _upsertRide(ride),
-        isSubmittingAction: false,
-        clearActiveRide: true,
-        clearAvailableErrorMessage: true,
-        clearHistoryErrorMessage: true,
-      );
-      return null;
-    } on DriverRideFailure catch (error) {
-      state = state.copyWith(
-        isSubmittingAction: false,
-        clearActiveRide: true,
-        availableErrorMessage: error.message,
-      );
-      return error.message;
+    if (includeAvailableRides) {
+      tasks.add(_refreshAvailableRidesSilently());
     }
+
+    if (includeHistory) {
+      tasks.add(_refreshHistorySilently());
+    }
+
+    if (tasks.isEmpty) {
+      return;
+    }
+
+    await Future.wait(tasks);
   }
 
   Future<String?> rejectRide(int rideId, {String? reason}) async {
@@ -206,14 +197,32 @@ class RideDriverController extends StateNotifier<RideDriverState> {
     return state.availableRides.where((ride) => ride.id != rideId).toList();
   }
 
-  List<DriverRide> _upsertRide(DriverRide nextRide) {
-    final updated = [...state.rides];
-    final index = updated.indexWhere((ride) => ride.id == nextRide.id);
-    if (index >= 0) {
-      updated[index] = nextRide;
-      return updated;
+  Future<void> _refreshAvailableRidesSilently() async {
+    try {
+      final rides = await _repository.fetchAvailableRides();
+      state = state.copyWith(
+        availableRides: rides,
+        clearAvailableErrorMessage: true,
+      );
+    } on DriverRideFailure catch (error) {
+      if (state.availableRides.isEmpty) {
+        state = state.copyWith(availableErrorMessage: error.message);
+      }
     }
-    return [nextRide, ...updated];
+  }
+
+  Future<void> _refreshHistorySilently() async {
+    try {
+      final rides = await _repository.fetchMyRides();
+      state = state.copyWith(
+        rides: rides,
+        clearHistoryErrorMessage: true,
+      );
+    } on DriverRideFailure catch (error) {
+      if (state.rides.isEmpty) {
+        state = state.copyWith(historyErrorMessage: error.message);
+      }
+    }
   }
 }
 

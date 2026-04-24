@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_inline_feedback.dart';
 import '../../data/models/ride_offer_model.dart';
 
 class OfferCard extends StatelessWidget {
@@ -47,7 +48,8 @@ class OfferCard extends StatelessWidget {
                   color: const Color(0x141B8A5A),
                   borderRadius: BorderRadius.circular(16),
                 ),
-                child: const Icon(Icons.person_rounded, color: AppColors.emerald),
+                child:
+                    const Icon(Icons.person_rounded, color: AppColors.emerald),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -62,7 +64,7 @@ class OfferCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${offer.driverRating.toStringAsFixed(1)} ★ • ${offer.vehicleLabel}',
+                      '${offer.driverRating.toStringAsFixed(1)} * ${offer.vehicleLabel}',
                       style: theme.textTheme.bodyMedium,
                     ),
                   ],
@@ -80,12 +82,13 @@ class OfferCard extends StatelessWidget {
           const SizedBox(height: 14),
           if (offer.driverDistanceKm != null)
             Text(
-              'Driver à ${offer.driverDistanceKm!.toStringAsFixed(1)} km',
+              'Chauffeur a ${offer.driverDistanceKm!.toStringAsFixed(1)} km',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: AppColors.stone,
               ),
             ),
-          if (offer.plateNumber != null && offer.plateNumber!.trim().isNotEmpty) ...[
+          if (offer.plateNumber != null &&
+              offer.plateNumber!.trim().isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
               'Plaque : ${offer.plateNumber}',
@@ -93,6 +96,14 @@ class OfferCard extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 16),
+          if (isBusy) ...[
+            const AppInlineFeedback(
+              message: 'Mise a jour de votre choix en cours...',
+              tone: AppInlineFeedbackTone.info,
+              isLoading: true,
+            ),
+            const SizedBox(height: 16),
+          ],
           Row(
             children: [
               if (onReject != null) ...[
@@ -106,7 +117,8 @@ class OfferCard extends StatelessWidget {
               ],
               Expanded(
                 child: AppButton(
-                  label: isBusy ? 'Chargement...' : 'Choisir ce driver',
+                  label: 'Choisir ce chauffeur',
+                  isLoading: isBusy,
                   onPressed: isBusy ? null : onSelect,
                 ),
               ),

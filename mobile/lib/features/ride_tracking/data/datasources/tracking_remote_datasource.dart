@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_error.dart';
 
 class TrackingRemoteFailure implements Exception {
   const TrackingRemoteFailure(this.message);
@@ -92,7 +93,10 @@ class TrackingRemoteDatasource {
           const [];
     } on DioException catch (error) {
       throw TrackingRemoteFailure(
-          _readError(error, fallback: 'Impossible de charger les rides.'));
+          ApiErrorPayload.messageOrFallback(
+        error,
+        fallbackMessage: 'Impossible de charger les rides.',
+      ));
     }
   }
 
@@ -118,19 +122,18 @@ class TrackingRemoteDatasource {
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
       throw TrackingRemoteFailure(
-          _readError(error, fallback: 'Action tracking impossible.'));
+          ApiErrorPayload.messageOrFallback(
+        error,
+        fallbackMessage: 'Action tracking impossible.',
+      ));
     }
   }
 
   String _readError(DioException error, {required String fallback}) {
-    final data = error.response?.data;
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.trim().isNotEmpty) {
-        return detail;
-      }
-    }
-    return fallback;
+    return ApiErrorPayload.messageOrFallback(
+      error,
+      fallbackMessage: fallback,
+    );
   }
 }
 

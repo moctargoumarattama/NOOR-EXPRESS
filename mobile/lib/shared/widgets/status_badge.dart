@@ -32,10 +32,20 @@ class StatusBadge extends StatelessWidget {
 
   _BadgePalette _palette(String value) {
     switch (value) {
+      case 'pending':
+        return const _BadgePalette(
+          background: Color(0xFFFFF6E3),
+          foreground: Color(0xFF9B6A00),
+        );
+      case 'offered':
+        return const _BadgePalette(
+          background: Color(0xFFE8F4FF),
+          foreground: Color(0xFF315DB7),
+        );
       case 'accepted':
         return const _BadgePalette(
-          background: Color(0xFFEFF4FF),
-          foreground: Color(0xFF315DB7),
+          background: Color(0xFFE7F7F1),
+          foreground: AppColors.emerald,
         );
       case 'arrived':
         return const _BadgePalette(
@@ -69,13 +79,15 @@ class StatusBadge extends StatelessWidget {
   String _label(String value) {
     switch (value) {
       case 'pending':
-        return 'En attente';
+        return 'Recherche';
+      case 'offered':
+        return 'Offres recues';
       case 'accepted':
-        return 'Acceptee';
+        return 'Chauffeur confirme';
       case 'arrived':
-        return 'Arrivee';
+        return 'Chauffeur arrive';
       case 'started':
-        return 'En cours';
+        return 'Course en cours';
       case 'completed':
         return 'Terminee';
       case 'cancelled':

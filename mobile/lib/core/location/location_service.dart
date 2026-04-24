@@ -267,10 +267,10 @@ class LocationService {
   Stream<LocationResult<Position>> streamPosition({
     LocationAccuracy accuracy = LocationAccuracy.high,
     int distanceFilter = 10,
-    Duration timeout = const Duration(seconds: 15),
+    Duration? timeout,
   }) async* {
     debugPrint(
-      '[LocationService] streamPosition:start accuracy=$accuracy distanceFilter=$distanceFilter',
+      '[LocationService] streamPosition:start accuracy=$accuracy distanceFilter=$distanceFilter timeout=${timeout?.inSeconds ?? 'none'}s',
     );
 
     final permissionState = await requestPermission();
@@ -284,12 +284,14 @@ class LocationService {
     }
 
     try {
-      await for (final position in _geolocatorGateway
-          .getPositionStream(
-            accuracy: accuracy,
-            distanceFilter: distanceFilter,
-          )
-          .timeout(timeout)) {
+      final positionStream = _geolocatorGateway.getPositionStream(
+        accuracy: accuracy,
+        distanceFilter: distanceFilter,
+      );
+      final trackedStream =
+          timeout == null ? positionStream : positionStream.timeout(timeout);
+
+      await for (final position in trackedStream) {
         debugPrint(
           '[LocationService] streamPosition:update lat=${position.latitude} lng=${position.longitude}',
         );

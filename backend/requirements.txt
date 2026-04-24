@@ -11,3 +11,4 @@ bcrypt
 python-dotenv
 pydantic-settings
 firebase-admin
+upstash-redis

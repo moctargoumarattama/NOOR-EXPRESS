@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
+import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_inline_feedback.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_offer_model.dart';
 import '../../domain/entities/negotiation_state.dart';
@@ -34,7 +36,8 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
         initialRide: widget.initialPayload == null
             ? null
             : NegotiationRideModel.fromDriverNotificationJson(
-                widget.initialPayload!),
+                widget.initialPayload!,
+              ),
       );
 
   @override
@@ -50,7 +53,10 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
 
         if (next.toastMessage != null &&
             next.toastMessage != previous?.toastMessage) {
-          AppSnackbar.show(context, message: next.toastMessage!);
+          AppSnackbar.show(
+            context,
+            message: _humanizeMessage(next.toastMessage!),
+          );
           ref
               .read(negotiationControllerProvider(_scope).notifier)
               .consumeToast();
@@ -64,7 +70,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
               ref.read(negotiationControllerProvider(_scope).notifier);
           notifier.consumeNavigation();
           notifier.stop();
-          context.push(AppRoutes.driverMapWithRide(rideId));
+          context.go(AppRoutes.driverMapWithRide(rideId));
         }
 
         if (next.shouldCloseToHome && !(previous?.shouldCloseToHome ?? false)) {
@@ -96,6 +102,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(negotiationControllerProvider(_scope));
     final ride = state.ride ?? _scope.initialRide;
+    final recoveryMessage = _recoveryMessage(state, ride);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0D1523),
@@ -123,6 +130,22 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
               ],
             ),
             const SizedBox(height: 20),
+            if (recoveryMessage != null) ...[
+              AppInlineFeedback(
+                message: recoveryMessage,
+                tone: _recoveryTone(state),
+                isLoading: _recoveryLoading(state),
+                actionLabel: _shouldShowManualRefresh(state, ride)
+                    ? RideUiCopy.trackingRefreshAction
+                    : null,
+                onAction: _shouldShowManualRefresh(state, ride)
+                    ? () => ref
+                        .read(negotiationControllerProvider(_scope).notifier)
+                        .refresh()
+                    : null,
+              ),
+              const SizedBox(height: 16),
+            ],
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -132,80 +155,98 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Départ : ${ride?.pickup ?? 'En chargement...'}'),
-                  const SizedBox(height: 10),
-                  Text('Destination : ${ride?.dropoff ?? 'En chargement...'}'),
-                  const SizedBox(height: 10),
-                  Text('Prix client : ${_formatFcfa(ride?.clientPrice ?? 0)}'),
-                  const SizedBox(height: 10),
-                  Text(
-                    ride?.distanceKm == null
-                        ? 'Distance estimée indisponible'
-                        : 'Distance estimée : ${ride!.distanceKm!.toStringAsFixed(1)} km',
+                  _DetailLine(
+                    label: 'Depart',
+                    value: ride?.pickup ?? 'En chargement...',
                   ),
-                  if (state.errorMessage != null) ...[
-                    const SizedBox(height: 12),
-                    Text(
-                      state.errorMessage!,
-                      style: const TextStyle(color: Color(0xFFD64545)),
-                    ),
-                  ],
+                  const SizedBox(height: 10),
+                  _DetailLine(
+                    label: 'Destination',
+                    value: ride?.dropoff ?? 'En chargement...',
+                  ),
+                  const SizedBox(height: 10),
+                  _DetailLine(
+                    label: 'Prix client',
+                    value: _formatFcfa(ride?.clientPrice ?? 0),
+                    emphasize: true,
+                  ),
+                  const SizedBox(height: 10),
+                  _DetailLine(
+                    label: 'Distance estimee',
+                    value: ride?.distanceKm == null
+                        ? 'Indisponible'
+                        : '${ride!.distanceKm!.toStringAsFixed(1)} km',
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 20),
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0x14FFFFFF),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: const Color(0x40FFFFFF)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    state.hasSubmittedOffer
-                        ? 'Offre envoyée, en attente de réponse...'
-                        : 'Ton prix proposé',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: Colors.white,
-                        ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    _formatFcfa(state.submittedPrice ?? _proposedPrice),
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                          color: const Color(0xFF1B8A5A),
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (!state.hasSubmittedOffer)
-                    AppButton.secondary(
-                      label: 'Modifier le prix',
-                      onPressed: () async {
-                        final nextPrice = await showPriceProposalSheet(
-                          context,
-                          initialPrice: _proposedPrice == 0
-                              ? (ride?.clientPrice ?? 0)
-                              : _proposedPrice,
-                        );
-                        if (nextPrice == null || !mounted) {
-                          return;
-                        }
-                        setState(() {
-                          _proposedPrice = nextPrice;
-                        });
-                      },
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              child: Container(
+                key: ValueKey(
+                  'driver-offer-${state.hasSubmittedOffer}-${state.isSubmitting}-${state.submittedPrice}',
+                ),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0x14FFFFFF),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0x40FFFFFF)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      state.hasSubmittedOffer
+                          ? 'Offre envoyee'
+                          : 'Votre prix propose',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            color: Colors.white,
+                          ),
                     ),
-                ],
+                    const SizedBox(height: 12),
+                    Text(
+                      _formatFcfa(state.submittedPrice ?? _proposedPrice),
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                color: const Color(0xFF1B8A5A),
+                                fontWeight: FontWeight.w900,
+                              ),
+                    ),
+                    const SizedBox(height: 16),
+                    if (state.hasSubmittedOffer)
+                      const AppInlineFeedback(
+                        message:
+                            'Votre offre est bien partie. Nous vous prevenons des que le client repond.',
+                        tone: AppInlineFeedbackTone.info,
+                      )
+                    else
+                      AppButton.secondary(
+                        label: 'Modifier le prix',
+                        onPressed: () async {
+                          final nextPrice = await showPriceProposalSheet(
+                            context,
+                            initialPrice: _proposedPrice == 0
+                                ? (ride?.clientPrice ?? 0)
+                                : _proposedPrice,
+                          );
+                          if (nextPrice == null || !mounted) {
+                            return;
+                          }
+                          setState(() {
+                            _proposedPrice = nextPrice;
+                          });
+                        },
+                      ),
+                  ],
+                ),
               ),
             ),
             const SizedBox(height: 24),
             if (!state.hasSubmittedOffer) ...[
               AppButton(
-                label: state.isSubmitting ? 'Envoi...' : 'Proposer ce prix',
+                label: 'Proposer ce prix',
+                isLoading: state.isSubmitting,
                 onPressed: state.isSubmitting || ride == null
                     ? null
                     : () {
@@ -215,10 +256,9 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                             : _proposedPrice;
                         ref
                             .read(
-                                negotiationControllerProvider(_scope).notifier)
-                            .submitOffer(
-                              targetPrice,
-                            );
+                              negotiationControllerProvider(_scope).notifier,
+                            )
+                            .submitOffer(targetPrice);
                       },
               ),
               const SizedBox(height: 14),
@@ -234,4 +274,111 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
   }
 
   String _formatFcfa(double value) => '${value.round()} FCFA';
+
+  String? _recoveryMessage(
+    NegotiationState state,
+    NegotiationRideModel? ride,
+  ) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return _humanizeMessage(state.errorMessage!);
+    }
+
+    switch (state.connectionState) {
+      case NegotiationConnectionState.reconnecting:
+        return RideUiCopy.reconnecting;
+      case NegotiationConnectionState.connecting:
+        return 'Connexion a la demande en cours...';
+      case NegotiationConnectionState.disconnected:
+        return RideUiCopy.networkError;
+      case NegotiationConnectionState.connected:
+        if (ride == null) {
+          return 'Cette demande est en cours de synchronisation.';
+        }
+        return null;
+    }
+  }
+
+  AppInlineFeedbackTone _recoveryTone(NegotiationState state) {
+    if (state.errorMessage != null && state.errorMessage!.trim().isNotEmpty) {
+      return AppInlineFeedbackTone.error;
+    }
+    if (state.connectionState == NegotiationConnectionState.disconnected ||
+        state.connectionState == NegotiationConnectionState.reconnecting) {
+      return AppInlineFeedbackTone.warning;
+    }
+    return AppInlineFeedbackTone.info;
+  }
+
+  bool _recoveryLoading(NegotiationState state) {
+    return state.connectionState == NegotiationConnectionState.connecting ||
+        state.connectionState == NegotiationConnectionState.reconnecting ||
+        state.isLoading;
+  }
+
+  bool _shouldShowManualRefresh(
+    NegotiationState state,
+    NegotiationRideModel? ride,
+  ) {
+    return state.errorMessage != null ||
+        state.connectionState != NegotiationConnectionState.connected ||
+        ride == null;
+  }
+
+  String _humanizeMessage(String message) {
+    final value = message.trim().toLowerCase();
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
+    }
+    if (value.contains('expire')) {
+      return RideUiCopy.offerExpired;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+    if (value.contains('indisponible') && value.contains('chauffeur')) {
+      return RideUiCopy.driverUnavailable;
+    }
+    return message;
+  }
+}
+
+class _DetailLine extends StatelessWidget {
+  const _DetailLine({
+    required this.label,
+    required this.value,
+    this.emphasize = false,
+  });
+
+  final String label;
+  final String value;
+  final bool emphasize;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                color: const Color(0xFF6B7280),
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: emphasize
+              ? Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: const Color(0xFF1B8A5A),
+                    fontWeight: FontWeight.w800,
+                  )
+              : null,
+        ),
+      ],
+    );
+  }
 }

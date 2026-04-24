@@ -58,6 +58,7 @@ class ClientProfileRideModel {
     required this.status,
     required this.createdAt,
     required this.estimatedPrice,
+    this.agreedPrice,
     this.finalPrice,
   });
 
@@ -67,9 +68,10 @@ class ClientProfileRideModel {
   final String status;
   final DateTime createdAt;
   final double estimatedPrice;
+  final double? agreedPrice;
   final double? finalPrice;
 
-  double get displayPrice => finalPrice ?? estimatedPrice;
+  double get displayPrice => finalPrice ?? agreedPrice ?? estimatedPrice;
 
   factory ClientProfileRideModel.fromJson(Map<String, dynamic> json) {
     return ClientProfileRideModel(
@@ -81,6 +83,7 @@ class ClientProfileRideModel {
           DateTime.tryParse(json['created_at'] as String? ?? '')?.toLocal() ??
               DateTime.fromMillisecondsSinceEpoch(0),
       estimatedPrice: (json['estimated_price'] as num?)?.toDouble() ?? 0,
+      agreedPrice: (json['agreed_price'] as num?)?.toDouble(),
       finalPrice: (json['final_price'] as num?)?.toDouble(),
     );
   }

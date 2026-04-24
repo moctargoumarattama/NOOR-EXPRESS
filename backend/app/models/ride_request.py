@@ -12,6 +12,7 @@ from app.models.user import UserRole
 
 class RideRequestStatus(str, Enum):
     PENDING = "pending"
+    OFFERED = "offered"
     ACCEPTED = "accepted"
     ARRIVED = "arrived"
     STARTED = "started"
@@ -33,6 +34,7 @@ class RideRequest(Base):
     dropoff_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     dropoff_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     estimated_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
+    agreed_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     final_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     platform_commission: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     driver_net_earnings: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)

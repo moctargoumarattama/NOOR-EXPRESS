@@ -39,7 +39,7 @@ Future<DriverRatingDraft?> showDriverRatingBottomSheet(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Noter le driver',
+                'Noter le chauffeur',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
               Slider(

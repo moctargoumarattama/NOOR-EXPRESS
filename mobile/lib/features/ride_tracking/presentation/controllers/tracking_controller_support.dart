@@ -6,8 +6,15 @@ import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 
 RideTrackingModel? selectTrackingRide(
-    TrackingMode mode, List<RideTrackingModel> rides,
-    {int? preferredRideId}) {
+  TrackingMode mode,
+  List<RideTrackingModel> rides, {
+  int? preferredRideId,
+  RideTrackingModel? activeRide,
+}) {
+  if (activeRide != null) {
+    return activeRide;
+  }
+
   if (preferredRideId != null) {
     for (final ride in rides) {
       if (ride.id == preferredRideId) {
@@ -19,6 +26,7 @@ RideTrackingModel? selectTrackingRide(
   final priority = mode == TrackingMode.client
       ? const [
           RideTrackingStatus.pending,
+          RideTrackingStatus.offered,
           RideTrackingStatus.accepted,
           RideTrackingStatus.arrived,
           RideTrackingStatus.started,
@@ -84,16 +92,20 @@ double? headingBetweenPoints(
 
 String trackingStatusToast(String? status) {
   switch (status) {
+    case 'offered':
+      return 'Des offres sont arrivees.';
     case 'accepted':
-      return 'Votre driver a accepte la course.';
+      return 'Votre chauffeur a accepte la course.';
     case 'arrived':
-      return 'Votre driver est arrive.';
+      return 'Votre chauffeur est arrive.';
     case 'started':
       return 'La course a commence.';
     case 'completed':
       return 'La course est terminee.';
     case 'cancelled':
       return 'La course a ete annulee.';
+    case 'pending':
+      return 'La course redevient negotiable.';
     default:
       return 'Statut de course mis a jour.';
   }

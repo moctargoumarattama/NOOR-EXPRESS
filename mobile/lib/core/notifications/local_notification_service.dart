@@ -39,7 +39,9 @@ class LocalNotificationService {
     final notification = message.notification;
     final title = notification?.title ?? 'Noor Express';
     final body = notification?.body ?? '';
-    final channelId = _channelIdForType(message.data['type']?.toString());
+    final channelId = notificationChannelIdForType(
+      message.data['type']?.toString(),
+    );
 
     await _plugin.show(
       message.hashCode,
@@ -92,22 +94,6 @@ class LocalNotificationService {
     }
   }
 
-  String _channelIdForType(String? type) {
-    if (type == 'new_offer' ||
-        type == 'offer_accepted' ||
-        type == 'offer_rejected') {
-      return 'offers';
-    }
-    if (type == 'new_ride_request' ||
-        type == 'driver_en_route' ||
-        type == 'driver_arrived' ||
-        type == 'ride_started' ||
-        type == 'ride_completed') {
-      return 'rides';
-    }
-    return 'general';
-  }
-
   String _channelName(String id) {
     return switch (id) {
       'rides' => 'Courses',
@@ -123,6 +109,26 @@ class LocalNotificationService {
       _ => 'Notifications Noor Express.',
     };
   }
+}
+
+String notificationChannelIdForType(String? type) {
+  if (type == 'new_offer' ||
+      type == 'offer_accepted' ||
+      type == 'offer_rejected' ||
+      type == 'offer_invalidated' ||
+      type == 'new_ride_request') {
+    return 'offers';
+  }
+  if (type == 'ride_accepted' ||
+      type == 'driver_en_route' ||
+      type == 'driver_arrived' ||
+      type == 'ride_started' ||
+      type == 'ride_completed' ||
+      type == 'ride_cancelled' ||
+      type == 'ride_reopened') {
+    return 'rides';
+  }
+  return 'general';
 }
 
 final localNotificationServiceProvider =

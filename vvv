@@ -1,31 +1,4 @@
-.\venv\Scripts\Activate.ps1
-cd backend
-python -m uvicorn app.main:app --reload
-python -m uvicorn app.main:app --reload
-TEMPLATE  cd "C:\Users\hp\Desktop\NOOR EXPRESS\mobile"
-$env:Path += ";C:\Users\hp\Desktop\flutter_windows_3.41.7-stable\flutter\bin"
-flutter doctor
-flutter pub get
-flutter run -d chrome
-J’ai ajouté un vrai système de démarrage simple à la racine du projet :
-- [start_backend.ps1](</C:/Users/hp/Desktop/NOOR EXPRESS/start_backend.ps1>) lance FastAPI avec le `venv`
-- [start_mobile.ps1](</C:/Users/hp/Desktop/NOOR EXPRESS/start_mobile.ps1>) lance Flutter sur `chrome`
-- [start_all.ps1](</C:/Users/hp/Desktop/NOOR EXPRESS/start_all.ps1>) ouvre les deux en une seule commande
-- [virtuel](</C:/Users/hp/Desktop/NOOR EXPRESS/virtuel>) contient maintenant aussi les raccourcis utiles
-Commandes à utiliser depuis `C:\Users\hp\Desktop\NOOR EXPRESS` :
-```powershell
-.\start_backend.ps1
-```
-```powershell
-.\start_mobile.ps1
-```
-```powershell
-.\start_all.ps1
-```
-Tu peux aussi choisir un autre device Flutter si besoin :
-```powershell
-.\start_mobile.ps1 -Device chrome
-.\start_all.ps1 -Device chrome
+
 ```
 J’ai vérifié la syntaxe des scripts PowerShell. Je n’ai pas lancé les serveurs dans cette réponse, mais les scripts sont prêts à l’emploi.
 +212621014101
@@ -86,17 +59,6 @@ Tu peux maintenant envoyer ce fichier APK par WhatsApp/USB et l’installer sur 
 
 Le mode optionnel “téléphone réel” est en place, sans casser le mode actuel.
 
-Fichiers modifiés :
-- [app_config.dart](C:/Users/hp/Desktop/NOOR%20EXPRESS/mobile/lib/core/config/app_config.dart) : ajout de `NOOR_API_BASE_URL` et `NOOR_WS_BASE_URL` optionnels au build.
-- [run.py](C:/Users/hp/Desktop/NOOR%20EXPRESS/run.py) : ajout de `--lan` pour exposer le backend au téléphone sur le Wi-Fi.
-- [README.md](C:/Users/hp/Desktop/NOOR%20EXPRESS/README.md) : ajout des commandes téléphone réel.
-- [widget_test.dart](C:/Users/hp/Desktop/NOOR%20EXPRESS/mobile/test/widget_test.dart) : remplacement du vieux test Flutter template qui cassait `flutter analyze`.
-
-Utilisation normale sur PC, rien ne change :
-
-```powershell
-python run.py
-```
 
 Si un jour tu veux installer sur un vrai téléphone Android :
 
@@ -123,13 +85,6 @@ Puis tu mets ce fichier sur ton téléphone :
 mobile/build/app/outputs/flutter-apk/app-release.apk
 ```
 
-Vérifications faites :
-- `flutter analyze` : `No issues found`
-- `python -m py_compile run.py` : OK
-- `python run.py --help` : OK avec l’option `--lan` visible.
-
-
-
 
 python run.py --skip-deps --rebuild-web
 
@@ -138,3 +93,19 @@ python run.py --skip-deps --rebuild-web
 
 
 pour choisir ma base  (USE noor_express;)
+
+
+
+UPSTASH_REDIS_REST_URL="https://beloved-mink-68085.upstash.io"
+UPSTASH_REDIS_REST_TOKEN="gQAAAAAAAQn1AAIgcDFhMzIyZDJkMGQ0NGI0MjkzYWM0YjU0ZDk4NzkyOTgyMg"
+
+
+
+
+🔥 ÉTAPE 9 — Activer Redis (plus tard)
+
+Quand tu veux scaler :
+
+REALTIME_STORE_BACKEND=redis
+
+👉 et BOOM 💥

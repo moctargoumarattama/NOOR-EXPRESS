@@ -6,6 +6,7 @@ class ClientRide {
     required this.status,
     required this.estimatedPrice,
     required this.createdAt,
+    this.agreedPrice,
     this.finalPrice,
   });
 
@@ -14,8 +15,11 @@ class ClientRide {
   final String dropoffLocation;
   final String status;
   final double estimatedPrice;
+  final double? agreedPrice;
   final double? finalPrice;
   final DateTime createdAt;
+
+  double get displayPrice => finalPrice ?? agreedPrice ?? estimatedPrice;
 
   factory ClientRide.fromJson(Map<String, dynamic> json) {
     return ClientRide(
@@ -24,6 +28,7 @@ class ClientRide {
       dropoffLocation: json['dropoff_location'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       estimatedPrice: (json['estimated_price'] as num?)?.toDouble() ?? 0,
+      agreedPrice: (json['agreed_price'] as num?)?.toDouble(),
       finalPrice: (json['final_price'] as num?)?.toDouble(),
       createdAt: DateTime.parse(json['created_at'] as String).toLocal(),
     );
@@ -35,6 +40,7 @@ class ClientRide {
     String? dropoffLocation,
     String? status,
     double? estimatedPrice,
+    double? agreedPrice,
     double? finalPrice,
     DateTime? createdAt,
   }) {
@@ -44,6 +50,7 @@ class ClientRide {
       dropoffLocation: dropoffLocation ?? this.dropoffLocation,
       status: status ?? this.status,
       estimatedPrice: estimatedPrice ?? this.estimatedPrice,
+      agreedPrice: agreedPrice ?? this.agreedPrice,
       finalPrice: finalPrice ?? this.finalPrice,
       createdAt: createdAt ?? this.createdAt,
     );

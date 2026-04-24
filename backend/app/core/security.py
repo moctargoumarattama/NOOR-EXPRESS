@@ -5,10 +5,11 @@ import json
 import time
 from typing import Any
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_errors import ApiError, forbidden, unauthorized
 from app.core.config import settings
 from app.db.database import get_db_session
 from app.models.user import User, UserRole
@@ -58,10 +59,7 @@ def decode_access_token(token: str) -> dict[str, Any]:
     try:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        ) from exc
+        raise unauthorized("Invalid token") from exc
 
     signing_input = f"{encoded_header}.{encoded_payload}".encode("utf-8")
     expected_signature = hmac.new(
@@ -72,24 +70,15 @@ def decode_access_token(token: str) -> dict[str, Any]:
     received_signature = _base64url_decode(encoded_signature)
 
     if not hmac.compare_digest(received_signature, expected_signature):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise unauthorized("Invalid token")
 
     try:
         payload = json.loads(_base64url_decode(encoded_payload))
     except (ValueError, json.JSONDecodeError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        ) from exc
+        raise unauthorized("Invalid token") from exc
 
     if int(payload.get("exp", 0)) < int(time.time()):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Token expired",
-        )
+        raise unauthorized("Token expired")
 
     return payload
 
@@ -101,7 +90,7 @@ async def verify_token(token: str, session: AsyncSession) -> User | None:
         if user_id is None:
             return None
         return await get_user_by_id(session, int(user_id))
-    except (HTTPException, TypeError, ValueError):
+    except (ApiError, TypeError, ValueError):
         return None
 
 
@@ -110,42 +99,27 @@ async def get_current_user(
     session: AsyncSession = Depends(get_db_session),
 ) -> User:
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
+        raise unauthorized("Authentication required")
 
     payload = decode_access_token(credentials.credentials)
     user_id = payload.get("sub")
     if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token",
-        )
+        raise unauthorized("Invalid token")
 
     user = await get_user_by_id(session, int(user_id))
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-        )
+        raise unauthorized("User not found")
 
     return user
 
 
 async def get_current_client(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.CLIENT:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Client access required",
-        )
+        raise forbidden("Client access required")
     return current_user
 
 
 async def get_current_driver(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role != UserRole.DRIVER:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Driver access required",
-        )
+        raise forbidden("Driver access required")
     return current_user

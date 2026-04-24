@@ -28,11 +28,12 @@ const AdminApi = (() => {
     const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
     if (!response.ok) {
       const payload = await response.json().catch(() => ({}));
+      const message = payload.message || payload.detail || 'Erreur API';
       const isAdminLogin = path === '/admin/auth/login' || path === '/admin/init';
       if (response.status === 401 && path.startsWith('/admin/') && !isAdminLogin) {
-        redirectToLogin(payload.detail || 'Session admin expiree. Reconnecte-toi.');
+        redirectToLogin(message || 'Session admin expiree. Reconnecte-toi.');
       }
-      throw new Error(payload.detail || 'Erreur API');
+      throw new Error(message);
     }
     return response.status === 204 ? null : response.json();
   }
@@ -90,9 +91,6 @@ const AdminApi = (() => {
     $('top-drivers').innerHTML = (data.top_drivers || []).map((driver) =>
       `<tr><td>${driver.phone_number}</td><td>${driver.completed_rides}</td><td>${driver.total_earnings} FCFA</td></tr>`).join('');
   }
-
-  function initZoneMap() {}
-  async function loadZones() { await loadPricingAdmin(); }
 
   async function loadPricingAdmin() {
     try {
@@ -299,7 +297,7 @@ const AdminApi = (() => {
     $('rides-table').innerHTML = ridesCache.filter((ride) => !status || ride.status === status)
       .map((ride) => `<tr><td>${ride.id}</td><td>${ride.client}</td><td>${ride.driver || '-'}</td>
       <td>${ride.pickup_location}</td><td>${ride.dropoff_location}</td>
-      <td>${ride.final_price || ride.estimated_price} FCFA</td><td><span class="badge">${ride.status}</span></td>
+      <td>${ride.final_price || ride.agreed_price || ride.estimated_price} FCFA</td><td><span class="badge">${ride.status}</span></td>
       <td>${renderReportBadge(ride)}</td><td>${new Date(ride.created_at).toLocaleString()}</td></tr>`).join('');
   }
   function renderReportBadge(ride) {
@@ -349,7 +347,7 @@ const AdminApi = (() => {
 
   return {
     requireAuth, showLoginMessage, login, initAdmin, logout, loadDashboard,
-    initZoneMap, loadZones, loadPricingAdmin, savePricingSettings,
+    loadPricingAdmin, savePricingSettings,
     openZoneModal, closeZoneModal, saveZone, disableZone,
     openFareModal, closeFareModal, saveFare, disableFare,
     openTimeRuleModal, closeTimeRuleModal, saveTimeRule, disableTimeRule,

@@ -183,7 +183,18 @@ async def get_dashboard_stats(session: AsyncSession) -> dict[str, Any]:
     )
     counts = {status.value: count for status, count in grouped_result.all()}
     revenue_result = await session.execute(
-        select(func.coalesce(func.sum(RideRequest.estimated_price), 0.0)).where(
+        select(
+            func.coalesce(
+                func.sum(
+                    func.coalesce(
+                        RideRequest.final_price,
+                        RideRequest.agreed_price,
+                        RideRequest.estimated_price,
+                    )
+                ),
+                0.0,
+            )
+        ).where(
             RideRequest.status == RideRequestStatus.COMPLETED
         )
     )
@@ -191,6 +202,7 @@ async def get_dashboard_stats(session: AsyncSession) -> dict[str, Any]:
     return {
         "total_rides": sum(counts.values()),
         "pending": counts.get("pending", 0),
+        "offered": counts.get("offered", 0),
         "accepted": counts.get("accepted", 0),
         "started": counts.get("started", 0),
         "completed": counts.get("completed", 0),
@@ -214,6 +226,7 @@ def _ride_row(
         "pickup_location": ride.pickup_location,
         "dropoff_location": ride.dropoff_location,
         "estimated_price": ride.estimated_price,
+        "agreed_price": ride.agreed_price,
         "final_price": ride.final_price,
         "status": ride.status.value,
         "created_at": ride.created_at,

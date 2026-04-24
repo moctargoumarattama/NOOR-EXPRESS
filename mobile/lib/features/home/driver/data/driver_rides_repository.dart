@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_error.dart';
 import 'models/driver_ride.dart';
 
 class DriverRideFailure implements Exception {
@@ -29,7 +30,7 @@ class DriverRidesRepository {
           .toList();
     } on DioException catch (error) {
       throw DriverRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de charger les demandes disponibles.',
         ),
@@ -57,31 +58,9 @@ class DriverRidesRepository {
           .toList();
     } on DioException catch (error) {
       throw DriverRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de charger les courses driver.',
-        ),
-      );
-    }
-  }
-
-  Future<DriverRide> acceptRide(int rideId) async {
-    try {
-      final response = await _apiClient.dio.post<Map<String, dynamic>>(
-        '/ride-requests/$rideId/accept',
-      );
-
-      final payload = response.data;
-      if (payload == null) {
-        throw const DriverRideFailure('Acceptation impossible.');
-      }
-
-      return DriverRide.fromJson(payload);
-    } on DioException catch (error) {
-      throw DriverRideFailure(
-        _readErrorMessage(
-          error,
-          fallbackMessage: 'Impossible d accepter cette course.',
         ),
       );
     }
@@ -102,28 +81,12 @@ class DriverRidesRepository {
       return DriverRide.fromJson(payload);
     } on DioException catch (error) {
       throw DriverRideFailure(
-        _readErrorMessage(
+        ApiErrorPayload.messageOrFallback(
           error,
           fallbackMessage: 'Impossible de refuser cette course.',
         ),
       );
     }
-  }
-
-  String _readErrorMessage(
-    DioException error, {
-    required String fallbackMessage,
-  }) {
-    final data = error.response?.data;
-
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) {
-        return detail;
-      }
-    }
-
-    return fallbackMessage;
   }
 }
 

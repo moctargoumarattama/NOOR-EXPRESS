@@ -3,6 +3,7 @@ from datetime import date, datetime, time
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.api_errors import gone
 from app.core.security import get_current_client, get_current_driver, get_current_user
 from app.db.database import get_db_session
 from app.models.ride_request import RideRequestStatus
@@ -33,21 +34,11 @@ from app.services.ride_report_service import (
 )
 from app.services.ride_request_service import (
     RideRequestAlreadyRatedError,
-    RideRequestCancellationNotAllowedError,
-    RideRequestDriverNotConnectedError,
-    RideRequestDriverMismatchError,
-    RideRequestDriverNotFoundError,
     RideRequestExpiredError,
-    RideRequestInvalidDriverError,
-    RideRequestInvalidClientError,
-    RideRequestNotAcceptedError,
-    RideRequestNotArrivedError,
     RideRequestNotCompletedError,
     RideRequestNotPendingError,
     RideRequestNotFoundError,
-    RideRequestNotStartedError,
     RideRequestRatingNotAllowedError,
-    accept_ride_request,
     arrive_ride_request,
     cancel_ride_request,
     complete_ride_request,
@@ -190,19 +181,12 @@ async def get_available_ride_requests_endpoint(
     limit: int = Query(default=50, ge=1, le=50),
     offset: int = Query(default=0, ge=0),
 ) -> list[RideRequestRead]:
-    try:
-        ride_requests = await get_available_ride_requests(
-            session=session,
-            current_user=current_user,
-            limit=limit,
-            offset=offset,
-        )
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
+    ride_requests = await get_available_ride_requests(
+        session=session,
+        current_user=current_user,
+        limit=limit,
+        offset=offset,
+    )
     return [RideRequestRead.model_validate(ride_request) for ride_request in ride_requests]
 
 
@@ -223,14 +207,7 @@ async def create_ride_request_endpoint(
     current_user: User = Depends(get_current_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await create_ride_request(session, ride_request_in, current_user)
-    except RideRequestInvalidClientError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
+    ride_request = await create_ride_request(session, ride_request_in, current_user)
     return RideRequestRead.model_validate(ride_request)
 
 
@@ -241,24 +218,12 @@ async def cancel_ride_request_endpoint(
     current_user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await cancel_ride_request(
-            session,
-            ride_request_id,
-            current_user,
-            ride_request_cancel_in,
-        )
-    except RideRequestNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestCancellationNotAllowedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        ) from exc
-
+    ride_request = await cancel_ride_request(
+        session,
+        ride_request_id,
+        current_user,
+        ride_request_cancel_in,
+    )
     return RideRequestRead.model_validate(ride_request)
 
 
@@ -311,21 +276,6 @@ async def reject_ride_request_endpoint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
-    except RideRequestDriverNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverNotConnectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
-        ) from exc
     except RideRequestExpiredError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -368,39 +318,11 @@ async def accept_ride_request_endpoint(
     current_user: User = Depends(get_current_driver),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await accept_ride_request(
-            session,
-            ride_request_id,
-            current_user,
-        )
-    except RideRequestNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except RideRequestExpiredError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except RideRequestNotPendingError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-
-    return RideRequestRead.model_validate(ride_request)
+    del ride_request_id, current_user, session
+    raise gone(
+        "ride_direct_accept_disabled",
+        "Direct ride acceptance is disabled. Drivers must create an offer and clients accept the winning offer.",
+    )
 
 
 @router.post("/{ride_request_id}/start", response_model=RideRequestRead)
@@ -409,38 +331,11 @@ async def start_ride_request_endpoint(
     current_user: User = Depends(get_current_driver),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await start_ride_request(
-            session,
-            ride_request_id,
-            current_user,
-        )
-    except RideRequestNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except RideRequestNotArrivedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverMismatchError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
+    ride_request = await start_ride_request(
+        session,
+        ride_request_id,
+        current_user,
+    )
     return RideRequestRead.model_validate(ride_request)
 
 
@@ -450,33 +345,11 @@ async def arrive_ride_request_endpoint(
     current_user: User = Depends(get_current_driver),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await arrive_ride_request(
-            session,
-            ride_request_id,
-            current_user,
-        )
-    except RideRequestNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except RideRequestNotAcceptedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverMismatchError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
+    ride_request = await arrive_ride_request(
+        session,
+        ride_request_id,
+        current_user,
+    )
     return RideRequestRead.model_validate(ride_request)
 
 
@@ -487,39 +360,12 @@ async def complete_ride_request_endpoint(
     current_user: User = Depends(get_current_driver),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
-    try:
-        ride_request = await complete_ride_request(
-            session,
-            ride_request_id,
-            current_user,
-            ride_request_complete_in,
-        )
-    except RideRequestNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverNotFoundError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
-    except RideRequestInvalidDriverError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except RideRequestNotStartedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        ) from exc
-    except RideRequestDriverMismatchError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-
+    ride_request = await complete_ride_request(
+        session,
+        ride_request_id,
+        current_user,
+        ride_request_complete_in,
+    )
     return RideRequestRead.model_validate(ride_request)
 
 

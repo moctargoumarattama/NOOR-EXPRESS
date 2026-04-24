@@ -84,7 +84,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       }
     });
     if (mode == AddressSearchMode.dropoff) {
-      await _startSearchAfterDestinationSelected();
+      await _prepareRideAfterDestinationSelected();
       return;
     }
     _schedulePriceEstimate();
@@ -111,18 +111,13 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     );
   }
 
-  Future<void> _startSearchAfterDestinationSelected() async {
+  Future<void> _prepareRideAfterDestinationSelected() async {
     final pickup = _pickupAddress;
     final dropoff = _dropoffAddress;
     if (pickup == null || dropoff == null) {
       return;
     }
-    _showSnackBar('Recherche des chauffeurs...', tone: AppSnackbarTone.info);
     await _estimateSuggestedPrice(pickup, dropoff);
-    if (!mounted) {
-      return;
-    }
-    await _submitRide();
   }
 
   Future<void> _submitRide() async {
@@ -134,15 +129,20 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         await ref.read(clientHomeControllerProvider.notifier).createRide(input);
     if (!mounted || !success) {
       _showSnackBar(
-        ref.read(clientHomeControllerProvider).createError ??
-            'Creation de course impossible.',
+        _humanizeMessage(
+          ref.read(clientHomeControllerProvider).createError,
+          fallback: 'Impossible d envoyer la demande pour le moment.',
+        ),
         tone: AppSnackbarTone.error,
       );
       return;
     }
     final createdRideId = ref.read(clientHomeControllerProvider).rides.first.id;
     _resetForm();
-    _showSnackBar('Course creee avec succes.', tone: AppSnackbarTone.success);
+    _showSnackBar(
+      'Demande envoyee. Nous cherchons un chauffeur.',
+      tone: AppSnackbarTone.success,
+    );
     context.push(AppRoutes.clientNegotiation(createdRideId));
   }
 
@@ -152,14 +152,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     final price = double.tryParse(_priceController.text.trim());
     if (pickup == null || dropoff == null) {
       _showSnackBar(
-        'Choisis le depart et la destination.',
+        'Choisissez le depart et la destination.',
         tone: AppSnackbarTone.error,
       );
       return null;
     }
     if (_priceController.text.trim().isNotEmpty &&
         (price == null || price <= 0)) {
-      _showSnackBar('Entre un prix valide en FCFA.',
+      _showSnackBar('Entrez un prix valide en FCFA.',
           tone: AppSnackbarTone.error);
       return null;
     }
@@ -199,7 +199,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (ride == null) {
       return;
     }
-    if (ride.status == 'pending') {
+    if (ride.status == 'pending' || ride.status == 'offered') {
       context.push(AppRoutes.clientNegotiation(ride.id));
     } else {
       context.go(AppRoutes.clientMapWithRide(ride.id));
@@ -232,7 +232,9 @@ extension _ClientHomeActions on _ClientHomeScreenState {
   ClientRide? _activeRide(List<ClientRide> rides) {
     for (final ride in rides) {
       if (ride.status == 'pending' ||
+          ride.status == 'offered' ||
           ride.status == 'accepted' ||
+          ride.status == 'arrived' ||
           ride.status == 'started') {
         return ride;
       }
@@ -241,15 +243,16 @@ extension _ClientHomeActions on _ClientHomeScreenState {
   }
 
   void _showSnackBar(String message, {AppSnackbarTone? tone}) {
+    final humanized = _humanizeMessage(message, fallback: message);
     AppSnackbar.show(
       context,
-      message: message,
-      tone: tone ?? _snackbarToneForMessage(message),
+      message: humanized,
+      tone: tone ?? _snackbarToneForMessage(humanized),
     );
   }
 
   void _showNotification(String message) {
-    _updateUi(() => _notificationMessage = message);
+    _updateUi(() => _notificationMessage = _humanizeMessage(message));
     _notificationTimer?.cancel();
     _notificationTimer = Timer(const Duration(seconds: 4), () {
       _updateUi(() => _notificationMessage = null);
@@ -261,21 +264,64 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (value.contains('terminee') || value.contains('succes')) {
       return AppSnackbarTone.success;
     }
-    if (value.contains('annulee')) {
+    if (value.contains('annulee') ||
+        value.contains('indisponible') ||
+        value.contains('impossible')) {
       return AppSnackbarTone.error;
+    }
+    if (value.contains('reconnexion') ||
+        value.contains('connexion') ||
+        value.contains('chauffeur')) {
+      return AppSnackbarTone.info;
     }
     return AppSnackbarTone.info;
   }
 
   NotificationCardTone _notificationToneForMessage(String message) {
     final value = message.toLowerCase();
-    if (value.contains('terminee')) {
+    if (value.contains('terminee') || value.contains('confirme')) {
       return NotificationCardTone.success;
     }
-    if (value.contains('annulee')) {
+    if (value.contains('annulee') || value.contains('indisponible')) {
       return NotificationCardTone.error;
     }
+    if (value.contains('reconnexion') || value.contains('chauffeur')) {
+      return NotificationCardTone.warning;
+    }
     return NotificationCardTone.info;
+  }
+
+  String _humanizeMessage(String? message, {String? fallback}) {
+    final trimmed = message?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return fallback ?? '';
+    }
+
+    final value = trimmed.toLowerCase();
+    if (value.contains('gps')) {
+      return RideUiCopy.gpsUnavailable;
+    }
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
+    }
+    if ((value.contains('aucun') && value.contains('chauffeur')) ||
+        value.contains('no driver')) {
+      return RideUiCopy.noDriverAvailable;
+    }
+    if (value.contains('expire')) {
+      return RideUiCopy.offerExpired;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+    if (value.contains('indisponible') && value.contains('chauffeur')) {
+      return RideUiCopy.driverUnavailable;
+    }
+
+    return trimmed;
   }
 
   String _displayName(SessionState session) {

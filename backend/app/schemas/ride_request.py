@@ -33,15 +33,7 @@ class RideRequestReject(BaseModel):
 
 
 class RideRequestComplete(BaseModel):
-    final_price: float | None = Field(
-        default=None,
-        gt=0,
-    )
-
-    @field_validator("final_price", mode="before")
-    @classmethod
-    def parse_final_price(cls, value: object) -> float | None:
-        return _round_optional_price(value)
+    pass
 
 
 class ClientRideRatingCreate(BaseModel):
@@ -67,6 +59,7 @@ class RideRequestRead(BaseModel):
     dropoff_latitude: float | None
     dropoff_longitude: float | None
     estimated_price: float
+    agreed_price: float | None
     final_price: float | None
     platform_commission: float | None
     driver_net_earnings: float | None
@@ -81,6 +74,7 @@ class RideRequestRead(BaseModel):
 
     @field_validator(
         "estimated_price",
+        "agreed_price",
         "final_price",
         "platform_commission",
         "driver_net_earnings",
@@ -94,6 +88,7 @@ class RideRequestRead(BaseModel):
 class RideRequestStatsRead(BaseModel):
     total_rides: int
     pending: int
+    offered: int
     accepted: int
     started: int
     completed: int

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
 import '../../../../../core/state/session_controller.dart';
+import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
 import '../../../../../shared/widgets/notification_card.dart';
 import '../../../../map/presentation/controllers/map_controller.dart';
@@ -110,9 +111,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'Noor Driver',
+                title: 'Mise a jour',
                 message: _notificationMessage!,
                 tone: NotificationCardTone.warning,
+                compact: true,
               ),
             ),
           if (_notificationMessage == null && mapState.errorMessage != null)
@@ -121,9 +123,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               left: 16,
               right: 16,
               child: NotificationCard(
-                title: 'GPS driver',
-                message: mapState.errorMessage!,
+                title: 'GPS',
+                message: _humanizeMessage(
+                  mapState.errorMessage,
+                  fallback: RideUiCopy.gpsUnavailable,
+                ),
                 tone: NotificationCardTone.warning,
+                compact: true,
               ),
             ),
           if (_notificationMessage == null && mapState.errorMessage == null)
@@ -209,7 +215,9 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             _pendingRideId = next.pendingRideId;
             _pendingRidePayload = next.pendingRidePayload;
           });
-          _showLiveNotification('Nouvelle course recue.');
+          _showLiveNotification(
+            'Nouvelle demande recue. Repondez avant expiration.',
+          );
           ref.read(driverRealtimeProvider.notifier).consumePendingRide();
         }
       },
@@ -236,8 +244,12 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
     AppSnackbar.show(
       context,
-      message:
-          error ?? (value ? 'Vous etes en ligne.' : 'Vous etes hors ligne.'),
+      message: _humanizeMessage(
+        error,
+        fallback: value
+            ? 'Vous etes visible pour les clients.'
+            : 'Vous n apparaissez plus dans les demandes.',
+      ),
       tone: error == null ? AppSnackbarTone.success : AppSnackbarTone.error,
     );
   }
@@ -254,7 +266,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
     AppSnackbar.show(
       context,
-      message: error ?? 'Course ignoree.',
+      message: _humanizeMessage(error, fallback: 'Demande ignoree.'),
       tone: error == null ? AppSnackbarTone.info : AppSnackbarTone.error,
     );
   }
@@ -278,7 +290,10 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final mapState = ref.read(mapControllerProvider(MapMode.driver));
     AppSnackbar.show(
       context,
-      message: mapState.errorMessage ?? 'Position driver activee.',
+      message: _humanizeMessage(
+        mapState.errorMessage,
+        fallback: 'Position GPS activee.',
+      ),
       tone: mapState.errorMessage == null
           ? AppSnackbarTone.success
           : AppSnackbarTone.error,
@@ -378,13 +393,45 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _notificationMessage = message);
-    AppSnackbar.show(context, message: message, tone: AppSnackbarTone.info);
+    final humanized = _humanizeMessage(message, fallback: message);
+    setState(() => _notificationMessage = humanized);
+    AppSnackbar.show(
+      context,
+      message: humanized,
+      tone: AppSnackbarTone.info,
+    );
     _notificationTimer?.cancel();
     _notificationTimer = Timer(const Duration(seconds: 4), () {
       if (mounted) {
         setState(() => _notificationMessage = null);
       }
     });
+  }
+
+  String _humanizeMessage(String? message, {String? fallback}) {
+    final trimmed = message?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return fallback ?? '';
+    }
+
+    final value = trimmed.toLowerCase();
+    if (value.contains('gps')) {
+      return RideUiCopy.gpsUnavailable;
+    }
+    if (value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('socket') ||
+        value.contains('timeout')) {
+      return RideUiCopy.networkError;
+    }
+    if ((value.contains('aucun') && value.contains('chauffeur')) ||
+        value.contains('no driver')) {
+      return RideUiCopy.noDriverAvailable;
+    }
+    if (value.contains('annul')) {
+      return RideUiCopy.rideCancelled;
+    }
+
+    return trimmed;
   }
 }

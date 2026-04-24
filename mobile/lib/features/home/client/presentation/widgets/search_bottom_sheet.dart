@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../shared/widgets/app_button.dart';
+import '../../../../../shared/widgets/app_inline_feedback.dart';
+import '../../../../../shared/widgets/status_badge.dart';
 import '../../data/models/client_ride.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
 import 'address_input_card.dart';
@@ -114,5 +117,5 @@ class SearchBottomSheet extends StatelessWidget {
     );
   }
 
-  bool get _isSearching => activeRide?.status == 'pending';
+  bool get _isSearching => activeRide != null;
 }

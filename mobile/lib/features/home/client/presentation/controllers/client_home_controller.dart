@@ -91,6 +91,20 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
     }
   }
 
+  Future<void> resumeFromLifecycle() async {
+    try {
+      final rides = await _repository.fetchMyRides();
+      state = state.copyWith(
+        rides: rides,
+        clearLoadError: true,
+      );
+    } on ClientRideFailure catch (error) {
+      if (state.rides.isEmpty) {
+        state = state.copyWith(loadError: error.message);
+      }
+    }
+  }
+
   Future<bool> createRide(RideRequestCreateInput input) async {
     state = state.copyWith(
       isCreating: true,

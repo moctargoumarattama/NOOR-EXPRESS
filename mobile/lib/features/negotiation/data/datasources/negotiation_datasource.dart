@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/config/app_config.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/services/websocket_service.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/storage/secure_storage_service.dart';
@@ -72,6 +73,11 @@ class NegotiationDatasource {
 
   Future<void> disconnect() => _websocketService.disconnect();
 
+  Future<Map<String, dynamic>?> fetchActiveRide() async {
+    final payload = await _getMap('/ride-requests/active');
+    return payload.isEmpty ? null : payload;
+  }
+
   Future<NegotiationRideModel> fetchClientRide(int rideId) async {
     final payload = await _getMap('/ride-requests/$rideId');
     return NegotiationRideModel.fromRideRequestJson(payload);
@@ -91,7 +97,13 @@ class NegotiationDatasource {
       }
       return NegotiationRideModel.fromRideRequestJson(payload);
     } on DioException catch (error) {
-      throw NegotiationFailure(_readErrorMessage(error));
+      throw NegotiationFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage:
+              'Operation de negociation impossible pour le moment.',
+        ),
+      );
     }
   }
 
@@ -143,7 +155,13 @@ class NegotiationDatasource {
       );
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
-      throw NegotiationFailure(_readErrorMessage(error));
+      throw NegotiationFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage:
+              'Operation de negociation impossible pour le moment.',
+        ),
+      );
     }
   }
 
@@ -238,7 +256,13 @@ class NegotiationDatasource {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(path);
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
-      throw NegotiationFailure(_readErrorMessage(error));
+      throw NegotiationFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage:
+              'Operation de negociation impossible pour le moment.',
+        ),
+      );
     }
   }
 
@@ -251,19 +275,14 @@ class NegotiationDatasource {
           await _apiClient.dio.post<Map<String, dynamic>>(path, data: data);
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
-      throw NegotiationFailure(_readErrorMessage(error));
+      throw NegotiationFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage:
+              'Operation de negociation impossible pour le moment.',
+        ),
+      );
     }
-  }
-
-  String _readErrorMessage(DioException error) {
-    final data = error.response?.data;
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) {
-        return detail;
-      }
-    }
-    return 'Operation de negociation impossible pour le moment.';
   }
 }
 

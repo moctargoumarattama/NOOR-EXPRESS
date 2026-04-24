@@ -1,15 +1,12 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import get_current_client, get_current_driver
 from app.db.database import get_db_session
 from app.models.user import User
 from app.schemas.ride_offer import RideOfferCreate, RideOfferDriverRead, RideOfferRead
+from app.services.ride_lifecycle_service import accept_offer
 from app.services.ride_offer_service import (
-    RideOfferConflictError,
-    RideOfferForbiddenError,
-    RideOfferNotFoundError,
-    accept_offer,
     create_offer,
     expire_ride_after_offer_timeout,
     get_offers_for_ride,
@@ -26,20 +23,12 @@ async def create_offer_endpoint(
     current_user: User = Depends(get_current_driver),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideOfferDriverRead:
-    try:
-        offer = await create_offer(
-            session,
-            ride_id=offer_in.ride_request_id,
-            driver_id=current_user.id,
-            proposed_price=offer_in.proposed_price,
-        )
-    except RideOfferNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RideOfferForbiddenError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except RideOfferConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-
+    offer = await create_offer(
+        session,
+        ride_id=offer_in.ride_request_id,
+        driver_id=current_user.id,
+        proposed_price=offer_in.proposed_price,
+    )
     background_tasks.add_task(expire_ride_after_offer_timeout, offer_in.ride_request_id)
     return offer
 
@@ -50,12 +39,7 @@ async def get_offers_for_ride_endpoint(
     current_user: User = Depends(get_current_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> list[RideOfferDriverRead]:
-    try:
-        return await get_offers_for_ride(session, ride_id, current_user.id)
-    except RideOfferNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RideOfferForbiddenError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    return await get_offers_for_ride(session, ride_id, current_user.id)
 
 
 @router.post("/{offer_id}/accept", response_model=RideOfferRead)
@@ -64,14 +48,7 @@ async def accept_offer_endpoint(
     current_user: User = Depends(get_current_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideOfferRead:
-    try:
-        offer = await accept_offer(session, offer_id, current_user.id)
-    except RideOfferNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RideOfferForbiddenError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except RideOfferConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    offer = await accept_offer(session, offer_id, current_user)
     return RideOfferRead.model_validate(offer)
 
 
@@ -81,12 +58,5 @@ async def reject_offer_endpoint(
     current_user: User = Depends(get_current_client),
     session: AsyncSession = Depends(get_db_session),
 ) -> RideOfferRead:
-    try:
-        offer = await reject_offer(session, offer_id, current_user.id)
-    except RideOfferNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except RideOfferForbiddenError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except RideOfferConflictError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    offer = await reject_offer(session, offer_id, current_user.id)
     return RideOfferRead.model_validate(offer)

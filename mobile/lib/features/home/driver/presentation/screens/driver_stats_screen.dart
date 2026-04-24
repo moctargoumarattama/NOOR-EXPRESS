@@ -106,7 +106,7 @@ class _DriverStatsScreenState extends ConsumerState<DriverStatsScreen> {
   }
 
   double _rideEarning(DriverRide ride) {
-    return ride.driverNetEarnings ?? ride.finalPrice ?? ride.estimatedPrice;
+    return ride.driverNetEarnings ?? ride.displayPrice;
   }
 
   Future<void> _refresh() async {

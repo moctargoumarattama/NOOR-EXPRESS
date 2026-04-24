@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
+import 'websocket_resilience.dart';
 
 enum WebSocketStatus {
   disconnected,
@@ -25,11 +26,14 @@ class WebSocketService {
   WebSocketChannel? _channel;
   StreamSubscription<dynamic>? _channelSubscription;
   Timer? _reconnectTimer;
+  Timer? _watchdogTimer;
   String? _currentUrl;
   bool _manualDisconnect = false;
   bool _disposed = false;
   int _reconnectAttempt = 0;
   DateTime? _lastLocationUpdateAt;
+  DateTime? _lastActivityAt;
+  Map<String, dynamic>? _pendingLocationPayload;
   WebSocketStatus _status = WebSocketStatus.disconnected;
 
   Stream<Map<String, dynamic>> get messages => _messagesController.stream;
@@ -71,7 +75,10 @@ class WebSocketService {
         cancelOnError: true,
       );
       _reconnectAttempt = 0;
+      _recordActivity();
+      _startWatchdog();
       _setStatus(WebSocketStatus.connected);
+      _flushBufferedLocation();
       debugPrint('[$debugLabel] websocket connected');
     } catch (error) {
       debugPrint('[$debugLabel] websocket connect failed: $error');
@@ -87,10 +94,17 @@ class WebSocketService {
   }
 
   void sendJson(Map<String, dynamic> payload) {
+    if (_isLocationPayload(payload)) {
+      _pendingLocationPayload = Map<String, dynamic>.from(payload);
+    }
+    if (_status != WebSocketStatus.connected || _channel == null) {
+      return;
+    }
     try {
-      _channel?.sink.add(jsonEncode(payload));
+      _channel!.sink.add(jsonEncode(payload));
     } catch (error) {
       debugPrint('[$debugLabel] websocket send failed: $error');
+      unawaited(_restartFromWatchdog());
     }
   }
 
@@ -108,6 +122,7 @@ class WebSocketService {
     if (_disposed || rawMessage == null) {
       return;
     }
+    _recordActivity();
 
     try {
       final payload = jsonDecode(rawMessage as String);
@@ -130,11 +145,16 @@ class WebSocketService {
     }
   }
 
-  void _handleDisconnect() {
+  void _handleDisconnect([Object? error]) {
     if (_disposed) {
       return;
     }
 
+    if (error != null) {
+      debugPrint('[$debugLabel] websocket disconnected: $error');
+    }
+
+    _stopWatchdog();
     _channelSubscription?.cancel();
     _channelSubscription = null;
     _channel = null;
@@ -155,9 +175,9 @@ class WebSocketService {
       return;
     }
 
+    final delay = websocketReconnectDelay(attempt: _reconnectAttempt);
     _reconnectAttempt += 1;
-    final delaySeconds = math.min(30, math.pow(2, _reconnectAttempt).toInt());
-    _reconnectTimer = Timer(Duration(seconds: delaySeconds), () {
+    _reconnectTimer = Timer(delay, () {
       connect(url);
     });
   }
@@ -188,6 +208,7 @@ class WebSocketService {
 
   Future<void> _closeChannel() async {
     _reconnectTimer?.cancel();
+    _stopWatchdog();
     await _channelSubscription?.cancel();
     _channelSubscription = null;
     await _channel?.sink.close();
@@ -199,6 +220,53 @@ class WebSocketService {
     if (!_statusController.isClosed) {
       _statusController.add(nextStatus);
     }
+  }
+
+  bool _isLocationPayload(Map<String, dynamic> payload) {
+    return payload['type'] == 'location_update';
+  }
+
+  void _recordActivity() {
+    _lastActivityAt = DateTime.now();
+  }
+
+  void _flushBufferedLocation() {
+    final payload = _pendingLocationPayload;
+    if (payload == null || _status != WebSocketStatus.connected) {
+      return;
+    }
+    sendJson(payload);
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(websocketWatchdogInterval, (_) {
+      if (_status != WebSocketStatus.connected || _manualDisconnect) {
+        return;
+      }
+      if (!isWebSocketConnectionStale(
+        now: DateTime.now(),
+        lastActivityAt: _lastActivityAt,
+      )) {
+        return;
+      }
+      debugPrint('[$debugLabel] websocket stale, forcing reconnect');
+      unawaited(_restartFromWatchdog());
+    });
+  }
+
+  void _stopWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+  }
+
+  Future<void> _restartFromWatchdog() async {
+    if (_disposed || _manualDisconnect || _currentUrl == null) {
+      return;
+    }
+    await _closeChannel();
+    _setStatus(WebSocketStatus.reconnecting);
+    _scheduleReconnect();
   }
 }
 

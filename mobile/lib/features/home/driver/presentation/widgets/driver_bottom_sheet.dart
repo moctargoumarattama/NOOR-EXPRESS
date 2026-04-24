@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../shared/widgets/app_button.dart';
 import '../../data/models/driver_ride.dart';
 import 'driver_stats_card.dart';
 
@@ -107,11 +108,16 @@ class _OfflinePanel extends StatelessWidget {
             icon: Icons.pause_circle,
             text: 'Vous etes hors ligne',
             color: Color(0xFFE53935)),
+        const SizedBox(height: 8),
+        Text(
+          'Mettez-vous en ligne pour recevoir de nouvelles demandes.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
         const SizedBox(height: 18),
-        _BigButton(
-          label: isBusy ? 'Activation...' : 'Demarrer',
+        AppButton(
+          label: 'Se mettre en ligne',
           icon: Icons.play_arrow_rounded,
-          color: const Color(0xFF1B8A5A),
+          isLoading: isBusy,
           onPressed: isBusy ? null : onStart,
         ),
         const SizedBox(height: 16),
@@ -144,15 +150,20 @@ class _OnlinePanel extends StatelessWidget {
             text: 'En ligne',
             color: Color(0xFF1B8A5A)),
         const SizedBox(height: 8),
-        const Text('En attente de courses...',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+        Text(
+          'Vous recevez les demandes autour de vous en temps reel.',
+          style: Theme.of(context)
+              .textTheme
+              .bodyMedium
+              ?.copyWith(fontWeight: FontWeight.w700),
+        ),
         const SizedBox(height: 16),
         _StatsRow(todayRides: todayRides, todayEarnings: todayEarnings),
         const SizedBox(height: 16),
-        _BigButton(
-          label: isBusy ? 'Arret...' : 'Arreter',
+        AppButton.danger(
+          label: 'Se mettre hors ligne',
           icon: Icons.stop_rounded,
-          color: const Color(0xFFE53935),
+          isLoading: isBusy,
           onPressed: isBusy ? null : onStop,
         ),
       ],
@@ -179,14 +190,17 @@ class _ActiveRidePanel extends StatelessWidget {
         Text('${ride.pickupLocation} -> ${ride.dropoffLocation}',
             maxLines: 2, overflow: TextOverflow.ellipsis),
         const SizedBox(height: 8),
-        Text('${ride.estimatedPrice.toStringAsFixed(0)} FCFA cash',
-            style: const TextStyle(
-                color: Color(0xFF1B8A5A), fontWeight: FontWeight.w900)),
+        Text(
+          '${ride.displayPrice.toStringAsFixed(0)} FCFA cash',
+          style: const TextStyle(
+            color: Color(0xFF1B8A5A),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
         const SizedBox(height: 16),
-        _BigButton(
+        AppButton(
           label: 'Ouvrir le suivi',
           icon: Icons.navigation_rounded,
-          color: const Color(0xFF1B8A5A),
           onPressed: onOpen,
         ),
       ],
@@ -244,39 +258,6 @@ class _StatusTitle extends StatelessWidget {
                 .titleLarge
                 ?.copyWith(fontWeight: FontWeight.w900)),
       ],
-    );
-  }
-}
-
-class _BigButton extends StatelessWidget {
-  const _BigButton(
-      {required this.label,
-      required this.icon,
-      required this.color,
-      required this.onPressed});
-
-  final String label;
-  final IconData icon;
-  final Color color;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 58,
-      child: ElevatedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: color,
-          foregroundColor: Colors.white,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-          textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-        ),
-      ),
     );
   }
 }

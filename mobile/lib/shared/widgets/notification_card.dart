@@ -15,21 +15,45 @@ class NotificationCard extends StatelessWidget {
     required this.title,
     required this.message,
     this.tone = NotificationCardTone.info,
+    this.compact = false,
+    this.actionLabel,
+    this.onAction,
   });
 
   final String title;
   final String message;
   final NotificationCardTone tone;
+  final bool compact;
+  final String? actionLabel;
+  final VoidCallback? onAction;
 
   @override
   Widget build(BuildContext context) {
     final palette = _palette(tone);
+    final action = actionLabel != null && onAction != null
+        ? TextButton(
+            onPressed: onAction,
+            style: TextButton.styleFrom(
+              foregroundColor: palette.foreground,
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              minimumSize: Size.zero,
+            ),
+            child: Text(
+              actionLabel!,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: palette.foreground,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          )
+        : null;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(compact ? 14 : 16),
       decoration: BoxDecoration(
         color: palette.background,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(compact ? 18 : 22),
         boxShadow: const [
           BoxShadow(
             color: AppColors.shadow,
@@ -42,11 +66,11 @@ class NotificationCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: compact ? 36 : 42,
+            height: compact ? 36 : 42,
             decoration: BoxDecoration(
               color: palette.foreground.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(compact ? 12 : 14),
             ),
             child: Icon(palette.icon, color: palette.foreground),
           ),
@@ -69,6 +93,10 @@ class NotificationCard extends StatelessWidget {
                         color: palette.foreground.withValues(alpha: 0.9),
                       ),
                 ),
+                if (action != null) ...[
+                  const SizedBox(height: 10),
+                  action,
+                ],
               ],
             ),
           ),

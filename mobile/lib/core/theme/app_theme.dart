@@ -94,6 +94,40 @@ abstract final class AppTheme {
           ),
         ),
       ),
+      filledButtonTheme: FilledButtonThemeData(
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.emerald,
+          foregroundColor: AppColors.pearl,
+          disabledBackgroundColor: const Color(0xFFBFD7CD),
+          disabledForegroundColor: const Color(0xFFF5FAF8),
+          minimumSize: const Size(double.infinity, 56),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          backgroundColor: AppColors.pearl,
+          foregroundColor: AppColors.ink,
+          disabledBackgroundColor: const Color(0xFFF7F8F8),
+          disabledForegroundColor: const Color(0xFF9BA6A0),
+          minimumSize: const Size(double.infinity, 56),
+          side: const BorderSide(color: Color(0xFFDDE3DE)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
       cardTheme: CardThemeData(
         color: AppColors.pearl,
         elevation: 0,
@@ -135,7 +169,16 @@ abstract final class AppTheme {
         shape: StadiumBorder(),
       ),
       extensions: const [
-        AppButtonThemeExtension(),
+        AppButtonThemeExtension(
+          height: 56,
+          borderRadius: 18,
+          horizontalPadding: 20,
+          labelStyle: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.1,
+          ),
+        ),
       ],
     );
   }
