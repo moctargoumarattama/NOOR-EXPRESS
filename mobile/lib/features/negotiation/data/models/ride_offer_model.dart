@@ -71,6 +71,7 @@ class RideOfferModel {
     required this.proposedPrice,
     required this.status,
     this.driverDistanceKm,
+    this.driverEtaMinutes,
     this.vehicleBrand,
     this.vehicleModel,
     this.vehicleColor,
@@ -84,6 +85,7 @@ class RideOfferModel {
   final double proposedPrice;
   final String status;
   final double? driverDistanceKm;
+  final int? driverEtaMinutes;
   final String? vehicleBrand;
   final String? vehicleModel;
   final String? vehicleColor;
@@ -95,7 +97,7 @@ class RideOfferModel {
       vehicleModel,
       vehicleColor,
     ].whereType<String>().where((value) => value.trim().isNotEmpty).toList();
-    return parts.isEmpty ? 'Vehicule non renseigne' : parts.join(' - ');
+    return parts.isEmpty ? 'Vehicule a confirmer' : parts.join(' ');
   }
 
   factory RideOfferModel.fromJson(Map<String, dynamic> json) {
@@ -107,6 +109,12 @@ class RideOfferModel {
       proposedPrice: _asDouble(json['proposed_price']),
       status: json['status'] as String? ?? 'pending',
       driverDistanceKm: _asNullableDouble(json['driver_distance_km']),
+      driverEtaMinutes: _asNullableInt(
+        json['driver_eta_minutes'] ??
+            json['driver_eta_min'] ??
+            json['eta_minutes'] ??
+            json['eta_min'],
+      ),
       vehicleBrand: json['vehicle_brand'] as String?,
       vehicleModel: json['vehicle_model'] as String?,
       vehicleColor: json['vehicle_color'] as String?,
@@ -123,6 +131,12 @@ class RideOfferModel {
       proposedPrice: _asDouble(json['proposed_price']),
       status: 'pending',
       driverDistanceKm: _asNullableDouble(json['driver_distance_km']),
+      driverEtaMinutes: _asNullableInt(
+        json['driver_eta_minutes'] ??
+            json['driver_eta_min'] ??
+            json['eta_minutes'] ??
+            json['eta_min'],
+      ),
     );
   }
 }
@@ -146,6 +160,19 @@ double? _asNullableDouble(Object? value) {
   }
   if (value is String) {
     return double.tryParse(value);
+  }
+  return null;
+}
+
+int? _asNullableInt(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toInt();
+  }
+  if (value is String) {
+    return int.tryParse(value);
   }
   return null;
 }

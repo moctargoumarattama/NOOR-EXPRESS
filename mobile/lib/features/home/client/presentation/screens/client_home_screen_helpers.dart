@@ -57,6 +57,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (!mounted || estimate == null) {
       return estimate;
     }
+    if (!_hasReliableSuggestedPrice(estimate)) {
+      if (!_priceManuallyEdited) {
+        _isApplyingSuggestedPrice = true;
+        _priceController.clear();
+        _isApplyingSuggestedPrice = false;
+      }
+      return estimate;
+    }
     if (_priceController.text.trim().isEmpty || !_priceManuallyEdited) {
       _isApplyingSuggestedPrice = true;
       _priceController.text = estimate.estimatedPrice.round().toString();
@@ -64,6 +72,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       _priceManuallyEdited = false;
     }
     return estimate;
+  }
+
+  bool _hasReliableSuggestedPrice(PriceEstimate estimate) {
+    return estimate.estimatedPrice.isFinite &&
+        estimate.distanceKm.isFinite &&
+        estimate.estimatedPrice > 0 &&
+        estimate.estimatedPrice <= 500000 &&
+        estimate.distanceKm > 0;
   }
 
   Future<void> _openAddressSearch(AddressSearchMode mode) async {
@@ -155,6 +171,11 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       return;
     }
     final createdRideId = nextState.rides.first.id;
+    final routeSnapshot = ref.read(noorMapControllerProvider).route;
+    _updateUi(() {
+      _activeRideRouteSnapshotRideId = createdRideId;
+      _activeRideRouteSnapshot = routeSnapshot;
+    });
     _resetForm();
     _showSnackBar(
       'Votre demande est envoyee. On cherche un chauffeur.',
@@ -176,6 +197,71 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       return;
     }
     _openRide(ride);
+  }
+
+  Future<void> _cancelActiveRide(ClientRide? ride) async {
+    if (ride == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Annuler la demande ?'),
+          content: const Text(
+            'Votre proposition sera retiree et les chauffeurs ne pourront '
+            'plus y repondre.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Garder'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Annuler la demande'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || confirmed != true) {
+      return;
+    }
+
+    try {
+      await ref
+          .read(negotiationDatasourceProvider('client-home-cancel'))
+          .cancelRide(ride.id);
+      if (!mounted) {
+        return;
+      }
+      await ref.read(clientHomeControllerProvider.notifier).refreshRideStatus(
+            rideId: ride.id,
+            status: 'cancelled',
+          );
+      if (!mounted) {
+        return;
+      }
+      _updateUi(() {
+        if (_activeRideRouteSnapshotRideId == ride.id) {
+          _activeRideRouteSnapshotRideId = null;
+          _activeRideRouteSnapshot = null;
+        }
+      });
+      _showSnackBar('Demande annulee.', tone: AppSnackbarTone.success);
+    } on NegotiationFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar(
+        _humanizeMessage(
+          error.message,
+          fallback: 'Impossible d annuler la demande pour le moment.',
+        ),
+        tone: AppSnackbarTone.error,
+      );
+    }
   }
 
   Future<void> _recoverExistingRideAfterCreateConflict() async {
@@ -209,8 +295,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     }
     if (_priceController.text.trim().isNotEmpty &&
         (price == null || price <= 0)) {
-      _showSnackBar('Entrez un prix valide.',
-          tone: AppSnackbarTone.error);
+      _showSnackBar('Entrez un prix valide.', tone: AppSnackbarTone.error);
       return null;
     }
     return RideRequestCreateInput(

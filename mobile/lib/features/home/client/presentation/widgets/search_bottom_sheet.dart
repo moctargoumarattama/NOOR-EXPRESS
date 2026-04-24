@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../core/theme/app_colors.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_inline_feedback.dart';
-import '../../../../../shared/widgets/status_badge.dart';
 import '../../data/models/client_ride.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
+import '../../../../map/models/route_result.dart';
 import 'address_input_card.dart';
+import 'ride_bottom_sheet_shell.dart';
+import 'route_summary_card.dart';
+import 'price_selector.dart';
 
 part 'search_bottom_sheet_sections.dart';
 
@@ -27,6 +31,11 @@ class SearchBottomSheet extends StatelessWidget {
     required this.onOpenActiveRide,
     this.estimate,
     this.estimateError,
+    this.route,
+    this.routeError,
+    this.activeRideRoute,
+    this.nearbyDriversCount,
+    this.onCancelActiveRide,
   });
 
   final AddressResult? pickup;
@@ -36,86 +45,67 @@ class SearchBottomSheet extends StatelessWidget {
   final bool isCreating;
   final bool isEstimatingPrice;
   final ClientRide? activeRide;
+  final RouteResult? route;
+  final RouteResult? activeRideRoute;
+  final int? nearbyDriversCount;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
   final VoidCallback onClearPickup;
   final VoidCallback onClearDropoff;
   final VoidCallback onSubmit;
   final VoidCallback onOpenActiveRide;
+  final VoidCallback? onCancelActiveRide;
   final PriceEstimate? estimate;
   final String? estimateError;
+  final String? routeError;
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedPadding(
-      duration: const Duration(milliseconds: 180),
-      curve: Curves.easeOutCubic,
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: DraggableScrollableSheet(
-        initialChildSize: 0.30,
-        minChildSize: 0.22,
-        maxChildSize: 0.62,
-        snap: true,
-        snapSizes: const [0.30, 0.62],
-        builder: (context, scrollController) {
-          return DecoratedBox(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(30),
+    final initialSize = _isSearching
+        ? 0.66
+        : dropoff == null
+            ? 0.30
+            : 0.50;
+    final maxSize = _isSearching
+        ? 0.84
+        : dropoff == null
+            ? 0.62
+            : 0.72;
+
+    return RideBottomSheetShell(
+      initialChildSize: initialSize,
+      minChildSize: 0.22,
+      maxChildSize: maxSize,
+      snapSizes: [initialSize, maxSize],
+      child: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 220),
+        child: _isSearching
+            ? _SearchingRidePanel(
+                key: ValueKey('searching-${activeRide!.id}'),
+                ride: activeRide!,
+                route: activeRideRoute,
+                nearbyDriversCount: nearbyDriversCount,
+                onOpen: onOpenActiveRide,
+                onCancel: onCancelActiveRide,
+              )
+            : _BookingPanel(
+                key: ValueKey(dropoff == null ? 'idle' : 'route-preview'),
+                pickup: pickup,
+                dropoff: dropoff,
+                route: route,
+                routeError: routeError,
+                recentDepartureLabels: recentDepartureLabels,
+                priceController: priceController,
+                isCreating: isCreating,
+                isEstimatingPrice: isEstimatingPrice,
+                estimate: estimate,
+                estimateError: estimateError,
+                onPickupTap: onPickupTap,
+                onDropoffTap: onDropoffTap,
+                onClearPickup: onClearPickup,
+                onClearDropoff: onClearDropoff,
+                onSubmit: onSubmit,
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.08),
-                  blurRadius: 24,
-                  offset: const Offset(0, -8),
-                ),
-              ],
-            ),
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.fromLTRB(20, 10, 20, 26),
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE0E0E0),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 18),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 220),
-                  child: _isSearching
-                      ? _SearchingRidePanel(
-                          key: ValueKey('searching-${activeRide!.id}'),
-                          ride: activeRide!,
-                          onOpen: onOpenActiveRide,
-                        )
-                      : _BookingPanel(
-                          key: const ValueKey('booking'),
-                          pickup: pickup,
-                          dropoff: dropoff,
-                          recentDepartureLabels: recentDepartureLabels,
-                          priceController: priceController,
-                          isCreating: isCreating,
-                          isEstimatingPrice: isEstimatingPrice,
-                          estimate: estimate,
-                          estimateError: estimateError,
-                          onPickupTap: onPickupTap,
-                          onDropoffTap: onDropoffTap,
-                          onClearPickup: onClearPickup,
-                          onClearDropoff: onClearDropoff,
-                          onSubmit: onSubmit,
-                        ),
-                ),
-              ],
-            ),
-          );
-        },
       ),
     );
   }
