@@ -5,6 +5,7 @@ import 'package:noor_express_mobile/features/auth/presentation/screens/login_scr
 import 'package:noor_express_mobile/shared/screens/help_screen.dart';
 import 'package:noor_express_mobile/shared/screens/notifications_screen.dart';
 import 'package:noor_express_mobile/shared/screens/settings_screen.dart';
+import 'package:noor_express_mobile/shared/widgets/noor_logo.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,6 +38,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('Numero de telephone'), findsOneWidget);
+    expect(find.byType(NoorLogo), findsOneWidget);
   });
 
   testWidgets('HelpScreen explains the ride flow with simple steps', (

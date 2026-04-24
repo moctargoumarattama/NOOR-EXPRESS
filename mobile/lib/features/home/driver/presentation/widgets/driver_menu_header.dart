@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../../shared/widgets/noor_logo.dart';
 import '../../data/models/driver_profile.dart';
 
 class DriverMenuHeader extends StatelessWidget {
@@ -28,54 +29,63 @@ class DriverMenuHeader extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(18),
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 28,
-            backgroundColor: const Color(0xFFE8F5E9),
-            backgroundImage:
-                photoBytes == null ? null : MemoryImage(photoBytes),
-            child: photoBytes == null
-                ? Text(
-                    _initials(name),
-                    style: const TextStyle(
-                      color: Color(0xFF1B8A5A),
-                      fontSize: 19,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  )
-                : null,
+          const Center(
+            child: NoorLogo.header(width: 150),
           ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                  ),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: 28,
+                backgroundColor: const Color(0xFFE8F5E9),
+                backgroundImage:
+                    photoBytes == null ? null : MemoryImage(photoBytes),
+                child: photoBytes == null
+                    ? Text(
+                        _initials(name),
+                        style: const TextStyle(
+                          color: Color(0xFF1B8A5A),
+                          fontSize: 19,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Etoile 4.7 (45 courses)'),
+                    if (vehicle.isNotEmpty) Text(vehicle),
+                    if ((profile?.plateNumber ?? '').isNotEmpty)
+                      Text(profile!.plateNumber!),
+                    const SizedBox(height: 3),
+                    const Text(
+                      'Voir profil',
+                      style: TextStyle(
+                        color: Color(0xFF1B8A5A),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                const Text('Etoile 4.7 (45 courses)'),
-                if (vehicle.isNotEmpty) Text(vehicle),
-                if ((profile?.plateNumber ?? '').isNotEmpty)
-                  Text(profile!.plateNumber!),
-                const SizedBox(height: 3),
-                const Text(
-                  'Voir profil',
-                  style: TextStyle(
-                    color: Color(0xFF1B8A5A),
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ],
       ),

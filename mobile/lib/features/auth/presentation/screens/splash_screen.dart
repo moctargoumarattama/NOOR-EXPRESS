@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/noor_logo.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -63,36 +64,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 82,
-                  height: 82,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 18,
+                  ),
                   decoration: BoxDecoration(
-                    color: AppColors.emerald,
-                    shape: BoxShape.circle,
+                    color: AppColors.pearl,
+                    borderRadius: BorderRadius.circular(32),
                     boxShadow: [
                       BoxShadow(
-                        color: AppColors.emerald.withValues(alpha: 0.28),
-                        blurRadius: 28,
-                        offset: const Offset(0, 14),
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 30,
+                        offset: const Offset(0, 18),
                       ),
                     ],
                   ),
-                  child: const Icon(
-                    Icons.local_taxi_rounded,
-                    color: AppColors.pearl,
-                    size: 40,
-                  ),
+                  child: const NoorLogo.hero(),
                 ),
-                const SizedBox(height: 22),
-                Text(
-                  'Noor Express',
-                  style: theme.textTheme.headlineMedium?.copyWith(
-                    color: AppColors.ink,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+                const SizedBox(height: 24),
                 const SizedBox(height: 6),
                 Text(
-                  'Connexion en cours...',
+                  'Ouverture en cours...',
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: AppColors.stone,
                     fontWeight: FontWeight.w700,

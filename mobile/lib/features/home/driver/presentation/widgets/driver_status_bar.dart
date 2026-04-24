@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../shared/widgets/noor_logo.dart';
 
 class DriverStatusBar extends StatelessWidget {
   const DriverStatusBar({
@@ -42,14 +43,8 @@ class DriverStatusBar extends StatelessWidget {
                 icon: const Icon(Icons.menu_rounded),
               ),
               const Expanded(
-                child: Text(
-                  'NOOR EXPRESS',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.8,
-                    color: Color(0xFF1A1A1A),
-                  ),
+                child: Center(
+                  child: NoorLogo.compact(width: 112),
                 ),
               ),
               Container(

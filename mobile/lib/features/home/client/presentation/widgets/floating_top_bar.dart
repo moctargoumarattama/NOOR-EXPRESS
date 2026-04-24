@@ -2,6 +2,8 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
+import '../../../../../shared/widgets/noor_logo.dart';
+
 class FloatingTopBar extends StatelessWidget {
   const FloatingTopBar({
     super.key,
@@ -10,6 +12,7 @@ class FloatingTopBar extends StatelessWidget {
     required this.onMenuTap,
     required this.onProfileTap,
     this.hasNotification = false,
+    this.showBrandLogo = true,
   });
 
   final String title;
@@ -17,6 +20,7 @@ class FloatingTopBar extends StatelessWidget {
   final VoidCallback onMenuTap;
   final VoidCallback onProfileTap;
   final bool hasNotification;
+  final bool showBrandLogo;
 
   @override
   Widget build(BuildContext context) {
@@ -45,14 +49,19 @@ class FloatingTopBar extends StatelessWidget {
                 onPressed: onMenuTap,
               ),
               Expanded(
-                child: Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: const Color(0xFF1A1A1A),
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
-                      ),
+                child: Center(
+                  child: showBrandLogo
+                      ? const NoorLogo.compact()
+                      : Text(
+                          title,
+                          textAlign: TextAlign.center,
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    color: const Color(0xFF1A1A1A),
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.8,
+                                  ),
+                        ),
                 ),
               ),
               Stack(

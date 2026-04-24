@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_surface_card.dart';
 import '../../../../shared/widgets/app_text_field.dart';
+import '../../../../shared/widgets/noor_logo.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -61,15 +62,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               child: ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 460),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'Noor Express',
-                      style: theme.textTheme.headlineMedium,
+                    const Center(
+                      child: NoorLogo.hero(width: 230),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       'Un trajet simple, clair et rassurant des les premiers instants.',
+                      textAlign: TextAlign.center,
                       style: theme.textTheme.bodyLarge,
                     ),
                     const SizedBox(height: 28),

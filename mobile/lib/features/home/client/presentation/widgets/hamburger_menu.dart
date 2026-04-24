@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../shared/widgets/noor_logo.dart';
+
 class HamburgerMenu extends StatelessWidget {
   const HamburgerMenu({
     super.key,
@@ -174,49 +176,62 @@ class _MenuHeader extends StatelessWidget {
           color: const Color(0xFFE8F5E9),
           borderRadius: BorderRadius.circular(22),
         ),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              radius: 28,
-              backgroundColor: const Color(0xFF1B8A5A),
-              child: Text(
-                initials,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
+            const Center(
+              child: NoorLogo.header(width: 150),
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    displayName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    phoneNumber,
-                    style: const TextStyle(color: Color(0xFF757575)),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Voir mon profil',
-                    style: TextStyle(
-                      color: Color(0xFF1B8A5A),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 28,
+                  backgroundColor: const Color(0xFF1B8A5A),
+                  child: Text(
+                    initials,
+                    style: const TextStyle(
+                      color: Colors.white,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w900,
+                                ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        phoneNumber,
+                        style: const TextStyle(color: Color(0xFF757575)),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'Voir mon profil',
+                        style: TextStyle(
+                          color: Color(0xFF1B8A5A),
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: Color(0xFF1B8A5A),
+                ),
+              ],
             ),
-            const Icon(Icons.chevron_right_rounded, color: Color(0xFF1B8A5A)),
           ],
         ),
       ),
