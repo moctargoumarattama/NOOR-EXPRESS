@@ -1,8 +1,14 @@
 part of 'tracking_controller.dart';
 
 Future<void> _refreshSnapshot(TrackingController controller) async {
+  if (!controller._isActive) {
+    return;
+  }
   try {
     final activeRideJson = await controller._remoteDatasource.fetchActiveRide();
+    if (!controller._isActive) {
+      return;
+    }
     final activeRide = activeRideJson == null
         ? null
         : RideTrackingModel.fromJson(activeRideJson);
@@ -12,6 +18,9 @@ Future<void> _refreshSnapshot(TrackingController controller) async {
       final ridesJson = controller.mode == TrackingMode.client
           ? await controller._remoteDatasource.fetchClientRides()
           : await controller._remoteDatasource.fetchDriverRides();
+      if (!controller._isActive) {
+        return;
+      }
       rides = ridesJson.map(RideTrackingModel.fromJson).toList();
     }
 
@@ -23,24 +32,39 @@ Future<void> _refreshSnapshot(TrackingController controller) async {
     );
 
     if (ride == null) {
-      controller._currentState = controller._currentState.copyWith(
+      final currentState = controller._currentStateOrNull;
+      if (currentState == null) {
+        return;
+      }
+      controller._setStateIfAlive(currentState.copyWith(
         clearRide: true,
         clearCounterpart: true,
         clearDriverPosition: true,
         clearEta: true,
-      );
+      ));
       return;
     }
 
     final counterpart = await _resolveCounterpart(controller, ride);
-    controller._currentState = controller._currentState.copyWith(
+    if (!controller._isActive) {
+      return;
+    }
+    final currentState = controller._currentStateOrNull;
+    if (currentState == null) {
+      return;
+    }
+    controller._setStateIfAlive(currentState.copyWith(
       ride: ride,
       counterpart: counterpart,
-    );
+    ));
     _recomputeDerivedState(controller);
   } on TrackingRemoteFailure catch (error) {
-    controller._currentState = controller._currentState.copyWith(
-      errorMessage: error.message,
+    final currentState = controller._currentStateOrNull;
+    if (currentState == null) {
+      return;
+    }
+    controller._setStateIfAlive(
+      currentState.copyWith(errorMessage: error.message),
     );
   }
 }
@@ -67,43 +91,61 @@ Future<void> _runRideAction(
   required Future<Map<String, dynamic>> Function(int rideId) action,
   required String successMessage,
 }) async {
-  final ride = controller._currentState.ride;
+  if (!controller._isActive) {
+    return;
+  }
+  final currentState = controller._currentStateOrNull;
+  final ride = currentState?.ride;
   if (ride == null) {
     return;
   }
 
-  controller._currentState = controller._currentState.copyWith(
+  controller._setStateIfAlive(currentState!.copyWith(
     isActionLoading: true,
     clearError: true,
-  );
+  ));
   try {
     final payload = await action(ride.id);
-    controller._currentState = controller._currentState.copyWith(
+    if (!controller._isActive) {
+      return;
+    }
+    final nextState = controller._currentStateOrNull;
+    if (nextState == null) {
+      return;
+    }
+    controller._setStateIfAlive(nextState.copyWith(
       isActionLoading: false,
       ride: RideTrackingModel.fromJson(payload),
       toastMessage: successMessage,
-    );
+    ));
     _recomputeDerivedState(controller);
     await _refreshSnapshot(controller);
   } on TrackingRemoteFailure catch (error) {
-    controller._currentState = controller._currentState.copyWith(
+    final nextState = controller._currentStateOrNull;
+    if (nextState == null) {
+      return;
+    }
+    controller._setStateIfAlive(nextState.copyWith(
       isActionLoading: false,
       errorMessage: error.message,
-    );
+    ));
   }
 }
 
 void _recomputeDerivedState(TrackingController controller) {
-  final ride = controller._currentState.ride;
+  if (!controller._isActive) {
+    return;
+  }
+  final currentState = controller._currentStateOrNull;
+  final ride = currentState?.ride;
   if (ride == null) {
     return;
   }
 
   final driverPosition = controller.mode == TrackingMode.driver
-      ? controller._currentState.currentPosition
-      : controller._currentState.driverPosition;
-  final pickupPoint =
-      ride.pickupPosition ?? controller._currentState.currentPosition;
+      ? currentState!.currentPosition
+      : currentState!.driverPosition;
+  final pickupPoint = ride.pickupPosition ?? currentState.currentPosition;
   final target = switch (ride.status) {
     RideTrackingStatus.accepted => pickupPoint,
     RideTrackingStatus.arrived => pickupPoint,
@@ -111,13 +153,13 @@ void _recomputeDerivedState(TrackingController controller) {
     _ => null,
   };
 
-  controller._currentState = controller._currentState.copyWith(
+  controller._setStateIfAlive(currentState.copyWith(
     etaMinutes: estimateTrackingEta(
       rideStatus: ride.status,
       from: driverPosition,
       to: target,
     ),
-  );
+  ));
 }
 
 double? _headingBetween(

@@ -17,6 +17,7 @@ import '../../../../map/widgets/eta_overlay.dart';
 import '../../../../ride_tracking/presentation/widgets/report_bottom_sheet.dart';
 import '../../../../ride_tracking/data/datasources/tracking_remote_datasource.dart';
 import '../../data/models/client_ride.dart';
+import '../client_active_ride_guard.dart';
 import '../controllers/client_home_controller.dart';
 import '../controllers/client_realtime_controller.dart';
 import '../widgets/floating_top_bar.dart';
@@ -87,7 +88,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     final homeState = ref.watch(clientHomeControllerProvider);
     final mapState = ref.watch(mapControllerProvider(MapMode.client));
     final route = ref.watch(noorMapControllerProvider.select((s) => s.route));
-    final activeRide = _activeRide(homeState.rides);
+    final activeRide = homeState.activeRide;
     final displayName = _displayName(session);
     final initials = _initials(displayName);
 
@@ -166,6 +167,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             estimate: homeState.priceEstimate,
             estimateError: homeState.priceEstimateError,
             activeRide: activeRide,
+            recentDepartureLabels: _recentDepartureLabels(homeState.rides),
             onPickupTap: () => _openAddressSearch(AddressSearchMode.pickup),
             onDropoffTap: () => _openAddressSearch(AddressSearchMode.dropoff),
             onClearPickup: _clearPickup,

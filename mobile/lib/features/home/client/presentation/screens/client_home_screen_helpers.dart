@@ -121,29 +121,79 @@ extension _ClientHomeActions on _ClientHomeScreenState {
   }
 
   Future<void> _submitRide() async {
+    final currentState = ref.read(clientHomeControllerProvider);
+    final currentActiveRide = currentState.activeRide;
+    if (shouldBlockClientRideCreation(currentActiveRide)) {
+      await _resumeExistingRide(currentActiveRide!);
+      return;
+    }
+
     final input = _buildRideInput();
     if (input == null) {
       return;
     }
     final success =
         await ref.read(clientHomeControllerProvider.notifier).createRide(input);
-    if (!mounted || !success) {
+    if (!mounted) {
+      return;
+    }
+
+    final nextState = ref.read(clientHomeControllerProvider);
+    if (!success) {
+      if (shouldRecoverExistingRideFromCreateError(nextState.createErrorCode)) {
+        await _recoverExistingRideAfterCreateConflict();
+        return;
+      }
+
       _showSnackBar(
         _humanizeMessage(
-          ref.read(clientHomeControllerProvider).createError,
+          nextState.createError,
           fallback: 'Impossible d envoyer la demande pour le moment.',
         ),
         tone: AppSnackbarTone.error,
       );
       return;
     }
-    final createdRideId = ref.read(clientHomeControllerProvider).rides.first.id;
+    final createdRideId = nextState.rides.first.id;
     _resetForm();
     _showSnackBar(
       'Votre demande est envoyee. On cherche un chauffeur.',
       tone: AppSnackbarTone.success,
     );
     context.push(AppRoutes.clientNegotiation(createdRideId));
+  }
+
+  Future<void> _resumeExistingRide(
+    ClientRide ride, {
+    String? message,
+  }) async {
+    _showSnackBar(
+      message ?? activeRideResumeMessage(ride),
+      tone: AppSnackbarTone.info,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 180));
+    if (!mounted) {
+      return;
+    }
+    _openRide(ride);
+  }
+
+  Future<void> _recoverExistingRideAfterCreateConflict() async {
+    await ref.read(clientHomeControllerProvider.notifier).loadRides();
+    if (!mounted) {
+      return;
+    }
+
+    final activeRide = ref.read(clientHomeControllerProvider).activeRide;
+    if (shouldBlockClientRideCreation(activeRide)) {
+      await _resumeExistingRide(activeRide!);
+      return;
+    }
+
+    _showSnackBar(
+      RideUiCopy.activeRideConflict,
+      tone: AppSnackbarTone.info,
+    );
   }
 
   RideRequestCreateInput? _buildRideInput() {
@@ -208,8 +258,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
 
   Future<void> _openGeneralReport() async {
     _updateUi(() => _isMenuOpen = false);
-    final activeRide =
-        _activeRide(ref.read(clientHomeControllerProvider).rides);
+    final activeRide = ref.read(clientHomeControllerProvider).activeRide;
     final draft = await showRideReportBottomSheet(
       context,
       onSubmit: (draft) async {
@@ -229,17 +278,23 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     }
   }
 
-  ClientRide? _activeRide(List<ClientRide> rides) {
-    for (final ride in rides) {
-      if (ride.status == 'pending' ||
-          ride.status == 'offered' ||
-          ride.status == 'accepted' ||
-          ride.status == 'arrived' ||
-          ride.status == 'started') {
-        return ride;
+  List<String> _recentDepartureLabels(List<ClientRide> rides) {
+    final sortedRides = [...rides]
+      ..sort((left, right) => right.createdAt.compareTo(left.createdAt));
+    final labels = <String>[];
+
+    for (final ride in sortedRides) {
+      final label = ride.pickupLocation.trim();
+      if (label.isEmpty || labels.contains(label)) {
+        continue;
+      }
+      labels.add(label);
+      if (labels.length == 3) {
+        break;
       }
     }
-    return null;
+
+    return labels;
   }
 
   void _showSnackBar(String message, {AppSnackbarTone? tone}) {

@@ -118,4 +118,77 @@ void main() {
       expect(shouldRefit, isTrue);
     });
   });
+
+  group('resolveTrackingPulseAnchor', () {
+    test('uses the pickup point while looking for a nearby driver', () {
+      final target = resolveTrackingPulseAnchor(
+        status: RideTrackingStatus.pending,
+        driverPosition: null,
+        pickupPosition: const TrackingCoordinates(
+          latitude: 13.5,
+          longitude: 2.1,
+        ),
+        currentPosition: const TrackingCoordinates(
+          latitude: 13.52,
+          longitude: 2.12,
+        ),
+      );
+
+      expect(target, TrackingPulseAnchor.pickup);
+    });
+
+    test('uses the current position when pickup is still missing', () {
+      final target = resolveTrackingPulseAnchor(
+        status: RideTrackingStatus.pending,
+        driverPosition: null,
+        pickupPosition: null,
+        currentPosition: const TrackingCoordinates(
+          latitude: 13.52,
+          longitude: 2.12,
+        ),
+      );
+
+      expect(target, TrackingPulseAnchor.current);
+    });
+
+    test('uses the driver marker once the live car is known', () {
+      final target = resolveTrackingPulseAnchor(
+        status: RideTrackingStatus.accepted,
+        driverPosition: const TrackingCoordinates(
+          latitude: 13.51,
+          longitude: 2.11,
+        ),
+        pickupPosition: const TrackingCoordinates(
+          latitude: 13.5,
+          longitude: 2.1,
+        ),
+        currentPosition: const TrackingCoordinates(
+          latitude: 13.52,
+          longitude: 2.12,
+        ),
+      );
+
+      expect(target, TrackingPulseAnchor.driver);
+    });
+
+    test('stops the pulse when the ride is no longer active', () {
+      final target = resolveTrackingPulseAnchor(
+        status: RideTrackingStatus.completed,
+        driverPosition: const TrackingCoordinates(
+          latitude: 13.51,
+          longitude: 2.11,
+        ),
+        pickupPosition: const TrackingCoordinates(
+          latitude: 13.5,
+          longitude: 2.1,
+        ),
+        currentPosition: const TrackingCoordinates(
+          latitude: 13.52,
+          longitude: 2.12,
+        ),
+      );
+
+      expect(target, TrackingPulseAnchor.none);
+    });
+  });
 }

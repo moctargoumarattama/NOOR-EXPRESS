@@ -5,6 +5,13 @@ import 'package:latlong2/latlong.dart';
 import '../../../../../core/map/tile_cache_service.dart';
 import '../../data/models/ride_tracking_model.dart';
 
+enum TrackingPulseAnchor {
+  none,
+  current,
+  pickup,
+  driver,
+}
+
 class MapView extends StatefulWidget {
   const MapView({
     super.key,
@@ -29,6 +36,7 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   static const _fallbackNiamey = LatLng(13.5116, 2.1254);
+  static const _cameraPadding = EdgeInsets.fromLTRB(56, 132, 56, 300);
   final MapController _mapController = MapController();
 
   @override
@@ -49,6 +57,9 @@ class _MapViewState extends State<MapView> {
   }
 
   void _fitMap() {
+    if (!mounted) {
+      return;
+    }
     final points = _focusPoints;
     if (points.isEmpty) {
       return;
@@ -62,7 +73,7 @@ class _MapViewState extends State<MapView> {
       _mapController.fitCamera(
         CameraFit.bounds(
           bounds: LatLngBounds.fromPoints(points),
-          padding: const EdgeInsets.all(64),
+          padding: _cameraPadding,
         ),
       );
     } catch (_) {
@@ -176,6 +187,12 @@ class _MapViewState extends State<MapView> {
   TileProvider get _tileProvider => createNoorTileProvider();
 
   List<Marker> _buildMarkers() {
+    final pulseAnchor = resolveTrackingPulseAnchor(
+      status: widget.status,
+      currentPosition: widget.currentPosition,
+      driverPosition: widget.driverPosition,
+      pickupPosition: widget.pickupPosition,
+    );
     final shouldShowCurrent = widget.currentPosition != null &&
         !_samePoint(widget.currentPosition, widget.pickupPosition);
 
@@ -185,12 +202,14 @@ class _MapViewState extends State<MapView> {
           point: widget.currentPosition!,
           color: const Color(0xFF315DB7),
           icon: Icons.my_location_rounded,
+          showPulse: pulseAnchor == TrackingPulseAnchor.current,
         ),
       if (widget.pickupPosition != null)
         _marker(
           point: widget.pickupPosition!,
           color: const Color(0xFF1B8A5A),
           icon: Icons.trip_origin_rounded,
+          showPulse: pulseAnchor == TrackingPulseAnchor.pickup,
         ),
       if (widget.destinationPosition != null)
         _marker(
@@ -204,6 +223,7 @@ class _MapViewState extends State<MapView> {
           color: const Color(0xFF1B8A5A),
           icon: Icons.navigation_rounded,
           rotationDegrees: widget.driverHeadingDegrees,
+          showPulse: pulseAnchor == TrackingPulseAnchor.driver,
         ),
     ];
   }
@@ -213,31 +233,19 @@ class _MapViewState extends State<MapView> {
     required Color color,
     required IconData icon,
     double? rotationDegrees,
+    bool showPulse = false,
   }) {
     return Marker(
       point: LatLng(point.latitude, point.longitude),
-      width: 54,
-      height: 54,
+      width: showPulse ? 80 : 54,
+      height: showPulse ? 80 : 54,
       child: Center(
         child: RepaintBoundary(
-          child: Transform.rotate(
-            angle: ((rotationDegrees ?? 0) * 3.1415926535) / 180,
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: color,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.24),
-                    blurRadius: 16,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: Icon(icon, size: 20, color: Colors.white),
-            ),
+          child: _TrackingPulseMarker(
+            color: color,
+            icon: icon,
+            rotationDegrees: rotationDegrees,
+            showPulse: showPulse,
           ),
         ),
       ),
@@ -253,6 +261,187 @@ class _MapViewState extends State<MapView> {
 
   bool _samePoint(TrackingCoordinates? left, TrackingCoordinates? right) {
     return trackingCoordinatesEqual(left, right);
+  }
+}
+
+TrackingPulseAnchor resolveTrackingPulseAnchor({
+  required RideTrackingStatus status,
+  required TrackingCoordinates? currentPosition,
+  required TrackingCoordinates? driverPosition,
+  required TrackingCoordinates? pickupPosition,
+}) {
+  switch (status) {
+    case RideTrackingStatus.pending:
+    case RideTrackingStatus.offered:
+      if (pickupPosition != null) {
+        return TrackingPulseAnchor.pickup;
+      }
+      if (currentPosition != null) {
+        return TrackingPulseAnchor.current;
+      }
+      return TrackingPulseAnchor.none;
+    case RideTrackingStatus.accepted:
+    case RideTrackingStatus.arrived:
+    case RideTrackingStatus.started:
+      if (driverPosition != null) {
+        return TrackingPulseAnchor.driver;
+      }
+      if (pickupPosition != null) {
+        return TrackingPulseAnchor.pickup;
+      }
+      if (currentPosition != null) {
+        return TrackingPulseAnchor.current;
+      }
+      return TrackingPulseAnchor.none;
+    case RideTrackingStatus.completed:
+    case RideTrackingStatus.cancelled:
+    case RideTrackingStatus.expired:
+    case RideTrackingStatus.unknown:
+      return TrackingPulseAnchor.none;
+  }
+}
+
+class _TrackingPulseMarker extends StatefulWidget {
+  const _TrackingPulseMarker({
+    required this.color,
+    required this.icon,
+    required this.showPulse,
+    this.rotationDegrees,
+  });
+
+  final Color color;
+  final IconData icon;
+  final bool showPulse;
+  final double? rotationDegrees;
+
+  @override
+  State<_TrackingPulseMarker> createState() => _TrackingPulseMarkerState();
+}
+
+class _TrackingPulseMarkerState extends State<_TrackingPulseMarker>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    );
+    if (widget.showPulse) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _TrackingPulseMarker oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.showPulse == oldWidget.showPulse) {
+      return;
+    }
+    if (widget.showPulse) {
+      _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final marker = Transform.rotate(
+      angle: ((widget.rotationDegrees ?? 0) * 3.1415926535) / 180,
+      child: Container(
+        key: widget.showPulse
+            ? ValueKey('tracking-pulse-${widget.icon.codePoint}')
+            : null,
+        width: 42,
+        height: 42,
+        decoration: BoxDecoration(
+          color: widget.color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.8),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.22),
+              blurRadius: 14,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Icon(widget.icon, size: 20, color: Colors.white),
+      ),
+    );
+
+    if (!widget.showPulse) {
+      return marker;
+    }
+
+    return SizedBox(
+      width: 80,
+      height: 80,
+      child: AnimatedBuilder(
+        animation: _controller,
+        child: marker,
+        builder: (context, child) {
+          final progress = _controller.value;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: widget.color.withValues(alpha: 0.08),
+                ),
+              ),
+              _TrackingPulseRing(
+                color: widget.color,
+                progress: progress,
+              ),
+              child!,
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _TrackingPulseRing extends StatelessWidget {
+  const _TrackingPulseRing({
+    required this.color,
+    required this.progress,
+  });
+
+  final Color color;
+  final double progress;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = 34 + (progress * 32);
+    final opacity = (1 - progress).clamp(0.0, 1.0);
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color.withValues(alpha: 0.16 * opacity),
+        border: Border.all(
+          color: color.withValues(alpha: 0.38 * opacity),
+          width: 1.8,
+        ),
+      ),
+    );
   }
 }
 

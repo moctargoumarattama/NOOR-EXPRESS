@@ -109,3 +109,11 @@ Quand tu veux scaler :
 REALTIME_STORE_BACKEND=redis
 
 👉 et BOOM 💥
+
+
+
+
+
+git add .
+git commit -m "ton message ici"
+git push origin main

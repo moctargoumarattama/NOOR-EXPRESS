@@ -5,6 +5,7 @@ class _BookingPanel extends StatelessWidget {
     super.key,
     required this.pickup,
     required this.dropoff,
+    required this.recentDepartureLabels,
     required this.priceController,
     required this.isCreating,
     required this.isEstimatingPrice,
@@ -19,6 +20,7 @@ class _BookingPanel extends StatelessWidget {
 
   final AddressResult? pickup;
   final AddressResult? dropoff;
+  final List<String> recentDepartureLabels;
   final TextEditingController priceController;
   final bool isCreating;
   final bool isEstimatingPrice;
@@ -41,13 +43,11 @@ class _BookingPanel extends StatelessWidget {
           _SearchLauncher(onTap: onDropoffTap),
           const SizedBox(height: 18),
           Text(
-            'Adresses recentes',
+            'Derniers quartiers de depart',
             style: Theme.of(context).textTheme.titleSmall,
           ),
           const SizedBox(height: 10),
-          const _RecentAddress(label: 'Grand Marche'),
-          const _RecentAddress(label: 'Aeroport Diori Hamani'),
-          const _RecentAddress(label: 'Universite Abdou Moumouni'),
+          for (final label in _recentLabels) _RecentAddress(label: label),
         ] else ...[
           AddressInputCard(
             pickup: pickup,
@@ -88,6 +88,17 @@ class _BookingPanel extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  List<String> get _recentLabels {
+    if (recentDepartureLabels.isNotEmpty) {
+      return recentDepartureLabels.take(3).toList();
+    }
+    return const [
+      'Grand Marche',
+      'Aeroport Diori Hamani',
+      'Universite Abdou Moumouni',
+    ];
   }
 }
 

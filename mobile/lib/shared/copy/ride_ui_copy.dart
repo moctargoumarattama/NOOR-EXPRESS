@@ -7,6 +7,11 @@ abstract final class RideUiCopy {
   static const offerExpired = 'Cette proposition n est plus disponible.';
   static const rideCancelled = 'Le trajet a ete annule.';
   static const driverUnavailable = 'Ce chauffeur n est plus disponible.';
+  static const activeRideConflict = 'Vous avez deja une course en cours.';
+  static const resumeExistingRequest =
+      'Vous avez deja une demande en cours. Nous vous y ramenons.';
+  static const resumeExistingRide =
+      'Vous avez deja une course en cours. Nous vous y ramenons.';
   static const gpsUnavailable =
       'Votre position est difficile a retrouver pour le moment.';
   static const negotiationRefreshHint =

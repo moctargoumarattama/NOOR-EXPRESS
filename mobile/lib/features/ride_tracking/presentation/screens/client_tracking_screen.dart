@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -59,9 +61,7 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
       },
     );
 
-    Future.microtask(() {
-      ref.read(trackingControllerProvider(_scope).notifier).start();
-    });
+    unawaited(ref.read(trackingControllerProvider(_scope).notifier).start());
   }
 
   @override

@@ -14,6 +14,7 @@ class SearchBottomSheet extends StatelessWidget {
     super.key,
     required this.pickup,
     required this.dropoff,
+    required this.recentDepartureLabels,
     required this.priceController,
     required this.isCreating,
     required this.isEstimatingPrice,
@@ -30,6 +31,7 @@ class SearchBottomSheet extends StatelessWidget {
 
   final AddressResult? pickup;
   final AddressResult? dropoff;
+  final List<String> recentDepartureLabels;
   final TextEditingController priceController;
   final bool isCreating;
   final bool isEstimatingPrice;
@@ -97,6 +99,7 @@ class SearchBottomSheet extends StatelessWidget {
                           key: const ValueKey('booking'),
                           pickup: pickup,
                           dropoff: dropoff,
+                          recentDepartureLabels: recentDepartureLabels,
                           priceController: priceController,
                           isCreating: isCreating,
                           isEstimatingPrice: isEstimatingPrice,
@@ -117,5 +120,8 @@ class SearchBottomSheet extends StatelessWidget {
     );
   }
 
-  bool get _isSearching => activeRide != null;
+  bool get _isSearching {
+    final status = activeRide?.status;
+    return status == 'pending' || status == 'offered';
+  }
 }

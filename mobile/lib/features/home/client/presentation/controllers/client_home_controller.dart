@@ -6,11 +6,13 @@ import '../../data/models/client_ride.dart';
 class ClientHomeState {
   const ClientHomeState({
     required this.rides,
+    this.activeRide,
     required this.isLoading,
     required this.isCreating,
     required this.isEstimatingPrice,
     this.loadError,
     this.createError,
+    this.createErrorCode,
     this.priceEstimate,
     this.priceEstimateError,
   });
@@ -24,35 +26,43 @@ class ClientHomeState {
         );
 
   final List<ClientRide> rides;
+  final ClientRide? activeRide;
   final bool isLoading;
   final bool isCreating;
   final bool isEstimatingPrice;
   final String? loadError;
   final String? createError;
+  final String? createErrorCode;
   final PriceEstimate? priceEstimate;
   final String? priceEstimateError;
 
   ClientHomeState copyWith({
     List<ClientRide>? rides,
+    ClientRide? activeRide,
     bool? isLoading,
     bool? isCreating,
     bool? isEstimatingPrice,
     String? loadError,
     String? createError,
+    String? createErrorCode,
     PriceEstimate? priceEstimate,
     String? priceEstimateError,
     bool clearLoadError = false,
     bool clearCreateError = false,
     bool clearPriceEstimate = false,
     bool clearPriceEstimateError = false,
+    bool clearActiveRide = false,
   }) {
     return ClientHomeState(
       rides: rides ?? this.rides,
+      activeRide: clearActiveRide ? null : activeRide ?? this.activeRide,
       isLoading: isLoading ?? this.isLoading,
       isCreating: isCreating ?? this.isCreating,
       isEstimatingPrice: isEstimatingPrice ?? this.isEstimatingPrice,
       loadError: clearLoadError ? null : loadError ?? this.loadError,
       createError: clearCreateError ? null : createError ?? this.createError,
+      createErrorCode:
+          clearCreateError ? null : createErrorCode ?? this.createErrorCode,
       priceEstimate:
           clearPriceEstimate ? null : priceEstimate ?? this.priceEstimate,
       priceEstimateError: clearPriceEstimateError
@@ -78,8 +88,10 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
 
     try {
       final rides = await _repository.fetchMyRides();
+      final activeRide = await _repository.fetchActiveRide();
       state = state.copyWith(
         rides: rides,
+        activeRide: activeRide,
         isLoading: false,
         clearLoadError: true,
       );
@@ -94,8 +106,10 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
   Future<void> resumeFromLifecycle() async {
     try {
       final rides = await _repository.fetchMyRides();
+      final activeRide = await _repository.fetchActiveRide();
       state = state.copyWith(
         rides: rides,
+        activeRide: activeRide,
         clearLoadError: true,
       );
     } on ClientRideFailure catch (error) {
@@ -116,6 +130,7 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
       state = state.copyWith(
         isCreating: false,
         rides: [ride, ...state.rides],
+        activeRide: ride,
         clearCreateError: true,
       );
       return true;
@@ -123,6 +138,7 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
       state = state.copyWith(
         isCreating: false,
         createError: error.message,
+        createErrorCode: error.code,
       );
       return false;
     }
@@ -179,8 +195,22 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
     }
 
     final updated = [...state.rides];
-    updated[index] = updated[index].copyWith(status: status);
-    state = state.copyWith(rides: updated);
+    final nextRide = updated[index].copyWith(status: status);
+    updated[index] = nextRide;
+    final currentActiveRide = state.activeRide;
+    final shouldClearActiveRide = switch (status) {
+      'completed' || 'cancelled' || 'expired' => true,
+      _ => false,
+    };
+    final shouldPromoteUpdatedRide =
+        currentActiveRide == null || currentActiveRide.id == rideId;
+    state = state.copyWith(
+      rides: updated,
+      activeRide: shouldPromoteUpdatedRide && !shouldClearActiveRide
+          ? nextRide
+          : currentActiveRide,
+      clearActiveRide: shouldPromoteUpdatedRide && shouldClearActiveRide,
+    );
   }
 }
 

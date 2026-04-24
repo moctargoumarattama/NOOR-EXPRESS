@@ -59,59 +59,95 @@ class TrackingController extends StateNotifier<TrackingState> {
   StreamSubscription<LocationResult<Position>>? _locationSubscription;
   DateTime? _lastDriverPingAt;
   bool _started = false;
+  bool _isDisposed = false;
   void Function()? _unregisterLifecycleResume;
 
-  TrackingState get _currentState => state;
-  set _currentState(TrackingState value) => state = value;
+  bool get _isActive => _started && !_isDisposed;
+
+  TrackingState? get _currentStateOrNull => _isDisposed ? null : state;
+
+  void _setStateIfAlive(TrackingState value) {
+    if (_isDisposed) {
+      return;
+    }
+    state = value;
+  }
 
   Future<void> start() async {
-    if (_started) {
+    if (_started || _isDisposed) {
       return;
     }
 
     _started = true;
     _registerLifecycleResume();
-    state = state.copyWith(isLoading: true, clearError: true);
+    _setStateIfAlive(state.copyWith(isLoading: true, clearError: true));
     await _refreshSnapshot(this);
+    if (!_isActive) {
+      return;
+    }
     await _bindRealtime(this);
+    if (!_isActive) {
+      return;
+    }
     _startLocationTracking(this);
-    state = state.copyWith(isLoading: false);
+    if (!_isActive) {
+      return;
+    }
+    _setStateIfAlive(state.copyWith(isLoading: false));
   }
 
-  Future<void> stop() async {
+  Future<void> stop({bool resetState = true}) async {
+    if (_isDisposed) {
+      return;
+    }
     _started = false;
     _unregisterLifecycleResume?.call();
     _unregisterLifecycleResume = null;
-    await _eventSubscription?.cancel();
-    await _connectionSubscription?.cancel();
-    await _locationSubscription?.cancel();
+    final eventSubscription = _eventSubscription;
+    final connectionSubscription = _connectionSubscription;
+    final locationSubscription = _locationSubscription;
     _eventSubscription = null;
     _connectionSubscription = null;
     _locationSubscription = null;
+    await eventSubscription?.cancel();
+    await connectionSubscription?.cancel();
+    await locationSubscription?.cancel();
     await _websocketDatasource.disconnect();
-    state = TrackingState.initial(mode);
+    if (_isDisposed || !resetState) {
+      return;
+    }
+    _setStateIfAlive(TrackingState.initial(mode));
   }
 
   Future<void> refreshPosition() async {
     final result = await _locationService.getCurrentPosition();
+    if (!_isActive) {
+      return;
+    }
     if (result case LocationSuccess<Position>(value: final position)) {
       _applyCurrentPosition(this, position);
       return;
     }
     if (result case LocationError<Position>(failure: final failure)) {
-      state = state.copyWith(errorMessage: failure.message);
+      _setStateIfAlive(state.copyWith(errorMessage: failure.message));
     }
   }
 
   Future<void> refresh() => _refreshSnapshot(this);
 
   Future<void> resumeFromLifecycle() async {
-    if (!_started) {
+    if (!_isActive) {
       return;
     }
 
     await _websocketDatasource.resumeFromLifecycle();
+    if (!_isActive) {
+      return;
+    }
     _startLocationTracking(this);
+    if (!_isActive) {
+      return;
+    }
     await _refreshSnapshot(this);
   }
 
@@ -151,28 +187,34 @@ class TrackingController extends StateNotifier<TrackingState> {
     required double rating,
     String? comment,
   }) async {
-    final ride = state.ride;
+    final ride = _currentStateOrNull?.ride;
     if (ride == null) {
       return;
     }
 
-    state = state.copyWith(isActionLoading: true, clearError: true);
+    _setStateIfAlive(state.copyWith(isActionLoading: true, clearError: true));
     try {
       final payload = await _remoteDatasource.rateDriver(
         rideId: ride.id,
         rating: rating,
         comment: comment,
       );
-      state = state.copyWith(
+      if (!_isActive) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
         isActionLoading: false,
         ride: RideTrackingModel.fromJson(payload),
         toastMessage: 'Merci pour votre note.',
-      );
+      ));
     } on TrackingRemoteFailure catch (error) {
-      state = state.copyWith(
+      if (_isDisposed) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
         isActionLoading: false,
         errorMessage: error.message,
-      );
+      ));
     }
   }
 
@@ -180,35 +222,44 @@ class TrackingController extends StateNotifier<TrackingState> {
     required String reason,
     String? description,
   }) async {
-    final ride = state.ride;
+    final ride = _currentStateOrNull?.ride;
     if (ride == null) {
       return;
     }
 
-    state = state.copyWith(isActionLoading: true, clearError: true);
+    _setStateIfAlive(state.copyWith(isActionLoading: true, clearError: true));
     try {
       await _remoteDatasource.reportRide(
         rideId: ride.id,
         reason: reason,
         description: description,
       );
-      state = state.copyWith(
+      if (!_isActive) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
         isActionLoading: false,
         toastMessage: 'Signalement envoye.',
-      );
+      ));
     } on TrackingRemoteFailure catch (error) {
-      state = state.copyWith(
+      if (_isDisposed) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
         isActionLoading: false,
         errorMessage: error.message,
-      );
+      ));
     }
   }
 
   void acknowledgePassengerReady() {
-    state = state.copyWith(
+    if (_isDisposed) {
+      return;
+    }
+    _setStateIfAlive(state.copyWith(
       toastMessage:
           'Parfait. Votre chauffeur vous attend juste devant le point de depart.',
-    );
+    ));
   }
 
   Future<void> openAppSettings() => _locationService.openAppSettings();
@@ -216,16 +267,44 @@ class TrackingController extends StateNotifier<TrackingState> {
       _locationService.openLocationSettings();
 
   void consumeToast() {
-    state = state.copyWith(clearToast: true);
+    if (_isDisposed) {
+      return;
+    }
+    _setStateIfAlive(state.copyWith(clearToast: true));
   }
 
   void _registerLifecycleResume() {
+    if (_isDisposed) {
+      return;
+    }
     _unregisterLifecycleResume?.call();
     _unregisterLifecycleResume =
         ref.read(appLifecycleRecoveryServiceProvider).registerResumeHandler(
               'tracking-${mode.name}-${preferredRideId ?? 'active'}',
               resumeFromLifecycle,
             );
+  }
+
+  @override
+  void dispose() {
+    _isDisposed = true;
+    _started = false;
+    _unregisterLifecycleResume?.call();
+    _unregisterLifecycleResume = null;
+
+    final eventSubscription = _eventSubscription;
+    final connectionSubscription = _connectionSubscription;
+    final locationSubscription = _locationSubscription;
+    _eventSubscription = null;
+    _connectionSubscription = null;
+    _locationSubscription = null;
+
+    unawaited(eventSubscription?.cancel() ?? Future<void>.value());
+    unawaited(connectionSubscription?.cancel() ?? Future<void>.value());
+    unawaited(locationSubscription?.cancel() ?? Future<void>.value());
+    unawaited(_websocketDatasource.disconnect());
+
+    super.dispose();
   }
 }
 
@@ -242,9 +321,6 @@ final trackingControllerProvider = StateNotifierProvider.autoDispose
       ),
       locationService: ref.watch(locationServiceProvider),
     );
-    ref.onDispose(() {
-      controller.stop();
-    });
     return controller;
   },
 );
