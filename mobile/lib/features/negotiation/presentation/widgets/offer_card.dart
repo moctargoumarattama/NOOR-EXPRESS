@@ -15,6 +15,7 @@ class OfferCard extends StatelessWidget {
     this.isAccepting = false,
     this.isRejecting = false,
     this.isDisabled = false,
+    this.compact = false,
   });
 
   final RideOfferModel offer;
@@ -24,14 +25,17 @@ class OfferCard extends StatelessWidget {
   final bool isAccepting;
   final bool isRejecting;
   final bool isDisabled;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final hasActionInProgress = isBusy || isAccepting || isRejecting;
     final actionsDisabled = isDisabled || hasActionInProgress;
+    final padding = compact ? 14.0 : 18.0;
+    final avatarSize = compact ? 44.0 : 50.0;
 
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: EdgeInsets.all(padding),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
@@ -50,8 +54,8 @@ class OfferCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 50,
-                height: 50,
+                width: avatarSize,
+                height: avatarSize,
                 decoration: BoxDecoration(
                   color: const Color(0x141B8A5A),
                   borderRadius: BorderRadius.circular(18),
@@ -60,12 +64,15 @@ class OfferCard extends StatelessWidget {
                     const Icon(Icons.person_rounded, color: AppColors.emerald),
               ),
               const SizedBox(width: 12),
-              Expanded(child: _DriverInfo(offer: offer)),
+              Expanded(child: _DriverInfo(offer: offer, compact: compact)),
               const SizedBox(width: 12),
-              _PriceBlock(price: _formatFcfa(offer.proposedPrice)),
+              _PriceBlock(
+                price: _formatFcfa(offer.proposedPrice),
+                compact: compact,
+              ),
             ],
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 12 : 16),
           Row(
             children: [
               Expanded(
@@ -73,6 +80,7 @@ class OfferCard extends StatelessWidget {
                   label: 'Distance chauffeur',
                   value: _distanceLabel,
                   icon: Icons.near_me_rounded,
+                  compact: compact,
                 ),
               ),
               const SizedBox(width: 10),
@@ -81,6 +89,7 @@ class OfferCard extends StatelessWidget {
                   label: 'ETA',
                   value: _etaLabel,
                   icon: Icons.schedule_rounded,
+                  compact: compact,
                 ),
               ),
             ],
@@ -91,7 +100,7 @@ class OfferCard extends StatelessWidget {
             _PlateBadge(value: offer.plateNumber!.trim()),
           ],
           if (hasActionInProgress) ...[
-            const SizedBox(height: 14),
+            SizedBox(height: compact ? 10 : 14),
             AppInlineFeedback(
               message: isRejecting
                   ? 'Refus de cette offre...'
@@ -100,7 +109,7 @@ class OfferCard extends StatelessWidget {
               isLoading: true,
             ),
           ],
-          const SizedBox(height: 16),
+          SizedBox(height: compact ? 12 : 16),
           Row(
             children: [
               if (onReject != null) ...[
@@ -150,9 +159,13 @@ class OfferCard extends StatelessWidget {
 }
 
 class _DriverInfo extends StatelessWidget {
-  const _DriverInfo({required this.offer});
+  const _DriverInfo({
+    required this.offer,
+    required this.compact,
+  });
 
   final RideOfferModel offer;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -201,9 +214,13 @@ class _DriverInfo extends StatelessWidget {
 }
 
 class _PriceBlock extends StatelessWidget {
-  const _PriceBlock({required this.price});
+  const _PriceBlock({
+    required this.price,
+    required this.compact,
+  });
 
   final String price;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -226,10 +243,13 @@ class _PriceBlock extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             price,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: AppColors.emerald,
-                  fontWeight: FontWeight.w900,
-                ),
+            style: (compact
+                    ? Theme.of(context).textTheme.titleSmall
+                    : Theme.of(context).textTheme.titleMedium)
+                ?.copyWith(
+              color: AppColors.emerald,
+              fontWeight: FontWeight.w900,
+            ),
           ),
         ],
       ),
@@ -242,17 +262,19 @@ class _MetricBox extends StatelessWidget {
     required this.label,
     required this.value,
     required this.icon,
+    required this.compact,
   });
 
   final String label;
   final String value;
   final IconData icon;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      constraints: const BoxConstraints(minHeight: 86),
-      padding: const EdgeInsets.all(12),
+      constraints: BoxConstraints(minHeight: compact ? 72 : 86),
+      padding: EdgeInsets.all(compact ? 10 : 12),
       decoration: BoxDecoration(
         color: const Color(0xFFF8FAF9),
         borderRadius: BorderRadius.circular(18),
@@ -262,7 +284,7 @@ class _MetricBox extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: AppColors.emerald, size: 18),
-          const SizedBox(height: 8),
+          SizedBox(height: compact ? 6 : 8),
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(

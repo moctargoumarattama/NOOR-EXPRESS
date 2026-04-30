@@ -5,6 +5,18 @@ import 'package:geolocator/geolocator.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 
+class TrackingProgressEstimate {
+  const TrackingProgressEstimate({
+    required this.distanceKm,
+    required this.etaMinutes,
+    required this.isEtaReliable,
+  });
+
+  final double distanceKm;
+  final int? etaMinutes;
+  final bool isEtaReliable;
+}
+
 RideTrackingModel? selectTrackingRide(
   TrackingMode mode,
   List<RideTrackingModel> rides, {
@@ -50,6 +62,49 @@ RideTrackingModel? selectTrackingRide(
   return rides.isEmpty ? null : rides.first;
 }
 
+TrackingProgressEstimate? estimateTrackingProgress({
+  required RideTrackingStatus rideStatus,
+  required TrackingCoordinates? from,
+  required TrackingCoordinates? to,
+  double? routeDistanceKm,
+  int? routeDurationMinutes,
+  bool isRouteReliable = false,
+}) {
+  if (from == null || to == null) {
+    return null;
+  }
+
+  if (isRouteReliable &&
+      routeDistanceKm != null &&
+      routeDistanceKm.isFinite &&
+      routeDistanceKm > 0 &&
+      routeDurationMinutes != null &&
+      routeDurationMinutes > 0) {
+    return TrackingProgressEstimate(
+      distanceKm: routeDistanceKm,
+      etaMinutes: routeDurationMinutes,
+      isEtaReliable: true,
+    );
+  }
+
+  final distanceKm = Geolocator.distanceBetween(
+        from.latitude,
+        from.longitude,
+        to.latitude,
+        to.longitude,
+      ) /
+      1000;
+  if (!distanceKm.isFinite || distanceKm <= 0) {
+    return null;
+  }
+
+  return TrackingProgressEstimate(
+    distanceKm: distanceKm,
+    etaMinutes: null,
+    isEtaReliable: false,
+  );
+}
+
 int? estimateTrackingEta({
   required RideTrackingStatus rideStatus,
   required TrackingCoordinates? from,
@@ -69,6 +124,36 @@ int? estimateTrackingEta({
   final averageSpeedKmh =
       rideStatus == RideTrackingStatus.started ? 28.0 : 22.0;
   return math.max(1, ((distanceKm / averageSpeedKmh) * 60).round());
+}
+
+bool isPlausibleTrackingUpdate({
+  required TrackingCoordinates? previous,
+  required TrackingCoordinates next,
+  required Duration? elapsed,
+  double maxSpeedKmh = 180,
+  double graceDistanceMeters = 150,
+}) {
+  if (previous == null || elapsed == null || elapsed <= Duration.zero) {
+    return true;
+  }
+
+  final distanceMeters = Geolocator.distanceBetween(
+    previous.latitude,
+    previous.longitude,
+    next.latitude,
+    next.longitude,
+  );
+  if (!distanceMeters.isFinite || distanceMeters <= graceDistanceMeters) {
+    return true;
+  }
+
+  final elapsedHours = elapsed.inMilliseconds / Duration.millisecondsPerHour;
+  if (elapsedHours <= 0) {
+    return true;
+  }
+
+  final speedKmh = (distanceMeters / 1000) / elapsedHours;
+  return speedKmh <= maxSpeedKmh;
 }
 
 double? headingBetweenPoints(

@@ -80,9 +80,13 @@ void _handleSocketEvent(
       return;
     case TrackingSocketEventType.driverLocation:
       final currentState = controller._currentStateOrNull;
-      final ride = currentState?.ride;
+      if (currentState == null) {
+        return;
+      }
+      final ride = currentState.ride;
+      final position = event.position;
       if (controller.mode != TrackingMode.client ||
-          event.position == null ||
+          position == null ||
           ride == null ||
           (ride.driverId != null &&
               event.driverId != null &&
@@ -90,10 +94,21 @@ void _handleSocketEvent(
         return;
       }
 
-      controller._setStateIfAlive(currentState!.copyWith(
-        driverHeadingDegrees: _headingBetween(
-            currentState.driverPosition, event.position),
-        driverPosition: event.position,
+      final now = DateTime.now();
+      if (!isPlausibleTrackingUpdate(
+        previous: currentState.driverPosition,
+        next: position,
+        elapsed: controller._lastDriverPositionAt == null
+            ? null
+            : now.difference(controller._lastDriverPositionAt!),
+      )) {
+        return;
+      }
+      controller._lastDriverPositionAt = now;
+      controller._setStateIfAlive(currentState.copyWith(
+        driverHeadingDegrees:
+            _headingBetween(currentState.driverPosition, position),
+        driverPosition: position,
       ));
       _recomputeDerivedState(controller);
       return;
@@ -146,6 +161,17 @@ void _applyCurrentPosition(
     latitude: position.latitude,
     longitude: position.longitude,
   );
+  final now = DateTime.now();
+  if (!isPlausibleTrackingUpdate(
+    previous: currentState.currentPosition,
+    next: nextPoint,
+    elapsed: controller._lastCurrentPositionAt == null
+        ? null
+        : now.difference(controller._lastCurrentPositionAt!),
+  )) {
+    return;
+  }
+  controller._lastCurrentPositionAt = now;
   controller._setStateIfAlive(currentState.copyWith(
     currentPosition: nextPoint,
     clearError: true,

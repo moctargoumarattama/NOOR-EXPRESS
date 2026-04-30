@@ -10,6 +10,7 @@ class RideDriverState {
     required this.isLoadingAvailable,
     required this.isLoadingHistory,
     required this.isSubmittingAction,
+    this.activeRide,
     this.activeRideId,
     this.activeAction,
     this.availableErrorMessage,
@@ -30,6 +31,7 @@ class RideDriverState {
   final bool isLoadingAvailable;
   final bool isLoadingHistory;
   final bool isSubmittingAction;
+  final DriverRide? activeRide;
   final int? activeRideId;
   final String? activeAction;
   final String? availableErrorMessage;
@@ -41,11 +43,13 @@ class RideDriverState {
     bool? isLoadingAvailable,
     bool? isLoadingHistory,
     bool? isSubmittingAction,
+    DriverRide? activeRide,
     int? activeRideId,
     String? activeAction,
     String? availableErrorMessage,
     String? historyErrorMessage,
     bool clearActiveRide = false,
+    bool clearBackendActiveRide = false,
     bool clearAvailableErrorMessage = false,
     bool clearHistoryErrorMessage = false,
   }) {
@@ -55,6 +59,7 @@ class RideDriverState {
       isLoadingAvailable: isLoadingAvailable ?? this.isLoadingAvailable,
       isLoadingHistory: isLoadingHistory ?? this.isLoadingHistory,
       isSubmittingAction: isSubmittingAction ?? this.isSubmittingAction,
+      activeRide: clearBackendActiveRide ? null : activeRide ?? this.activeRide,
       activeRideId: clearActiveRide ? null : activeRideId ?? this.activeRideId,
       activeAction: clearActiveRide ? null : activeAction ?? this.activeAction,
       availableErrorMessage: clearAvailableErrorMessage
@@ -111,10 +116,13 @@ class RideDriverController extends StateNotifier<RideDriverState> {
 
     try {
       final rides = await _repository.fetchMyRides();
+      final activeRide = await _repository.fetchActiveRide();
       state = state.copyWith(
         rides: rides,
+        activeRide: activeRide,
         isLoadingHistory: false,
         clearHistoryErrorMessage: true,
+        clearBackendActiveRide: activeRide == null,
       );
     } on DriverRideFailure catch (error) {
       state = state.copyWith(
@@ -127,6 +135,7 @@ class RideDriverController extends StateNotifier<RideDriverState> {
   Future<void> refreshRealtimeSnapshot({
     bool includeAvailableRides = true,
     bool includeHistory = true,
+    bool includeActiveRide = true,
   }) async {
     final tasks = <Future<void>>[];
 
@@ -136,6 +145,8 @@ class RideDriverController extends StateNotifier<RideDriverState> {
 
     if (includeHistory) {
       tasks.add(loadRides());
+    } else if (includeActiveRide) {
+      tasks.add(_refreshActiveRideSilently());
     }
 
     if (tasks.isEmpty) {
@@ -148,6 +159,7 @@ class RideDriverController extends StateNotifier<RideDriverState> {
   Future<void> resumeFromLifecycle({
     bool includeAvailableRides = true,
     bool includeHistory = true,
+    bool includeActiveRide = true,
   }) async {
     final tasks = <Future<void>>[];
 
@@ -157,6 +169,10 @@ class RideDriverController extends StateNotifier<RideDriverState> {
 
     if (includeHistory) {
       tasks.add(_refreshHistorySilently());
+    }
+
+    if (includeActiveRide) {
+      tasks.add(_refreshActiveRideSilently());
     }
 
     if (tasks.isEmpty) {
@@ -220,6 +236,21 @@ class RideDriverController extends StateNotifier<RideDriverState> {
       );
     } on DriverRideFailure catch (error) {
       if (state.rides.isEmpty) {
+        state = state.copyWith(historyErrorMessage: error.message);
+      }
+    }
+  }
+
+  Future<void> _refreshActiveRideSilently() async {
+    try {
+      final activeRide = await _repository.fetchActiveRide();
+      state = state.copyWith(
+        activeRide: activeRide,
+        clearBackendActiveRide: activeRide == null,
+        clearHistoryErrorMessage: true,
+      );
+    } on DriverRideFailure catch (error) {
+      if (state.activeRide == null) {
         state = state.copyWith(historyErrorMessage: error.message);
       }
     }

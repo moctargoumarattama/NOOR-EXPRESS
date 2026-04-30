@@ -38,6 +38,11 @@ async def register(
 ) -> User:
     user = await get_user_by_phone_number(session, phone_number)
     if user is not None:
+        if user.is_blocked:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is blocked.",
+            )
         user.name = name
         user.role = role
         if role == UserRole.DRIVER:
@@ -72,6 +77,11 @@ async def send_otp(session: AsyncSession, phone_number: str) -> None:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found. Register first.",
         )
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is blocked.",
+        )
 
     otp_code = settings.OTP_CODE_DEV
     otp = OtpCode(
@@ -96,6 +106,11 @@ async def verify_otp(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found.",
+        )
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is blocked.",
         )
 
     result = await session.execute(
@@ -138,7 +153,7 @@ async def refresh_token(
         select(User).where(User.refresh_token == current_refresh_token)
     )
     user = result.scalar_one_or_none()
-    if user is None or _is_refresh_token_expired(current_refresh_token):
+    if user is None or user.is_blocked or _is_refresh_token_expired(current_refresh_token):
         if user is not None:
             user.refresh_token = None
             await session.commit()

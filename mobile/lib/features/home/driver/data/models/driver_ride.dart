@@ -9,6 +9,7 @@ class DriverRide {
     this.agreedPrice,
     this.finalPrice,
     this.driverNetEarnings,
+    this.distanceToPickupKm,
   });
 
   final int id;
@@ -19,6 +20,7 @@ class DriverRide {
   final double? agreedPrice;
   final double? finalPrice;
   final double? driverNetEarnings;
+  final double? distanceToPickupKm;
   final DateTime createdAt;
 
   double get displayPrice => finalPrice ?? agreedPrice ?? estimatedPrice;
@@ -33,6 +35,7 @@ class DriverRide {
       agreedPrice: (json['agreed_price'] as num?)?.toDouble(),
       finalPrice: (json['final_price'] as num?)?.toDouble(),
       driverNetEarnings: (json['driver_net_earnings'] as num?)?.toDouble(),
+      distanceToPickupKm: _asNullableDouble(json['driver_distance_km']),
       createdAt: DateTime.tryParse(json['created_at'] as String? ?? '') ??
           DateTime.fromMillisecondsSinceEpoch(0),
     );
@@ -47,6 +50,7 @@ class DriverRide {
     double? agreedPrice,
     double? finalPrice,
     double? driverNetEarnings,
+    double? distanceToPickupKm,
     DateTime? createdAt,
   }) {
     return DriverRide(
@@ -58,7 +62,21 @@ class DriverRide {
       agreedPrice: agreedPrice ?? this.agreedPrice,
       finalPrice: finalPrice ?? this.finalPrice,
       driverNetEarnings: driverNetEarnings ?? this.driverNetEarnings,
+      distanceToPickupKm: distanceToPickupKm ?? this.distanceToPickupKm,
       createdAt: createdAt ?? this.createdAt,
     );
   }
+}
+
+double? _asNullableDouble(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    return double.tryParse(value);
+  }
+  return null;
 }

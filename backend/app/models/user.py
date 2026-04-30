@@ -29,6 +29,7 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(SqlEnum(UserRole), nullable=False)
     refresh_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    is_blocked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     vehicle_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     vehicle_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     vehicle_color: Mapped[str | None] = mapped_column(String(50), nullable=True)

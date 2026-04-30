@@ -3,36 +3,53 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Users - Noor Express</title>
+  <title>Utilisateurs - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
-<body>
-  <aside class="sidebar">
-    <h2>Noor Admin</h2>
-    <a href="dashboard.html">Dashboard</a>
-    <a href="zones.html">Zones & tarifs</a>
-    <a href="rides.html">Courses</a>
-    <a class="active" href="users.html">Users</a>
-    <a href="drivers.html">Drivers a valider</a>
-    <button onclick="AdminApi.logout()">Logout</button>
-  </aside>
+<body data-active-page="users">
+  <aside class="sidebar" data-admin-sidebar></aside>
   <main class="content">
     <div class="page-head">
-      <h1>Users</h1>
-      <select id="role-filter" onchange="AdminApi.renderUsers()">
-        <option value="">Tous rôles</option>
-        <option value="client">client</option>
-        <option value="driver">driver</option>
-      </select>
+      <div>
+        <h1>Utilisateurs</h1>
+        <p class="hint">Clients et chauffeurs, avec blocage simple.</p>
+      </div>
+      <div class="tabs">
+        <button id="users-tab-client" onclick="AdminApi.setUsersRole('client')">Clients</button>
+        <button id="users-tab-driver" onclick="AdminApi.setUsersRole('driver')">Chauffeurs</button>
+      </div>
     </div>
     <section class="panel">
+      <div class="toolbar">
+        <label>Année archive
+          <input data-archive-year type="number" min="2020" max="2100" placeholder="2025" onchange="AdminApi.renderUsers()">
+        </label>
+        <label>Mois
+          <select data-archive-month onchange="AdminApi.renderUsers()">
+            <option value="">Tous les mois</option>
+            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option>
+            <option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option>
+            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+          </select>
+        </label>
+      </div>
       <table>
-        <thead><tr><th>ID</th><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Inscription</th></tr></thead>
+        <thead><tr><th>ID</th><th>Nom</th><th>Téléphone</th><th>Rôle</th><th>Statut</th><th>Inscription</th><th>Actions</th></tr></thead>
         <tbody id="users-table"></tbody>
       </table>
     </section>
   </main>
-  <script src="assets/api.js"></script>
+  <dialog id="user-profile-modal">
+    <div class="modal-form">
+      <h2>Profil utilisateur</h2>
+      <div id="user-profile-content"></div>
+      <div class="actions"><button class="ghost" onclick="AdminApi.closeUserProfile()">Fermer</button></div>
+    </div>
+  </dialog>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
   <script>AdminApi.requireAuth(); AdminApi.loadUsers();</script>
 </body>
 </html>

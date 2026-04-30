@@ -4,6 +4,27 @@ import 'package:noor_express_mobile/features/ride_tracking/domain/entities/track
 import 'package:noor_express_mobile/features/ride_tracking/presentation/widgets/tracking_shell_widgets.dart';
 
 void main() {
+  testWidgets('TrackingTopBar shows remaining distance and reliable ETA',
+      (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          backgroundColor: Colors.black,
+          body: TrackingTopBar(
+            connectionState: TrackingConnectionState.connected,
+            etaMinutes: 8,
+            distanceRemainingKm: 4.2,
+            onBack: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('4.2 km'), findsOneWidget);
+    expect(find.text('Dans 8 min'), findsOneWidget);
+    expect(find.text('En direct'), findsOneWidget);
+  });
+
   testWidgets('TrackingRecoveryBanner shows manual refresh in degraded states',
       (
     tester,

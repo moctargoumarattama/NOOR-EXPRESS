@@ -28,6 +28,8 @@ import '../features/ride_tracking/presentation/screens/driver_tracking_screen.da
 import '../shared/screens/help_screen.dart';
 import '../shared/screens/notifications_screen.dart';
 import '../shared/screens/settings_screen.dart';
+import '../shared/screens/support_screen.dart';
+import '../shared/screens/usage_policy_screen.dart';
 import 'app_routes.dart';
 
 final rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -93,6 +95,20 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _fastFadePage(
           key: state.pageKey,
           child: const HelpScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.support,
+        pageBuilder: (context, state) => _fastFadePage(
+          key: state.pageKey,
+          child: const SupportScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.usagePolicy,
+        pageBuilder: (context, state) => _fastFadePage(
+          key: state.pageKey,
+          child: const UsagePolicyScreen(),
         ),
       ),
       GoRoute(

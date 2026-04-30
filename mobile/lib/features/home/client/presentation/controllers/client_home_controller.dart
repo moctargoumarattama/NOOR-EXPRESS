@@ -94,6 +94,7 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
         activeRide: activeRide,
         isLoading: false,
         clearLoadError: true,
+        clearActiveRide: activeRide == null,
       );
     } on ClientRideFailure catch (error) {
       state = state.copyWith(
@@ -110,11 +111,15 @@ class ClientHomeController extends StateNotifier<ClientHomeState> {
       state = state.copyWith(
         rides: rides,
         activeRide: activeRide,
+        isLoading: false,
         clearLoadError: true,
+        clearActiveRide: activeRide == null,
       );
     } on ClientRideFailure catch (error) {
       if (state.rides.isEmpty) {
-        state = state.copyWith(loadError: error.message);
+        state = state.copyWith(isLoading: false, loadError: error.message);
+      } else {
+        state = state.copyWith(isLoading: false);
       }
     }
   }

@@ -60,10 +60,13 @@ class TrackingCounterpartModel {
     Map<String, dynamic> json, {
     double? rating,
   }) {
+    final rawName = json['name'] as String?;
     final phoneNumber = json['phone_number'] as String? ?? 'Utilisateur';
     final brand = json['vehicle_brand'] as String?;
     final model = json['vehicle_model'] as String?;
     final color = json['vehicle_color'] as String?;
+    final displayName =
+        rawName == null || rawName.trim().isEmpty ? phoneNumber : rawName.trim();
 
     final vehicleParts = [brand, model, color]
         .whereType<String>()
@@ -72,7 +75,7 @@ class TrackingCounterpartModel {
 
     return TrackingCounterpartModel(
       id: json['id'] as int? ?? 0,
-      displayName: phoneNumber,
+      displayName: displayName,
       phoneNumber: phoneNumber,
       rating: rating,
       plateNumber: json['plate_number'] as String?,

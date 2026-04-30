@@ -17,7 +17,6 @@ class _BookingPanel extends StatelessWidget {
     required this.onClearDropoff,
     required this.onSubmit,
     this.estimate,
-    this.estimateError,
   });
 
   final AddressResult? pickup;
@@ -29,7 +28,6 @@ class _BookingPanel extends StatelessWidget {
   final bool isCreating;
   final bool isEstimatingPrice;
   final PriceEstimate? estimate;
-  final String? estimateError;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
   final VoidCallback onClearPickup;
@@ -57,7 +55,6 @@ class _BookingPanel extends StatelessWidget {
       isCreating: isCreating,
       isEstimatingPrice: isEstimatingPrice,
       estimate: estimate,
-      estimateError: estimateError,
       onPickupTap: onPickupTap,
       onDropoffTap: onDropoffTap,
       onClearPickup: onClearPickup,
@@ -139,7 +136,6 @@ class _RoutePreviewPanel extends StatelessWidget {
     required this.onClearDropoff,
     required this.onSubmit,
     this.estimate,
-    this.estimateError,
   });
 
   final AddressResult? pickup;
@@ -150,7 +146,6 @@ class _RoutePreviewPanel extends StatelessWidget {
   final bool isCreating;
   final bool isEstimatingPrice;
   final PriceEstimate? estimate;
-  final String? estimateError;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
   final VoidCallback onClearPickup;
@@ -165,43 +160,25 @@ class _RoutePreviewPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _RideModeHeader(
-          title: 'Votre course',
-          subtitle: 'Verifiez le trajet puis proposez votre prix.',
-        ),
-        const SizedBox(height: 16),
-        AddressInputCard(
-          pickup: pickup,
-          dropoff: dropoff,
-          onPickupTap: onPickupTap,
-          onDropoffTap: onDropoffTap,
-          onClearPickup: onClearPickup,
-          onClearDropoff: onClearDropoff,
-        ),
-        const SizedBox(height: 14),
-        if (isEstimatingPrice) ...[
-          const AppInlineFeedback(
-            message: 'On calcule la distance, la duree et le prix conseille...',
-            tone: AppInlineFeedbackTone.info,
-            isLoading: true,
-          ),
-          const SizedBox(height: 14),
-        ],
         RouteSummaryCard(
           pickupLabel: pickup?.name ?? 'Choisir le depart',
           dropoffLabel: dropoff?.name ?? 'Choisir l arrivee',
           distanceKm: route?.distanceKm,
           durationMinutes: route?.durationMinutes,
+          isRouteReliable: route?.hasReliableMetrics ?? false,
           recommendedPrice: reliableRecommendedPrice,
-          reliabilityMessage: _reliabilityMessage,
+          reliabilityMessage: isEstimatingPrice
+              ? 'Estimation en cours...'
+              : _reliabilityMessage,
+          compact: true,
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         PriceSelector(
           controller: priceController,
           recommendedPrice: reliableRecommendedPrice,
           enabled: !isCreating,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 12),
         AppButton(
           label: 'Trouver un chauffeur',
           icon: Icons.local_taxi_rounded,
@@ -228,33 +205,338 @@ class _RoutePreviewPanel extends StatelessWidget {
   }
 
   String? get _reliabilityMessage {
-    final hasReliableRoute = route != null &&
-        route!.distanceKm.isFinite &&
-        route!.distanceKm > 0 &&
-        route!.durationMinutes > 0;
+    final hasReliableRoute = route?.hasReliableMetrics ?? false;
     final hasReliablePrice = _reliableRecommendedPrice != null;
-    final cleanedEstimateError = estimateError?.trim();
     final cleanedRouteError = routeError?.trim();
 
+    if (route?.isFallback == true && !hasReliablePrice) {
+      return 'Estimation indisponible';
+    }
+    if (route?.isFallback == true) {
+      return 'Estimation indisponible';
+    }
+
     if (!hasReliableRoute && !hasReliablePrice) {
-      return 'Distance, duree et prix ne sont pas encore fiables. '
-          'Verifiez les adresses ou reessayez.';
+      return 'Estimation indisponible';
     }
     if (!hasReliableRoute) {
-      return cleanedRouteError == null || cleanedRouteError.isEmpty
-          ? 'Distance et duree ne sont pas encore fiables.'
-          : cleanedRouteError;
+      return 'Estimation indisponible';
     }
     if (!hasReliablePrice) {
-      return cleanedEstimateError == null || cleanedEstimateError.isEmpty
-          ? 'Prix recommande indisponible pour ce trajet. '
-              'Vous pouvez saisir votre prix.'
-          : cleanedEstimateError;
+      return 'Estimation indisponible';
     }
     if (cleanedRouteError != null && cleanedRouteError.isNotEmpty) {
       return cleanedRouteError;
     }
     return null;
+  }
+}
+
+class _OfferReceivedPanel extends StatelessWidget {
+  const _OfferReceivedPanel({
+    super.key,
+    required this.ride,
+    required this.route,
+    required this.offers,
+    this.isRefreshingOffers = false,
+    this.acceptingOfferId,
+    this.rejectingOfferId,
+    this.onAcceptOffer,
+    this.onRejectOffer,
+    this.onViewAllOffers,
+  });
+
+  final ClientRide ride;
+  final RouteResult? route;
+  final List<RideOfferModel> offers;
+  final bool isRefreshingOffers;
+  final int? acceptingOfferId;
+  final int? rejectingOfferId;
+  final ValueChanged<RideOfferModel>? onAcceptOffer;
+  final ValueChanged<RideOfferModel>? onRejectOffer;
+  final VoidCallback? onViewAllOffers;
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryOffer = offers.first;
+    final hasBusyOffer = acceptingOfferId != null || rejectingOfferId != null;
+    final isPrimaryBusy = acceptingOfferId == primaryOffer.offerId ||
+        rejectingOfferId == primaryOffer.offerId;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _OfferReceivedHeader(),
+        const SizedBox(height: 12),
+        _CompactRideSummary(ride: ride, route: route),
+        if (isRefreshingOffers) ...[
+          const SizedBox(height: 10),
+          const AppInlineFeedback(
+            message: 'Mise a jour des offres...',
+            tone: AppInlineFeedbackTone.info,
+            isLoading: true,
+          ),
+        ],
+        const SizedBox(height: 12),
+        if (offers.length > 1 && onViewAllOffers != null) ...[
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: onViewAllOffers,
+              icon: const Icon(Icons.list_alt_rounded, size: 18),
+              label: const Text('Voir toutes les offres'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.emerald,
+                textStyle: const TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+          const SizedBox(height: 4),
+        ],
+        OfferCard(
+          offer: primaryOffer,
+          compact: true,
+          isAccepting: acceptingOfferId == primaryOffer.offerId,
+          isRejecting: rejectingOfferId == primaryOffer.offerId,
+          isDisabled: hasBusyOffer && !isPrimaryBusy,
+          onSelect: onAcceptOffer == null
+              ? () {}
+              : () => onAcceptOffer!(primaryOffer),
+          onReject:
+              onRejectOffer == null ? null : () => onRejectOffer!(primaryOffer),
+        ),
+      ],
+    );
+  }
+}
+
+class _OffersLoadingPanel extends StatelessWidget {
+  const _OffersLoadingPanel({
+    super.key,
+    required this.ride,
+    required this.route,
+  });
+
+  final ClientRide ride;
+  final RouteResult? route;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _OfferReceivedHeader(),
+        const SizedBox(height: 12),
+        _CompactRideSummary(ride: ride, route: route),
+        const SizedBox(height: 14),
+        const AppInlineFeedback(
+          message: 'Chargement des offres...',
+          tone: AppInlineFeedbackTone.info,
+          isLoading: true,
+        ),
+      ],
+    );
+  }
+}
+
+class _OfferReceivedHeader extends StatelessWidget {
+  const _OfferReceivedHeader();
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Offre recue',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.ink,
+                      fontWeight: FontWeight.w900,
+                    ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Un chauffeur vous propose un prix',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppColors.stone,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+          decoration: BoxDecoration(
+            color: AppColors.mint,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: const Text(
+            'Nouvelle',
+            style: TextStyle(
+              color: AppColors.emerald,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactRideSummary extends StatelessWidget {
+  const _CompactRideSummary({
+    required this.ride,
+    required this.route,
+  });
+
+  final ClientRide ride;
+  final RouteResult? route;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasReliableRoute = route != null && route!.hasReliableMetrics;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAF9),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE8EEE9)),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: _CompactRouteLabel(
+                  label: 'Depart',
+                  value: ride.pickupLocation,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _CompactRouteLabel(
+                  label: 'Arrivee',
+                  value: ride.dropoffLocation,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _CompactSummaryPill(
+                  label: 'Prix client',
+                  value: _formatFcfa(ride.displayPrice),
+                ),
+              ),
+              if (hasReliableRoute) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _CompactSummaryPill(
+                    label: 'Trajet',
+                    value:
+                        '${route!.distanceKm.toStringAsFixed(1)} km - ${route!.durationMinutes} min',
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatFcfa(double value) {
+    if (!value.isFinite || value <= 0 || value > 500000) {
+      return '--';
+    }
+    return '${value.round()} FCFA';
+  }
+}
+
+class _CompactRouteLabel extends StatelessWidget {
+  const _CompactRouteLabel({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.stone,
+                fontWeight: FontWeight.w700,
+              ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: AppColors.ink,
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactSummaryPill extends StatelessWidget {
+  const _CompactSummaryPill({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.stone,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.emerald,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -314,6 +596,7 @@ class _SearchingRidePanelState extends State<_SearchingRidePanel> {
           dropoffLabel: widget.ride.dropoffLocation,
           distanceKm: widget.route?.distanceKm,
           durationMinutes: widget.route?.durationMinutes,
+          isRouteReliable: widget.route?.hasReliableMetrics ?? false,
           reliabilityMessage: _routeReliabilityMessage,
         ),
         const SizedBox(height: 12),
@@ -365,10 +648,7 @@ class _SearchingRidePanelState extends State<_SearchingRidePanel> {
 
   String? get _routeReliabilityMessage {
     final route = widget.route;
-    final hasReliableRoute = route != null &&
-        route.distanceKm.isFinite &&
-        route.distanceKm > 0 &&
-        route.durationMinutes > 0;
+    final hasReliableRoute = route?.hasReliableMetrics ?? false;
     if (hasReliableRoute) {
       return null;
     }

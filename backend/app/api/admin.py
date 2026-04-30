@@ -5,16 +5,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.database import get_db_session
 from app.services.admin_service import (
     AdminAlreadyExistsError,
+    AdminUserDeleteBlockedError,
+    AdminUserNotFoundError,
+    block_user,
     create_admin,
+    delete_user,
     get_all_reports,
     get_all_rides,
     get_all_users,
     get_dashboard_stats,
     login_admin,
     require_admin,
+    unblock_user,
 )
-from app.schemas.driver_profile import DriverRejectRequest
+from app.schemas.driver_profile import DriverProfileAdminUpdate, DriverRejectRequest
 from app.services.driver_profile_service import (
+    admin_update_driver_profile,
+    get_all_drivers,
     get_pending_drivers,
     reject_driver,
     verify_driver,
@@ -69,6 +76,50 @@ async def admin_users_endpoint(
     return await get_all_users(session)
 
 
+def _user_not_found_response(exc: AdminUserNotFoundError) -> HTTPException:
+    return HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+
+
+@router.post("/users/{user_id}/block")
+async def admin_block_user_endpoint(
+    user_id: int,
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    try:
+        user = await block_user(session, user_id)
+    except AdminUserNotFoundError as exc:
+        raise _user_not_found_response(exc) from exc
+    return {"user_id": user.id, "is_blocked": user.is_blocked}
+
+
+@router.post("/users/{user_id}/unblock")
+async def admin_unblock_user_endpoint(
+    user_id: int,
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    try:
+        user = await unblock_user(session, user_id)
+    except AdminUserNotFoundError as exc:
+        raise _user_not_found_response(exc) from exc
+    return {"user_id": user.id, "is_blocked": user.is_blocked}
+
+
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_user_endpoint(
+    user_id: int,
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    try:
+        await delete_user(session, user_id)
+    except AdminUserNotFoundError as exc:
+        raise _user_not_found_response(exc) from exc
+    except AdminUserDeleteBlockedError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+
+
 @router.get("/rides")
 async def admin_rides_endpoint(
     _admin: dict = Depends(require_admin),
@@ -103,6 +154,28 @@ async def admin_pending_drivers_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ) -> list[dict]:
     return await get_pending_drivers(session)
+
+
+@router.get("/drivers")
+async def admin_drivers_endpoint(
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> list[dict]:
+    return await get_all_drivers(session)
+
+
+@router.put("/drivers/{user_id}/profile")
+async def admin_update_driver_profile_endpoint(
+    user_id: int,
+    profile_in: DriverProfileAdminUpdate,
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict:
+    profile = await admin_update_driver_profile(session, user_id, profile_in)
+    return {
+        "user_id": profile.user_id,
+        "verification_status": profile.verification_status.value,
+    }
 
 
 @router.post("/drivers/{user_id}/verify")

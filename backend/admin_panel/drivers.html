@@ -3,35 +3,48 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Drivers a valider - Noor Express</title>
+  <title>Chauffeurs à valider - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
-<body>
-  <aside class="sidebar">
-    <h2>Noor Admin</h2>
-    <a href="dashboard.html">Dashboard</a>
-    <a href="zones.html">Zones & tarifs</a>
-    <a href="rides.html">Courses</a>
-    <a href="users.html">Users</a>
-    <a class="active" href="drivers.html">Drivers a valider <span id="drivers-count" class="nav-badge">0</span></a>
-    <button onclick="AdminApi.logout()">Logout</button>
-  </aside>
+<body data-active-page="drivers">
+  <aside class="sidebar" data-admin-sidebar></aside>
   <main class="content">
     <div class="page-head">
-      <h1>Drivers a valider</h1>
-      <button onclick="AdminApi.loadPendingDrivers()">Rafraichir</button>
+      <div>
+        <h1>Chauffeurs à valider</h1>
+        <p class="hint">Validation dossier, documents, véhicule et suspension.</p>
+      </div>
+      <button onclick="AdminApi.loadDrivers()">Actualiser</button>
     </div>
     <p id="message" class="message"></p>
     <section class="panel">
+      <div class="toolbar">
+        <label>Statut
+          <select id="driver-status-filter" onchange="AdminApi.renderDrivers()">
+            <option value="">Tous statuts</option>
+            <option value="pending">pending</option>
+            <option value="verified">verified</option>
+            <option value="rejected">rejected</option>
+            <option value="blocked">blocked</option>
+          </select>
+        </label>
+        <label>Année archive
+          <input data-archive-year type="number" min="2020" max="2100" placeholder="2025" onchange="AdminApi.renderDrivers()">
+        </label>
+        <label>Mois
+          <select data-archive-month onchange="AdminApi.renderDrivers()">
+            <option value="">Tous les mois</option>
+            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option>
+            <option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option>
+            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+          </select>
+        </label>
+      </div>
       <table>
         <thead>
-          <tr>
-            <th>Nom</th>
-            <th>Telephone</th>
-            <th>Soumission</th>
-            <th>Statut</th>
-            <th>Action</th>
-          </tr>
+          <tr><th>Nom</th><th>Téléphone</th><th>Documents</th><th>Véhicule</th><th>Soumission</th><th>Statut</th><th>Action</th></tr>
         </thead>
         <tbody id="drivers-table"></tbody>
       </table>
@@ -39,11 +52,12 @@
   </main>
   <dialog id="driver-modal">
     <div class="modal-form">
-      <h2>Dossier driver</h2>
+      <h2>Dossier chauffeur</h2>
       <div id="driver-modal-content"></div>
     </div>
   </dialog>
-  <script src="assets/api.js"></script>
-  <script>AdminApi.requireAuth(); AdminApi.loadPendingDrivers();</script>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadDrivers();</script>
 </body>
 </html>

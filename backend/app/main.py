@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.api.admin import router as admin_router
 from app.api.admin_pricing import router as admin_pricing_router
+from app.api.admin_simulations import router as admin_simulations_router
 from app.api.auth import router as auth_router
 from app.api.driver import router as driver_router
 from app.api.driver_profile import router as driver_profile_router
@@ -52,6 +53,7 @@ app.mount(
 )
 app.include_router(admin_router)
 app.include_router(admin_pricing_router)
+app.include_router(admin_simulations_router)
 app.include_router(auth_router)
 app.include_router(driver_router)
 app.include_router(driver_profile_router)

@@ -109,6 +109,8 @@ async def get_current_user(
     user = await get_user_by_id(session, int(user_id))
     if user is None:
         raise unauthorized("User not found")
+    if user.is_blocked:
+        raise forbidden("Account is blocked")
 
     return user
 

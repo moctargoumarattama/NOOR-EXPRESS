@@ -4,9 +4,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
+    ENV: str = "development"
     DATABASE_URL: str
     SECRET_KEY: str
     ADMIN_SECRET_KEY: str
+    ENABLE_DEV_SIMULATIONS: bool = False
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     OTP_CODE_DEV: str = "1234"

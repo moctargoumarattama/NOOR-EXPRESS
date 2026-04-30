@@ -8,7 +8,7 @@ import 'package:noor_express_mobile/shared/widgets/app_inline_feedback.dart';
 
 void main() {
   testWidgets(
-      'SearchBottomSheet shows shared loading feedback while creating a ride', (
+      'SearchBottomSheet keeps route preview compact while creating a ride', (
     tester,
   ) async {
     final controller = TextEditingController(text: '2500');
@@ -49,7 +49,8 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.byType(AppInlineFeedback), findsOneWidget);
+    expect(find.text('Estimation en cours...'), findsOneWidget);
+    expect(find.byType(AppInlineFeedback), findsNothing);
     expect(find.byType(AppButton), findsOneWidget);
   });
 

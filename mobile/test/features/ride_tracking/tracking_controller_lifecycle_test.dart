@@ -51,6 +51,88 @@ void main() {
 
     await expectLater(startFuture, completes);
   });
+
+  test('resumeFromLifecycle resyncs the active ride from the backend',
+      () async {
+    final remoteDatasource = _CountingTrackingRemoteDatasource();
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final locationService = LocationService(
+      geolocatorGateway: _FakeGeolocatorGateway(),
+      permissionGateway: const _FakeLocationPermissionGateway(),
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        trackingRemoteDatasourceProvider.overrideWith((ref) {
+          return remoteDatasource;
+        }),
+        trackingWebsocketDatasourceProvider.overrideWith((ref, mode) {
+          return websocketDatasource;
+        }),
+        locationServiceProvider.overrideWith((ref) {
+          return locationService;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      trackingControllerProvider(
+        const TrackingControllerScope(mode: TrackingMode.client),
+      ).notifier,
+    );
+
+    await controller.start();
+    expect(remoteDatasource.fetchActiveRideCalls, 1);
+
+    await controller.resumeFromLifecycle();
+
+    expect(websocketDatasource.resumeCalls, 1);
+    expect(remoteDatasource.fetchActiveRideCalls, 2);
+  });
+
+  test('resumeFromLifecycle clears tracking when backend has no active ride',
+      () async {
+    final staleRide = _rideJson(id: 42, status: 'accepted');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: staleRide,
+      clientRides: [staleRide],
+    );
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final locationService = LocationService(
+      geolocatorGateway: _FakeGeolocatorGateway(),
+      permissionGateway: const _FakeLocationPermissionGateway(),
+    );
+
+    final container = ProviderContainer(
+      overrides: [
+        trackingRemoteDatasourceProvider.overrideWith((ref) {
+          return remoteDatasource;
+        }),
+        trackingWebsocketDatasourceProvider.overrideWith((ref, mode) {
+          return websocketDatasource;
+        }),
+        locationServiceProvider.overrideWith((ref) {
+          return locationService;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.client),
+    );
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+    expect(container.read(provider).ride?.id, 42);
+
+    remoteDatasource.activeRide = null;
+
+    await controller.resumeFromLifecycle();
+
+    expect(container.read(provider).ride, isNull);
+  });
 }
 
 class _FakeTrackingRemoteDatasource extends TrackingRemoteDatasource {
@@ -84,6 +166,8 @@ class _FakeTrackingWebSocketDatasource extends TrackingWebSocketDatasource {
           storageService: const SecureStorageService(),
         );
 
+  int resumeCalls = 0;
+
   @override
   Future<void> connectForClient(int clientId) async {}
 
@@ -94,7 +178,56 @@ class _FakeTrackingWebSocketDatasource extends TrackingWebSocketDatasource {
   Future<void> disconnect() async {}
 
   @override
-  Future<void> resumeFromLifecycle() async {}
+  Future<void> resumeFromLifecycle() async {
+    resumeCalls += 1;
+  }
+}
+
+class _CountingTrackingRemoteDatasource extends TrackingRemoteDatasource {
+  _CountingTrackingRemoteDatasource() : super(apiClient: ApiClient());
+
+  int fetchActiveRideCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>?> fetchActiveRide() async {
+    fetchActiveRideCalls += 1;
+    return null;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchClientRides() async {
+    return const [];
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchDriverRides() async {
+    return const [];
+  }
+}
+
+class _MutableTrackingRemoteDatasource extends TrackingRemoteDatasource {
+  _MutableTrackingRemoteDatasource({
+    required this.activeRide,
+    required this.clientRides,
+  }) : super(apiClient: ApiClient());
+
+  Map<String, dynamic>? activeRide;
+  List<Map<String, dynamic>> clientRides;
+
+  @override
+  Future<Map<String, dynamic>?> fetchActiveRide() async {
+    return activeRide;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchClientRides() async {
+    return clientRides;
+  }
+
+  @override
+  Future<List<Map<String, dynamic>>> fetchDriverRides() async {
+    return const [];
+  }
 }
 
 class _FakeGeolocatorGateway implements GeolocatorGateway {
@@ -156,4 +289,19 @@ Position _position() {
     speed: 0,
     speedAccuracy: 0,
   );
+}
+
+Map<String, dynamic> _rideJson({
+  required int id,
+  required String status,
+}) {
+  return {
+    'id': id,
+    'client_id': 7,
+    'pickup_location': 'Grand Marche',
+    'dropoff_location': 'Aeroport',
+    'estimated_price': 2500,
+    'created_at': '2026-04-24T10:00:00Z',
+    'status': status,
+  };
 }

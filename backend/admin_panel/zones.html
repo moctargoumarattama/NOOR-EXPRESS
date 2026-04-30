@@ -5,17 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Pricing - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
-<body>
-  <aside class="sidebar">
-    <h2>Noor Admin</h2>
-    <a href="dashboard.html">Dashboard</a>
-    <a class="active" href="zones.html">Pricing</a>
-    <a href="rides.html">Courses</a>
-    <a href="users.html">Users</a>
-    <a href="drivers.html">Drivers a valider</a>
-    <button onclick="AdminApi.logout()">Logout</button>
-  </aside>
+<body data-active-page="pricing">
+  <aside class="sidebar" data-admin-sidebar></aside>
   <main class="content">
     <div class="page-head">
       <div>
@@ -132,7 +125,8 @@
     </form>
   </dialog>
 
-  <script src="assets/api.js"></script>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
   <script>
     AdminApi.requireAuth();
     AdminApi.loadPricingAdmin();

@@ -16,7 +16,9 @@ class RouteLayer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currentRoute = route;
-    if (currentRoute == null || currentRoute.polylinePoints.length < 2) {
+    if (currentRoute == null ||
+        currentRoute.polylinePoints.length < 2 ||
+        !currentRoute.hasReliableMetrics) {
       return const SizedBox.shrink();
     }
 

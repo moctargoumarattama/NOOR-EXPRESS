@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Signalements - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+</head>
+<body data-active-page="reports">
+  <aside class="sidebar" data-admin-sidebar></aside>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Signalements</h1>
+        <p class="hint">Tickets ouverts par clients ou chauffeurs.</p>
+      </div>
+      <button onclick="AdminApi.loadReportsPage()">Actualiser</button>
+    </div>
+    <section class="panel">
+      <div class="toolbar">
+        <label>Statut
+          <select id="report-status-filter" onchange="AdminApi.renderReportsPage()">
+            <option value="">Tous</option>
+            <option value="ouvert">ouvert</option>
+            <option value="en_cours">en cours</option>
+            <option value="resolu">résolu</option>
+          </select>
+        </label>
+        <label>Type
+          <select id="report-type-filter" onchange="AdminApi.renderReportsPage()">
+            <option value="">Tous</option>
+            <option value="client">client</option>
+            <option value="driver">chauffeur</option>
+          </select>
+        </label>
+        <label>Année archive
+          <input data-archive-year type="number" min="2020" max="2100" placeholder="2025" onchange="AdminApi.renderReportsPage()">
+        </label>
+        <label>Mois
+          <select data-archive-month onchange="AdminApi.renderReportsPage()">
+            <option value="">Tous les mois</option>
+            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option>
+            <option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
+            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option>
+            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+          </select>
+        </label>
+      </div>
+      <table>
+        <thead><tr><th>ID</th><th>Course</th><th>Type</th><th>Auteur</th><th>Raison</th><th>Statut</th><th>Date</th></tr></thead>
+        <tbody id="reports-table"></tbody>
+      </table>
+    </section>
+  </main>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadReportsPage();</script>
+</body>
+</html>

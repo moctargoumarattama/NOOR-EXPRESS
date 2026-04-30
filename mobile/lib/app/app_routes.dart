@@ -7,6 +7,8 @@ abstract final class AppRoutes {
   static const addressSearch = '/address-search';
   static const profile = '/profile';
   static const help = '/help';
+  static const support = '/support';
+  static const usagePolicy = '/usage-policy';
   static const settings = '/settings';
   static const notifications = '/notifications';
   static const rideDetailBase = '/ride-detail';

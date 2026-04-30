@@ -35,4 +35,38 @@ void main() {
     expect(find.byType(AppInlineFeedback), findsOneWidget);
     expect(find.text('Pas maintenant'), findsOneWidget);
   });
+
+  testWidgets('RideRequestPopup labels pickup as the client pickup point', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Stack(
+          children: [
+            RideRequestPopup(
+              ride: DriverRide(
+                id: 2,
+                pickupLocation: 'Ma position actuelle',
+                dropoffLocation: 'Plateau',
+                status: 'pending',
+                estimatedPrice: 2500,
+                distanceToPickupKm: 1.2,
+                createdAt: DateTime(2026, 4, 24),
+              ),
+              isSubmitting: false,
+              onSend: (_) {},
+              onSkip: () {},
+            ),
+          ],
+        ),
+      ),
+    );
+
+    expect(find.text('Depart : Ma position actuelle'), findsNothing);
+    expect(find.text('Point de prise en charge'), findsOneWidget);
+    expect(find.text('Ma position actuelle'), findsOneWidget);
+    expect(find.text('A 1.2 km de vous'), findsOneWidget);
+    expect(find.text('Destination'), findsOneWidget);
+    expect(find.text('Plateau'), findsOneWidget);
+  });
 }

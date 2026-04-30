@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Paramètres - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+</head>
+<body data-active-page="settings">
+  <aside class="sidebar" data-admin-sidebar></aside>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Paramètres</h1>
+        <p class="hint">Configuration visible non sensible.</p>
+      </div>
+    </div>
+    <section class="panel">
+      <div class="form-grid">
+        <label>Mode maintenance
+          <select id="maintenance-mode">
+            <option value="off">OFF</option>
+            <option value="on">ON</option>
+          </select>
+        </label>
+        <label>Mode app
+          <input id="visible-env" value="development" readonly>
+        </label>
+      </div>
+      <p class="hint">Les variables sensibles ne sont pas affichées dans le panel.</p>
+    </section>
+  </main>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadSettingsPage();</script>
+</body>
+</html>

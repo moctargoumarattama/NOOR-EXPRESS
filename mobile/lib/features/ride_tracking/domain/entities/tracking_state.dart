@@ -24,6 +24,9 @@ class TrackingState {
     this.driverPosition,
     this.driverHeadingDegrees,
     this.etaMinutes,
+    this.distanceRemainingKm,
+    this.isEtaReliable = false,
+    this.routePoints = const [],
     this.errorMessage,
     this.toastMessage,
   });
@@ -46,6 +49,9 @@ class TrackingState {
   final TrackingCoordinates? driverPosition;
   final double? driverHeadingDegrees;
   final int? etaMinutes;
+  final double? distanceRemainingKm;
+  final bool isEtaReliable;
+  final List<TrackingCoordinates> routePoints;
   final String? errorMessage;
   final String? toastMessage;
 
@@ -61,6 +67,9 @@ class TrackingState {
     TrackingCoordinates? driverPosition,
     double? driverHeadingDegrees,
     int? etaMinutes,
+    double? distanceRemainingKm,
+    bool? isEtaReliable,
+    List<TrackingCoordinates>? routePoints,
     String? errorMessage,
     String? toastMessage,
     bool clearRide = false,
@@ -69,6 +78,8 @@ class TrackingState {
     bool clearDriverPosition = false,
     bool clearHeading = false,
     bool clearEta = false,
+    bool clearDistanceRemaining = false,
+    bool clearRoute = false,
     bool clearError = false,
     bool clearToast = false,
   }) {
@@ -87,6 +98,11 @@ class TrackingState {
       driverHeadingDegrees:
           clearHeading ? null : driverHeadingDegrees ?? this.driverHeadingDegrees,
       etaMinutes: clearEta ? null : etaMinutes ?? this.etaMinutes,
+      distanceRemainingKm: clearDistanceRemaining
+          ? null
+          : distanceRemainingKm ?? this.distanceRemainingKm,
+      isEtaReliable: isEtaReliable ?? this.isEtaReliable,
+      routePoints: clearRoute ? const [] : routePoints ?? this.routePoints,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       toastMessage: clearToast ? null : toastMessage ?? this.toastMessage,
     );

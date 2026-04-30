@@ -9,7 +9,7 @@ import 'package:noor_express_mobile/features/map/models/route_result.dart';
 
 void main() {
   testWidgets(
-    'SearchBottomSheet shows route preview with Course, route metrics, and price controls',
+    'SearchBottomSheet shows a compact route preview with visible action',
     (tester) async {
       final controller = TextEditingController(text: '2500');
       addTearDown(controller.dispose);
@@ -47,10 +47,16 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
-      expect(find.text('Course'), findsOneWidget);
-      expect(find.text('6.4 km'), findsOneWidget);
-      expect(find.text('18 min'), findsOneWidget);
-      expect(find.text('Prix recommande'), findsOneWidget);
+      final sheet = tester.widget<DraggableScrollableSheet>(
+        find.byType(DraggableScrollableSheet),
+      );
+      expect(sheet.initialChildSize, lessThanOrEqualTo(0.55));
+      expect(sheet.maxChildSize, lessThanOrEqualTo(0.60));
+      expect(find.text('Grand Marche \u2192 Aeroport'), findsOneWidget);
+      expect(find.text('Grand Marche'), findsNothing);
+      expect(find.text('Aeroport'), findsNothing);
+      expect(find.text('6.4 km \u2022 18 min'), findsOneWidget);
+      expect(find.text('Prix recommande : 2500 FCFA'), findsOneWidget);
       expect(find.byType(PriceSelector), findsOneWidget);
       expect(find.text('Trouver un chauffeur'), findsOneWidget);
     },
@@ -96,8 +102,48 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
 
-    expect(find.text('Prix recommande'), findsNothing);
-    expect(find.textContaining('pas encore fiables'), findsOneWidget);
+    expect(find.text('Estimation indisponible'), findsOneWidget);
+    expect(find.textContaining('pas encore fiables'), findsNothing);
+    expect(find.text('--'), findsNothing);
+    expect(find.textContaining('Prix recommande'), findsNothing);
+  });
+
+  testWidgets('SearchBottomSheet treats fallback routes as unavailable',
+      (tester) async {
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SearchBottomSheet(
+            pickup: _pickup,
+            dropoff: _dropoff,
+            route: RouteResult.fallback(
+              const LatLng(13.5, 2.1),
+              const LatLng(13.48, 2.17),
+            ),
+            priceController: controller,
+            isCreating: false,
+            isEstimatingPrice: false,
+            activeRide: null,
+            onPickupTap: _noop,
+            onDropoffTap: _noop,
+            onClearPickup: _noop,
+            onClearDropoff: _noop,
+            onSubmit: _noop,
+            onOpenActiveRide: _noop,
+            recentDepartureLabels: const ['Plateau', 'Agdal', 'Ocean'],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Estimation indisponible'), findsOneWidget);
+    expect(find.textContaining('Prix recommande'), findsNothing);
+    expect(find.textContaining('indisponibles'), findsNothing);
   });
 }
 

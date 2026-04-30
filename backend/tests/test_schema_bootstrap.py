@@ -81,6 +81,27 @@ class SchemaBootstrapTest(unittest.TestCase):
         ]
         self.assertEqual(agreed_price_columns, ["agreed_price"])
 
+    def test_adds_missing_user_block_flag(self) -> None:
+        with self.engine.begin() as connection:
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY,
+                        phone_number VARCHAR(20) NOT NULL,
+                        role VARCHAR(20) NOT NULL
+                    )
+                    """
+                )
+            )
+
+        with self.engine.begin() as connection:
+            ensure_database_schema_sync(connection)
+
+        inspector = inspect(self.engine)
+        column_names = {column["name"] for column in inspector.get_columns("users")}
+        self.assertIn("is_blocked", column_names)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notifications - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+</head>
+<body data-active-page="notifications">
+  <aside class="sidebar" data-admin-sidebar></aside>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Notifications</h1>
+        <p class="hint">Préparation d'un message simple par cible.</p>
+      </div>
+    </div>
+    <p id="message" class="message"></p>
+    <section class="panel">
+      <div class="form-grid">
+        <label>Cible
+          <select id="notification-target">
+            <option value="clients">clients</option>
+            <option value="drivers">chauffeurs</option>
+          </select>
+        </label>
+        <label>Titre
+          <input id="notification-title" value="Noor Express">
+        </label>
+      </div>
+      <label>Message
+        <textarea id="notification-message" rows="5" placeholder="Votre message..."></textarea>
+      </label>
+      <div class="actions">
+        <button onclick="AdminApi.sendAdminNotification()">Envoyer notification</button>
+      </div>
+    </section>
+  </main>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth();</script>
+</body>
+</html>

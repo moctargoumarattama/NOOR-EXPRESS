@@ -5,11 +5,22 @@ class RouteResult {
     required this.polylinePoints,
     required this.distanceKm,
     required this.durationMinutes,
+    this.isFallback = false,
   });
 
   final List<LatLng> polylinePoints;
   final double distanceKm;
   final int durationMinutes;
+  final bool isFallback;
+
+  bool get hasReliableMetrics {
+    return !isFallback &&
+        distanceKm.isFinite &&
+        distanceKm > 0 &&
+        distanceKm < 1000 &&
+        durationMinutes > 0 &&
+        durationMinutes < 1440;
+  }
 
   factory RouteResult.fromJson(Map<String, dynamic> json) {
     final rawPoints = json['polyline'];
@@ -30,6 +41,7 @@ class RouteResult {
       polylinePoints: points,
       distanceKm: (json['distance_km'] as num?)?.toDouble() ?? 0,
       durationMinutes: (json['duration_min'] as num?)?.toInt() ?? 1,
+      isFallback: json['is_fallback'] == true,
     );
   }
 
@@ -43,6 +55,7 @@ class RouteResult {
       polylinePoints: [origin, destination],
       distanceKm: distance,
       durationMinutes: (distance / 25 * 60).clamp(1, 999).round(),
+      isFallback: true,
     );
   }
 }

@@ -17,11 +17,107 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         if (message == null || message == previous?.lastMessage || !mounted) {
           return;
         }
+        final offerRideId = next.lastOfferRideId;
+        if (offerRideId != null && offerRideId != previous?.lastOfferRideId) {
+          final activeRide = ref.read(clientHomeControllerProvider).activeRide;
+          if (activeRide?.id == offerRideId &&
+              activeRide?.status == 'offered') {
+            unawaited(
+              _loadHomeOffers(
+                offerRideId,
+                force: true,
+                keepExisting: true,
+              ),
+            );
+          }
+        }
         _showSnackBar(message);
         _showNotification(message);
         ref.read(clientRealtimeProvider.notifier).consumeMessage();
       },
     );
+  }
+
+  void _scheduleHomeOfferSync(ClientRide? ride) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      _syncHomeOffers(ride);
+    });
+  }
+
+  void _syncHomeOffers(ClientRide? ride) {
+    if (ride?.status != 'offered') {
+      if (_homeOffersRideId != null ||
+          _homeOffers.isNotEmpty ||
+          _isLoadingHomeOffers) {
+        _updateUi(() {
+          _homeOffersRideId = null;
+          _homeOffers = const [];
+          _isLoadingHomeOffers = false;
+          _acceptingHomeOfferId = null;
+          _rejectingHomeOfferId = null;
+        });
+      }
+      return;
+    }
+
+    if (_homeOffersRideId == ride!.id || _isLoadingHomeOffers) {
+      return;
+    }
+    unawaited(_loadHomeOffers(ride.id));
+  }
+
+  Future<void> _loadHomeOffers(
+    int rideId, {
+    bool force = false,
+    bool keepExisting = false,
+  }) async {
+    if (!force && (_homeOffersRideId == rideId || _isLoadingHomeOffers)) {
+      return;
+    }
+    _updateUi(() {
+      _homeOffersRideId = rideId;
+      if (!keepExisting) {
+        _homeOffers = const [];
+      }
+      _isLoadingHomeOffers = true;
+      _acceptingHomeOfferId = null;
+      _rejectingHomeOfferId = null;
+    });
+
+    try {
+      final offers = await ref
+          .read(negotiationDatasourceProvider('client-home-offers'))
+          .fetchOffers(rideId);
+      offers.sort(
+        (left, right) => left.proposedPrice.compareTo(right.proposedPrice),
+      );
+      if (!mounted) {
+        return;
+      }
+      final activeRide = ref.read(clientHomeControllerProvider).activeRide;
+      if (activeRide?.id != rideId) {
+        return;
+      }
+      _updateUi(() {
+        _homeOffers = offers;
+        _isLoadingHomeOffers = false;
+      });
+    } on NegotiationFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateUi(() => _isLoadingHomeOffers = false);
+      _showSnackBar(
+        _humanizeMessage(
+          error.message,
+          fallback: 'Impossible de charger les offres pour le moment.',
+        ),
+        tone: AppSnackbarTone.error,
+      );
+    }
   }
 
   void _markPriceAsEdited() {
@@ -181,7 +277,6 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       'Votre demande est envoyee. On cherche un chauffeur.',
       tone: AppSnackbarTone.success,
     );
-    context.push(AppRoutes.clientNegotiation(createdRideId));
   }
 
   Future<void> _resumeExistingRide(
@@ -248,6 +343,12 @@ extension _ClientHomeActions on _ClientHomeScreenState {
           _activeRideRouteSnapshotRideId = null;
           _activeRideRouteSnapshot = null;
         }
+        if (_homeOffersRideId == ride.id) {
+          _homeOffersRideId = null;
+          _homeOffers = const [];
+          _acceptingHomeOfferId = null;
+          _rejectingHomeOfferId = null;
+        }
       });
       _showSnackBar('Demande annulee.', tone: AppSnackbarTone.success);
     } on NegotiationFailure catch (error) {
@@ -258,6 +359,99 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         _humanizeMessage(
           error.message,
           fallback: 'Impossible d annuler la demande pour le moment.',
+        ),
+        tone: AppSnackbarTone.error,
+      );
+    }
+  }
+
+  Future<void> _acceptHomeOffer(RideOfferModel offer) async {
+    final ride = ref.read(clientHomeControllerProvider).activeRide;
+    if (ride == null || _acceptingHomeOfferId != null) {
+      return;
+    }
+    _updateUi(() {
+      _acceptingHomeOfferId = offer.offerId;
+      _rejectingHomeOfferId = null;
+    });
+
+    try {
+      await ref
+          .read(negotiationDatasourceProvider('client-home-offers'))
+          .acceptOffer(offer.offerId);
+      if (!mounted) {
+        return;
+      }
+      final activeRide = await _resyncHomeTruth();
+      if (!mounted) {
+        return;
+      }
+      if (activeRide != null &&
+          activeRide.id == ride.id &&
+          _isTrackingRideStatus(activeRide)) {
+        context.go(AppRoutes.clientMapWithRide(ride.id));
+        return;
+      }
+      _updateUi(() => _acceptingHomeOfferId = null);
+      _showSnackBar(
+        'Offre traitee. On remet votre demande a jour.',
+        tone: AppSnackbarTone.info,
+      );
+    } on NegotiationFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateUi(() => _acceptingHomeOfferId = null);
+      _showSnackBar(
+        _humanizeMessage(
+          error.message,
+          fallback: 'Impossible d accepter cette offre pour le moment.',
+        ),
+        tone: AppSnackbarTone.error,
+      );
+    }
+  }
+
+  Future<void> _rejectHomeOffer(RideOfferModel offer) async {
+    if (_rejectingHomeOfferId != null || _acceptingHomeOfferId != null) {
+      return;
+    }
+    final rideId = ref.read(clientHomeControllerProvider).activeRide?.id;
+    _updateUi(() {
+      _rejectingHomeOfferId = offer.offerId;
+      _acceptingHomeOfferId = null;
+    });
+
+    try {
+      await ref
+          .read(negotiationDatasourceProvider('client-home-offers'))
+          .rejectOffer(offer.offerId);
+      if (!mounted) {
+        return;
+      }
+      final activeRide = await _resyncHomeTruth();
+      if (!mounted) {
+        return;
+      }
+      if (activeRide?.id == rideId && activeRide?.status == 'offered') {
+        await _loadHomeOffers(activeRide!.id, force: true);
+      } else {
+        _updateUi(() {
+          _homeOffersRideId = null;
+          _homeOffers = const [];
+          _rejectingHomeOfferId = null;
+        });
+      }
+      _showSnackBar('Offre refusee.', tone: AppSnackbarTone.info);
+    } on NegotiationFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _updateUi(() => _rejectingHomeOfferId = null);
+      _showSnackBar(
+        _humanizeMessage(
+          error.message,
+          fallback: 'Impossible de refuser cette offre pour le moment.',
         ),
         tone: AppSnackbarTone.error,
       );
@@ -339,6 +533,17 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     } else {
       context.go(AppRoutes.clientMapWithRide(ride.id));
     }
+  }
+
+  Future<ClientRide?> _resyncHomeTruth() async {
+    await ref.read(clientHomeControllerProvider.notifier).resumeFromLifecycle();
+    return ref.read(clientHomeControllerProvider).activeRide;
+  }
+
+  bool _isTrackingRideStatus(ClientRide ride) {
+    return ride.status == 'accepted' ||
+        ride.status == 'arrived' ||
+        ride.status == 'started';
   }
 
   Future<void> _openGeneralReport() async {

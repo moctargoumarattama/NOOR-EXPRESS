@@ -9,22 +9,38 @@ class RouteSummaryCard extends StatelessWidget {
     required this.dropoffLabel,
     this.distanceKm,
     this.durationMinutes,
+    this.isRouteReliable = true,
     this.recommendedPrice,
     this.reliabilityMessage,
+    this.compact = false,
   });
 
   final String pickupLabel;
   final String dropoffLabel;
   final double? distanceKm;
   final int? durationMinutes;
+  final bool isRouteReliable;
   final double? recommendedPrice;
   final String? reliabilityMessage;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final reliableDistance = _isReliableDistance(distanceKm);
-    final reliableDuration = _isReliableDuration(durationMinutes);
+    final reliableDistance = isRouteReliable && _isReliableDistance(distanceKm);
+    final reliableDuration =
+        isRouteReliable && _isReliableDuration(durationMinutes);
     final reliablePrice = _isReliablePrice(recommendedPrice);
+
+    if (compact) {
+      return _CompactRouteSummaryCard(
+        pickupLabel: pickupLabel,
+        dropoffLabel: dropoffLabel,
+        distanceKm: reliableDistance ? distanceKm : null,
+        durationMinutes: reliableDuration ? durationMinutes : null,
+        recommendedPrice: reliablePrice ? recommendedPrice : null,
+        reliabilityMessage: reliabilityMessage,
+      );
+    }
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -91,6 +107,107 @@ class RouteSummaryCard extends StatelessWidget {
 
   bool _isReliablePrice(double? value) {
     return value != null && value.isFinite && value > 0 && value <= 500000;
+  }
+}
+
+class _CompactRouteSummaryCard extends StatelessWidget {
+  const _CompactRouteSummaryCard({
+    required this.pickupLabel,
+    required this.dropoffLabel,
+    required this.distanceKm,
+    required this.durationMinutes,
+    required this.recommendedPrice,
+    required this.reliabilityMessage,
+  });
+
+  final String pickupLabel;
+  final String dropoffLabel;
+  final double? distanceKm;
+  final int? durationMinutes;
+  final double? recommendedPrice;
+  final String? reliabilityMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasFullEstimate = distanceKm != null &&
+        durationMinutes != null &&
+        recommendedPrice != null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAF9),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE8EEE9)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.route_rounded,
+                color: AppColors.emerald,
+                size: 19,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '$pickupLabel \u2192 $dropoffLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (hasFullEstimate)
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
+              children: [
+                Text(
+                  '${distanceKm!.toStringAsFixed(1)} km \u2022 '
+                  '$durationMinutes min',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.ink,
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+                Text(
+                  'Prix recommande : ${recommendedPrice!.round()} FCFA',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: AppColors.emerald,
+                        fontWeight: FontWeight.w900,
+                      ),
+                ),
+              ],
+            )
+          else
+            Text(
+              _compactReliabilityMessage,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.stone,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String get _compactReliabilityMessage {
+    final message = reliabilityMessage?.trim();
+    if (message != null && message.isNotEmpty) {
+      return message;
+    }
+    return 'Estimation indisponible';
   }
 }
 

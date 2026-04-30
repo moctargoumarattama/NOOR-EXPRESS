@@ -85,6 +85,7 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
           Positioned.fill(
             child: MapView(
               status: ride?.status ?? RideTrackingStatus.pending,
+              routePoints: state.routePoints,
               currentPosition: state.currentPosition,
               driverPosition: state.driverPosition,
               pickupPosition: pickup,
@@ -99,9 +100,9 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.46),
+                    Colors.black.withValues(alpha: 0.18),
                     Colors.transparent,
-                    Colors.black.withValues(alpha: 0.36),
+                    Colors.black.withValues(alpha: 0.12),
                   ],
                 ),
               ),
@@ -115,7 +116,8 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
                 children: [
                   TrackingTopBar(
                     connectionState: state.connectionState,
-                    etaMinutes: state.etaMinutes,
+                    etaMinutes: state.isEtaReliable ? state.etaMinutes : null,
+                    distanceRemainingKm: state.distanceRemainingKm,
                     onBack: () {
                       if (context.canPop()) {
                         context.pop();
@@ -176,6 +178,8 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
                 ride: ride,
                 counterpart: state.counterpart,
                 roleLabel: 'Votre chauffeur',
+                distanceRemainingKm: state.distanceRemainingKm,
+                statusLabel: trackingStatusLabel(ride.status),
               ),
             ),
         ],

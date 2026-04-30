@@ -14,6 +14,7 @@ class ClientRealtimeState {
   const ClientRealtimeState({
     required this.connectionStatus,
     this.lastMessage,
+    this.lastOfferRideId,
     this.lastDriverPosition,
   });
 
@@ -22,18 +23,23 @@ class ClientRealtimeState {
 
   final WebSocketStatus connectionStatus;
   final String? lastMessage;
+  final int? lastOfferRideId;
   final RealtimeDriverPosition? lastDriverPosition;
 
   ClientRealtimeState copyWith({
     WebSocketStatus? connectionStatus,
     String? lastMessage,
+    int? lastOfferRideId,
     RealtimeDriverPosition? lastDriverPosition,
     bool clearLastMessage = false,
+    bool clearLastOfferRideId = false,
     bool clearLastDriverPosition = false,
   }) {
     return ClientRealtimeState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
       lastMessage: clearLastMessage ? null : lastMessage ?? this.lastMessage,
+      lastOfferRideId:
+          clearLastOfferRideId ? null : lastOfferRideId ?? this.lastOfferRideId,
       lastDriverPosition: clearLastDriverPosition
           ? null
           : lastDriverPosition ?? this.lastDriverPosition,
@@ -94,6 +100,24 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
         return;
       }
 
+      if (type == 'new_offer') {
+        final offerJson = message['offer'];
+        final offerRideId = offerJson is Map<String, dynamic>
+            ? ((offerJson['ride_id'] ??
+                    offerJson['ride_request_id'] ??
+                    message['ride_id'] ??
+                    message['ride_request_id']) as num?)
+                ?.toInt()
+            : ((message['ride_id'] ?? message['ride_request_id']) as num?)
+                ?.toInt();
+        await _ref.read(clientHomeControllerProvider.notifier).loadRides();
+        state = state.copyWith(
+          lastOfferRideId: offerRideId,
+          lastMessage: 'Nouvelle proposition recue.',
+        );
+        return;
+      }
+
       if (rideId == null || status == null) {
         return;
       }
@@ -124,11 +148,16 @@ class ClientRealtimeController extends StateNotifier<ClientRealtimeState> {
     _statusSubscription = null;
     _currentClientId = null;
     await _websocketService.disconnect();
-    state = const ClientRealtimeState.initial();
+    if (mounted) {
+      state = const ClientRealtimeState.initial();
+    }
   }
 
   void consumeMessage() {
-    state = state.copyWith(clearLastMessage: true);
+    state = state.copyWith(
+      clearLastMessage: true,
+      clearLastOfferRideId: true,
+    );
   }
 
   void consumeDriverPosition() {

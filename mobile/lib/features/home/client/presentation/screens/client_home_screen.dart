@@ -18,6 +18,7 @@ import '../../../../map/widgets/eta_overlay.dart';
 import '../../../../ride_tracking/presentation/widgets/report_bottom_sheet.dart';
 import '../../../../ride_tracking/data/datasources/tracking_remote_datasource.dart';
 import '../../../../negotiation/data/datasources/negotiation_datasource.dart';
+import '../../../../negotiation/data/models/ride_offer_model.dart';
 import '../../data/models/client_ride.dart';
 import '../client_active_ride_guard.dart';
 import '../controllers/client_home_controller.dart';
@@ -52,6 +53,11 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
   bool _priceManuallyEdited = false;
   int? _activeRideRouteSnapshotRideId;
   RouteResult? _activeRideRouteSnapshot;
+  int? _homeOffersRideId;
+  List<RideOfferModel> _homeOffers = const [];
+  bool _isLoadingHomeOffers = false;
+  int? _acceptingHomeOfferId;
+  int? _rejectingHomeOfferId;
 
   @override
   void initState() {
@@ -95,6 +101,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     final activeRide = homeState.activeRide;
     final displayName = _displayName(session);
     final initials = _initials(displayName);
+    _scheduleHomeOfferSync(activeRide);
 
     return Scaffold(
       resizeToAvoidBottomInset: false,
@@ -176,6 +183,11 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
                 ? _activeRideRouteSnapshot
                 : null,
             nearbyDriversCount: mapState.drivers.length,
+            offers:
+                activeRide?.id == _homeOffersRideId ? _homeOffers : const [],
+            isLoadingOffers: _isLoadingHomeOffers,
+            acceptingOfferId: _acceptingHomeOfferId,
+            rejectingOfferId: _rejectingHomeOfferId,
             activeRide: activeRide,
             recentDepartureLabels: _recentDepartureLabels(homeState.rides),
             onPickupTap: () => _openAddressSearch(AddressSearchMode.pickup),
@@ -185,6 +197,9 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             onSubmit: _submitRide,
             onOpenActiveRide: () => _openRide(activeRide),
             onCancelActiveRide: () => _cancelActiveRide(activeRide),
+            onAcceptOffer: _acceptHomeOffer,
+            onRejectOffer: _rejectHomeOffer,
+            onViewAllOffers: () => _openRide(activeRide),
           ),
           HamburgerMenu(
             isOpen: _isMenuOpen,
@@ -211,6 +226,14 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             onHelpTap: () {
               setState(() => _isMenuOpen = false);
               context.push(AppRoutes.help);
+            },
+            onSupportTap: () {
+              setState(() => _isMenuOpen = false);
+              context.push(AppRoutes.support);
+            },
+            onPolicyTap: () {
+              setState(() => _isMenuOpen = false);
+              context.push(AppRoutes.usagePolicy);
             },
             onReportTap: _openGeneralReport,
             onDriverModeTap: () {

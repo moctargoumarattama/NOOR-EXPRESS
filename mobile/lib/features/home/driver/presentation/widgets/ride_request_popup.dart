@@ -98,14 +98,20 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
                       ),
                       const SizedBox(height: 18),
                       _AddressLine(
-                          label: 'Depart', value: widget.ride.pickupLocation),
+                        label: 'Point de prise en charge',
+                        value: widget.ride.pickupLocation,
+                        subtitle: _distanceToPickupLabel(
+                          widget.ride.distanceToPickupKm,
+                        ),
+                      ),
                       const Padding(
                         padding: EdgeInsets.only(left: 11, top: 4, bottom: 4),
                         child: Icon(Icons.arrow_downward_rounded, size: 20),
                       ),
                       _AddressLine(
-                          label: 'Destination',
-                          value: widget.ride.dropoffLocation),
+                        label: 'Destination',
+                        value: widget.ride.dropoffLocation,
+                      ),
                       const SizedBox(height: 18),
                       Text(
                         'Prix propose : ${widget.ride.estimatedPrice.toStringAsFixed(0)} FCFA',
@@ -183,10 +189,15 @@ class _RideRequestPopupState extends State<RideRequestPopup> {
 }
 
 class _AddressLine extends StatelessWidget {
-  const _AddressLine({required this.label, required this.value});
+  const _AddressLine({
+    required this.label,
+    required this.value,
+    this.subtitle,
+  });
 
   final String label;
   final String value;
+  final String? subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -195,14 +206,53 @@ class _AddressLine extends StatelessWidget {
         const Icon(Icons.place_rounded, color: Color(0xFF1B8A5A)),
         const SizedBox(width: 10),
         Expanded(
-      child: Text(
-        '$label : $value',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Color(0xFF757575),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  subtitle!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Color(0xFF1B8A5A),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
   }
+}
+
+String? _distanceToPickupLabel(double? distanceKm) {
+  if (distanceKm == null || !distanceKm.isFinite || distanceKm <= 0) {
+    return null;
+  }
+  return 'A ${distanceKm.toStringAsFixed(1)} km de vous';
 }

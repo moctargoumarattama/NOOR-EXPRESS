@@ -16,6 +16,9 @@ class EtaOverlay extends StatelessWidget {
     if (currentRoute == null) {
       return const SizedBox.shrink();
     }
+    if (!currentRoute.hasReliableMetrics) {
+      return const SizedBox.shrink();
+    }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),

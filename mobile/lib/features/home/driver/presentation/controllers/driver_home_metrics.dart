@@ -11,17 +11,6 @@ DriverRide? driverPendingRide(List<DriverRide> rides, int? pendingRideId) {
   return rides.isEmpty ? null : rides.first;
 }
 
-DriverRide? driverActiveRide(List<DriverRide> rides) {
-  for (final ride in rides) {
-    if (ride.status == 'accepted' ||
-        ride.status == 'arrived' ||
-        ride.status == 'started') {
-      return ride;
-    }
-  }
-  return null;
-}
-
 int driverTodayRides(List<DriverRide> rides) {
   final now = DateTime.now();
   return rides.where((ride) {

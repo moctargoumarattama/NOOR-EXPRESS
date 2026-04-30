@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../network/api_client.dart';
 import 'local_notification_service.dart';
+import 'notification_event.dart';
 import 'notification_handler.dart';
 
 @pragma('vm:entry-point')
@@ -60,8 +61,8 @@ class FcmService {
 
     try {
       final token = await FirebaseMessaging.instance.getToken();
-      if (token != null && token.isNotEmpty) {
-        await _sendToken(token);
+      if (isUsableFcmToken(token)) {
+        await _sendToken(token!);
       }
     } catch (error) {
       debugPrint('[FCM] Token indisponible: $error');
@@ -78,10 +79,14 @@ class FcmService {
   }
 
   Future<void> _sendToken(String token) async {
+    if (!isUsableFcmToken(token)) {
+      return;
+    }
+
     try {
       await _apiClient.dio.post<Map<String, dynamic>>(
         '/notifications/token',
-        data: {'fcm_token': token},
+        data: {'fcm_token': token.trim()},
       );
     } on DioException catch (error) {
       debugPrint('[FCM] Enregistrement token impossible: ${error.message}');
@@ -89,8 +94,18 @@ class FcmService {
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    final type = message.data['type']?.toString();
+    if (shouldPresentForegroundInAppNotification(type)) {
+      _notificationHandler.showInApp(
+        message.data,
+        title: message.notification?.title,
+        body: message.notification?.body,
+      );
+      return;
+    }
+
     if (!shouldPresentForegroundLocalNotification(
-      message.data['type']?.toString(),
+      type,
     )) {
       return;
     }
@@ -111,24 +126,14 @@ final fcmServiceProvider = Provider<FcmService>((ref) {
 });
 
 bool shouldPresentForegroundLocalNotification(String? type) {
-  if (type == null || type.trim().isEmpty) {
-    return true;
-  }
+  return !isCriticalNotificationType(type);
+}
 
-  return switch (type) {
-    'new_offer' ||
-    'offer_accepted' ||
-    'offer_rejected' ||
-    'offer_invalidated' ||
-    'new_ride_request' ||
-    'ride_accepted' ||
-    'driver_en_route' ||
-    'driver_arrived' ||
-    'ride_started' ||
-    'ride_completed' ||
-    'ride_cancelled' ||
-    'ride_reopened' =>
-      false,
-    _ => true,
-  };
+bool shouldPresentForegroundInAppNotification(String? type) {
+  return isCriticalNotificationType(type);
+}
+
+bool isUsableFcmToken(String? token) {
+  final value = token?.trim();
+  return value != null && value.length >= 20;
 }

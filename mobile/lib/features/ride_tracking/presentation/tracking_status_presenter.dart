@@ -12,6 +12,29 @@ class TrackingStatusPresentation {
   final bool showSpinner;
 }
 
+String trackingStatusLabel(RideTrackingStatus status) {
+  switch (status) {
+    case RideTrackingStatus.pending:
+      return 'Recherche';
+    case RideTrackingStatus.offered:
+      return 'Proposition';
+    case RideTrackingStatus.accepted:
+      return 'En route';
+    case RideTrackingStatus.arrived:
+      return 'Arrive';
+    case RideTrackingStatus.started:
+      return 'En cours';
+    case RideTrackingStatus.completed:
+      return 'Termine';
+    case RideTrackingStatus.cancelled:
+      return 'Annule';
+    case RideTrackingStatus.expired:
+      return 'Expire';
+    case RideTrackingStatus.unknown:
+      return 'A jour';
+  }
+}
+
 TrackingStatusPresentation buildClientTrackingStatusPresentation(
   RideTrackingModel? ride,
 ) {

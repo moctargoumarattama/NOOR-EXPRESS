@@ -85,4 +85,13 @@ void main() {
       expect(presentation.showSpinner, isFalse);
     });
   });
+
+  group('trackingStatusLabel', () {
+    test('uses short production labels for active tracking states', () {
+      expect(trackingStatusLabel(RideTrackingStatus.accepted), 'En route');
+      expect(trackingStatusLabel(RideTrackingStatus.arrived), 'Arrive');
+      expect(trackingStatusLabel(RideTrackingStatus.started), 'En cours');
+      expect(trackingStatusLabel(RideTrackingStatus.completed), 'Termine');
+    });
+  });
 }

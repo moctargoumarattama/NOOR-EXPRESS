@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noor_express_mobile/app/app_routes.dart';
 import 'package:noor_express_mobile/core/notifications/local_notification_service.dart';
@@ -5,48 +6,88 @@ import 'package:noor_express_mobile/core/notifications/notification_handler.dart
 
 void main() {
   group('notificationRouteForPayload', () {
-    test('routes accepted client rides to tracking', () {
-      expect(
-        notificationRouteForPayload({'type': 'ride_accepted', 'ride_id': 18}),
-        AppRoutes.clientMapWithRide(18),
-      );
+    test('routes all critical client events to client home for backend resync',
+        () {
+      for (final type in [
+        'new_offer',
+        'ride_accepted',
+        'driver_arrived',
+        'ride_started',
+        'ride_completed',
+        'ride_cancelled',
+        'ride_reopened',
+      ]) {
+        expect(
+          notificationRouteForPayload({
+            'type': type,
+            'ride_id': 18,
+            'target_role': 'client',
+          }),
+          AppRoutes.clientHome,
+          reason: type,
+        );
+      }
     });
 
-    test('routes reopened client rides back to negotiation', () {
-      expect(
-        notificationRouteForPayload({'type': 'ride_reopened', 'ride_id': 11}),
-        AppRoutes.clientNegotiation(11),
-      );
+    test('routes all critical driver events to driver home for backend resync',
+        () {
+      for (final type in [
+        'offer_accepted',
+        'offer_invalidated',
+        'offer_rejected',
+        'ride_completed',
+        'ride_cancelled',
+        'new_ride_request',
+      ]) {
+        expect(
+          notificationRouteForPayload({
+            'type': type,
+            'ride_id': 21,
+            'target_role': 'driver',
+          }),
+          AppRoutes.driverHome,
+          reason: type,
+        );
+      }
     });
+  });
 
-    test('routes invalidated driver-side events to driver home', () {
-      expect(
-        notificationRouteForPayload(
-          {'type': 'offer_invalidated', 'ride_id': 7, 'target_role': 'driver'},
-        ),
-        AppRoutes.driverHome,
-      );
-      expect(
-        notificationRouteForPayload(
-          {'type': 'offer_rejected', 'ride_id': 7, 'target_role': 'driver'},
-        ),
-        AppRoutes.driverHome,
-      );
-      expect(
-        notificationRouteForPayload(
-          {'type': 'ride_cancelled', 'ride_id': 7, 'target_role': 'driver'},
-        ),
-        AppRoutes.driverHome,
-      );
-    });
+  group('NotificationHandler', () {
+    testWidgets('opens home and resyncs backend truth after a notification tap',
+        (tester) async {
+      BuildContext? capturedContext;
+      String? openedRoute;
+      Map<String, dynamic>? resyncedPayload;
+      final payload = {
+        'type': 'ride_completed',
+        'ride_id': 21,
+        'target_role': 'driver',
+      };
 
-    test('routes completed driver rides back to the driver tracking flow', () {
-      expect(
-        notificationRouteForPayload(
-          {'type': 'ride_completed', 'ride_id': 21, 'target_role': 'driver'},
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) {
+              capturedContext = context;
+              return const SizedBox.shrink();
+            },
+          ),
         ),
-        AppRoutes.driverMapWithRide(21),
       );
+
+      final handler = NotificationHandler(
+        contextReader: () => capturedContext,
+        navigator: (context, route) => openedRoute = route,
+        backendResync: (context, data) async {
+          resyncedPayload = data;
+        },
+      );
+
+      handler.handleTap(payload);
+      await tester.pump();
+
+      expect(openedRoute, AppRoutes.driverHome);
+      expect(resyncedPayload, payload);
     });
   });
 

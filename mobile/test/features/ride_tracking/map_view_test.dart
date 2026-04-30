@@ -3,6 +3,36 @@ import 'package:noor_express_mobile/features/ride_tracking/data/models/ride_trac
 import 'package:noor_express_mobile/features/ride_tracking/presentation/widgets/map_view.dart';
 
 void main() {
+  group('trackingRoutePolylinePoints', () {
+    test('prefers reliable route points over the fallback straight segment', () {
+      final points = trackingRoutePolylinePoints(
+        routePoints: const [
+          TrackingCoordinates(latitude: 13.51, longitude: 2.11),
+          TrackingCoordinates(latitude: 13.52, longitude: 2.12),
+          TrackingCoordinates(latitude: 13.53, longitude: 2.13),
+        ],
+        fallbackStart: const TrackingCoordinates(latitude: 13.40, longitude: 2.01),
+        fallbackEnd: const TrackingCoordinates(latitude: 13.50, longitude: 2.10),
+      );
+
+      expect(points, hasLength(3));
+      expect(points.first.latitude, 13.51);
+      expect(points.last.longitude, 2.13);
+    });
+
+    test('falls back to a straight segment when route points are missing', () {
+      final points = trackingRoutePolylinePoints(
+        routePoints: const [],
+        fallbackStart: const TrackingCoordinates(latitude: 13.40, longitude: 2.01),
+        fallbackEnd: const TrackingCoordinates(latitude: 13.50, longitude: 2.10),
+      );
+
+      expect(points, hasLength(2));
+      expect(points.first.latitude, 13.40);
+      expect(points.last.longitude, 2.10);
+    });
+  });
+
   group('shouldRefitTrackingViewport', () {
     test('refits when the initial driver position becomes available', () {
       final shouldRefit = shouldRefitTrackingViewport(

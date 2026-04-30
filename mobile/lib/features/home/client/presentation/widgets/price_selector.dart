@@ -133,45 +133,67 @@ class _PriceSelectorState extends State<PriceSelector> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: const Color(0xFFE8EEE9)),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
+          Text(
+            'Prix propose',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.ink,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 8),
           Row(
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Prix propose',
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: AppColors.ink,
-                            fontWeight: FontWeight.w900,
-                          ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _helperText(hasInvalidInput),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: hasInvalidInput
-                                ? AppColors.coral
-                                : AppColors.stone,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
               _StepButton(
                 key: const ValueKey('price-selector-decrease'),
                 icon: Icons.remove_rounded,
                 onPressed: canDecrease ? () => _adjust(-widget.step) : null,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SizedBox(
+                  height: 52,
+                  child: TextField(
+                    controller: widget.controller,
+                    enabled: widget.enabled,
+                    textAlign: TextAlign.center,
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                    ],
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          color: AppColors.emerald,
+                          fontWeight: FontWeight.w900,
+                        ),
+                    decoration: InputDecoration(
+                      hintText: widget.recommendedPrice?.round().toString(),
+                      suffixText: 'FCFA',
+                      suffixStyle:
+                          Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: AppColors.emerald,
+                                fontWeight: FontWeight.w900,
+                              ),
+                      filled: true,
+                      fillColor: AppColors.mint,
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 12,
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(width: 8),
               _StepButton(
@@ -181,25 +203,17 @@ class _PriceSelectorState extends State<PriceSelector> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: widget.controller,
-            enabled: widget.enabled,
-            keyboardType: TextInputType.number,
-            inputFormatters: [
-              FilteringTextInputFormatter.digitsOnly,
-            ],
-            decoration: InputDecoration(
-              labelText: 'Votre prix',
-              suffixText: 'FCFA',
-              filled: true,
-              fillColor: const Color(0xFFF8F9FA),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
+          if (hasInvalidInput) ...[
+            const SizedBox(height: 6),
+            Text(
+              _helperText(hasInvalidInput),
+              textAlign: TextAlign.center,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.coral,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
-          ),
+          ],
         ],
       ),
     );

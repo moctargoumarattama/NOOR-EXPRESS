@@ -58,6 +58,8 @@ void main() {
             onNotificationsTap: _noop,
             onSettingsTap: _noop,
             onHelpTap: _noop,
+            onSupportTap: _noop,
+            onPolicyTap: _noop,
             onReportTap: _noop,
             onDriverModeTap: _noop,
             onLogout: _noop,

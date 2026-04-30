@@ -66,6 +66,28 @@ class DriverRidesRepository {
     }
   }
 
+  Future<DriverRide?> fetchActiveRide() async {
+    try {
+      final response = await _apiClient.dio.get<Map<String, dynamic>>(
+        '/ride-requests/active',
+      );
+
+      final payload = response.data;
+      if (payload == null || payload.isEmpty) {
+        return null;
+      }
+
+      return DriverRide.fromJson(payload);
+    } on DioException catch (error) {
+      throw DriverRideFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage: 'Impossible de charger la course active.',
+        ),
+      );
+    }
+  }
+
   Future<DriverRide> rejectRide(int rideId, {String? reason}) async {
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(

@@ -108,7 +108,28 @@ def _ensure_mysql_v1_statuses(connection: Connection) -> None:
         )
 
 
+def _ensure_user_block_flag(connection: Connection) -> None:
+    table_names = _table_names(connection)
+    if "users" not in table_names:
+        return
+
+    user_columns = _column_names(connection, "users")
+    if "is_blocked" in user_columns:
+        return
+
+    if connection.dialect.name == "mysql":
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT FALSE")
+        )
+        return
+
+    connection.execute(
+        text("ALTER TABLE users ADD COLUMN is_blocked BOOLEAN NOT NULL DEFAULT 0")
+    )
+
+
 def ensure_database_schema_sync(connection: Connection) -> None:
+    _ensure_user_block_flag(connection)
     _ensure_ride_request_agreed_price(connection)
     _ensure_mysql_v1_statuses(connection)
 

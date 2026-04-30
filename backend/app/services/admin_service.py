@@ -9,6 +9,7 @@ import bcrypt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
@@ -17,12 +18,20 @@ from app.db.database import get_db_session
 from app.models.admin import Admin
 from app.models.ride_report import RideReport, RideReportStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
-from app.models.user import User
+from app.models.user import DriverStatus, User
 
 admin_bearer_scheme = HTTPBearer(auto_error=False)
 
 
 class AdminAlreadyExistsError(Exception):
+    pass
+
+
+class AdminUserDeleteBlockedError(Exception):
+    pass
+
+
+class AdminUserNotFoundError(Exception):
     pass
 
 
@@ -115,10 +124,53 @@ async def get_all_users(session: AsyncSession) -> list[dict[str, Any]]:
             "phone_number": user.phone_number,
             "name": user.name,
             "role": user.role.value,
+            "is_blocked": bool(user.is_blocked),
             "created_at": user.created_at,
         }
         for user in result.scalars().all()
     ]
+
+
+async def block_user(session: AsyncSession, user_id: int) -> User:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    user.is_blocked = True
+    user.refresh_token = None
+    user.fcm_token = None
+    if user.role.value == "driver":
+        user.is_available = False
+        user.driver_status = DriverStatus.OFFLINE
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def unblock_user(session: AsyncSession, user_id: int) -> User:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    user.is_blocked = False
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def delete_user(session: AsyncSession, user_id: int) -> None:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    await session.delete(user)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise AdminUserDeleteBlockedError(
+            "User has related data. Block this account instead."
+        ) from exc
 
 
 async def get_all_rides(session: AsyncSession) -> list[dict[str, Any]]:

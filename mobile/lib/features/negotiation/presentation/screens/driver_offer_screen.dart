@@ -101,7 +101,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(negotiationControllerProvider(_scope));
-    final ride = state.ride ?? _scope.initialRide;
+    final ride = _mergeInitialDistance(state.ride, _scope.initialRide);
     final recoveryMessage = _recoveryMessage(state, ride);
 
     return Scaffold(
@@ -119,12 +119,12 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                       const Icon(Icons.arrow_back_rounded, color: Colors.white),
                 ),
                 const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Choisissez votre prix',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            color: Colors.white,
-                          ),
+                Expanded(
+                  child: Text(
+                    'Choisissez votre prix',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          color: Colors.white,
+                        ),
                   ),
                 ),
               ],
@@ -156,7 +156,7 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _DetailLine(
-                    label: 'Depart',
+                    label: 'Point de prise en charge',
                     value: ride?.pickup ?? 'En chargement...',
                   ),
                   const SizedBox(height: 10),
@@ -172,10 +172,10 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
                   ),
                   const SizedBox(height: 10),
                   _DetailLine(
-                    label: 'Distance estimee',
+                    label: 'Distance chauffeur-client',
                     value: ride?.distanceKm == null
                         ? 'Indisponible'
-                        : '${ride!.distanceKm!.toStringAsFixed(1)} km',
+                        : _distanceToClientLabel(ride!.distanceKm),
                   ),
                 ],
               ),
@@ -274,6 +274,27 @@ class _DriverOfferScreenState extends ConsumerState<DriverOfferScreen> {
   }
 
   String _formatFcfa(double value) => '${value.round()} FCFA';
+
+  NegotiationRideModel? _mergeInitialDistance(
+    NegotiationRideModel? ride,
+    NegotiationRideModel? initialRide,
+  ) {
+    if (ride == null) {
+      return initialRide;
+    }
+    final initialDistance = initialRide?.distanceKm;
+    if (ride.distanceKm != null || initialDistance == null) {
+      return ride;
+    }
+    return ride.copyWith(distanceKm: initialDistance);
+  }
+
+  String _distanceToClientLabel(double? distanceKm) {
+    if (distanceKm == null || !distanceKm.isFinite || distanceKm <= 0) {
+      return 'Indisponible';
+    }
+    return 'A ${distanceKm.toStringAsFixed(1)} km de vous';
+  }
 
   String? _recoveryMessage(
     NegotiationState state,

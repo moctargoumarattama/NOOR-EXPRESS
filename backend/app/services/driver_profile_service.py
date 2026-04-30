@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.driver_profile import DriverProfile, DriverVerificationStatus
 from app.models.user import User, UserRole
-from app.schemas.driver_profile import DriverProfileCreate
+from app.schemas.driver_profile import DriverProfileAdminUpdate, DriverProfileCreate
 
 
 async def create_or_update_profile(
@@ -59,6 +59,47 @@ async def get_pending_drivers(session: AsyncSession) -> list[dict]:
     ]
 
 
+async def get_all_drivers(session: AsyncSession) -> list[dict]:
+    result = await session.execute(
+        select(DriverProfile, User)
+        .join(User, DriverProfile.user_id == User.id)
+        .where(User.role == UserRole.DRIVER)
+        .order_by(DriverProfile.submitted_at.desc(), DriverProfile.created_at.desc())
+    )
+    return [
+        _admin_row(profile, user)
+        for profile, user in result.all()
+    ]
+
+
+async def admin_update_driver_profile(
+    session: AsyncSession,
+    user_id: int,
+    data: DriverProfileAdminUpdate,
+) -> DriverProfile:
+    profile = await _get_profile_or_404(session, user_id)
+    user = await session.get(User, user_id)
+    if user is None or getattr(user, "role", UserRole.DRIVER) != UserRole.DRIVER:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Driver not found",
+        )
+
+    profile.first_name = data.first_name.strip()
+    profile.last_name = data.last_name.strip()
+    profile.address = data.address.strip() if data.address else None
+    user.phone_number = data.phone_number.strip()
+    user.name = data.user_name.strip() if data.user_name else f"{profile.first_name} {profile.last_name}"
+    user.vehicle_brand = data.vehicle_brand.strip() if data.vehicle_brand else None
+    user.vehicle_model = data.vehicle_model.strip() if data.vehicle_model else None
+    user.vehicle_color = data.vehicle_color.strip() if data.vehicle_color else None
+    user.plate_number = data.plate_number.strip() if data.plate_number else None
+
+    await session.commit()
+    await session.refresh(profile)
+    return profile
+
+
 async def verify_driver(session: AsyncSession, user_id: int) -> DriverProfile:
     profile = await _get_profile_or_404(session, user_id)
     profile.verification_status = DriverVerificationStatus.VERIFIED
@@ -108,4 +149,9 @@ def _admin_row(profile: DriverProfile, user: User) -> dict:
         "rejection_reason": profile.rejection_reason,
         "submitted_at": profile.submitted_at,
         "verified_at": profile.verified_at,
+        "is_blocked": bool(user.is_blocked),
+        "vehicle_brand": getattr(user, "vehicle_brand", None),
+        "vehicle_model": getattr(user, "vehicle_model", None),
+        "vehicle_color": getattr(user, "vehicle_color", None),
+        "plate_number": getattr(user, "plate_number", None),
     }

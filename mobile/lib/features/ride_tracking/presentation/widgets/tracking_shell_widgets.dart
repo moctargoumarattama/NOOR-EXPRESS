@@ -11,10 +11,12 @@ class TrackingTopBar extends StatelessWidget {
     required this.connectionState,
     required this.onBack,
     this.etaMinutes,
+    this.distanceRemainingKm,
   });
 
   final TrackingConnectionState connectionState;
   final int? etaMinutes;
+  final double? distanceRemainingKm;
   final VoidCallback onBack;
 
   @override
@@ -28,10 +30,24 @@ class TrackingTopBar extends StatelessWidget {
           ),
           icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
         ),
-        const Spacer(),
-        if (etaMinutes != null) EtaChip(label: 'Dans $etaMinutes min'),
-        const SizedBox(width: 10),
-        ConnectionBadge(connectionState: connectionState),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (distanceRemainingKm != null)
+                  EtaChip(label: '${distanceRemainingKm!.toStringAsFixed(1)} km'),
+                if (etaMinutes != null) EtaChip(label: 'Dans $etaMinutes min'),
+                ConnectionBadge(connectionState: connectionState),
+              ],
+            ),
+          ),
+        ),
       ],
     );
   }

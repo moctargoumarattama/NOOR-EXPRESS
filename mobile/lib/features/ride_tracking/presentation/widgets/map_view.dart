@@ -16,6 +16,7 @@ class MapView extends StatefulWidget {
   const MapView({
     super.key,
     required this.status,
+    this.routePoints = const [],
     this.currentPosition,
     this.driverPosition,
     this.pickupPosition,
@@ -24,6 +25,7 @@ class MapView extends StatefulWidget {
   });
 
   final RideTrackingStatus status;
+  final List<TrackingCoordinates> routePoints;
   final TrackingCoordinates? currentPosition;
   final TrackingCoordinates? driverPosition;
   final TrackingCoordinates? pickupPosition;
@@ -97,9 +99,14 @@ class _MapViewState extends State<MapView> {
             widget.status == RideTrackingStatus.arrived) &&
         driver != null &&
         pickup != null) {
+      final routePoints = trackingRoutePolylinePoints(
+        routePoints: widget.routePoints,
+        fallbackStart: widget.driverPosition,
+        fallbackEnd: widget.pickupPosition,
+      );
       return [
         Polyline(
-          points: [driver, pickup],
+          points: routePoints,
           strokeWidth: 5,
           color: const Color(0xFFF5A623),
         ),
@@ -107,11 +114,16 @@ class _MapViewState extends State<MapView> {
     }
 
     if (widget.status == RideTrackingStatus.started &&
-        pickup != null &&
+        driver != null &&
         destination != null) {
+      final routePoints = trackingRoutePolylinePoints(
+        routePoints: widget.routePoints,
+        fallbackStart: widget.driverPosition,
+        fallbackEnd: widget.destinationPosition,
+      );
       return [
         Polyline(
-          points: [pickup, destination],
+          points: routePoints,
           strokeWidth: 5,
           color: const Color(0xFF1B8A5A),
         ),
@@ -262,6 +274,25 @@ class _MapViewState extends State<MapView> {
   bool _samePoint(TrackingCoordinates? left, TrackingCoordinates? right) {
     return trackingCoordinatesEqual(left, right);
   }
+}
+
+List<LatLng> trackingRoutePolylinePoints({
+  required List<TrackingCoordinates> routePoints,
+  required TrackingCoordinates? fallbackStart,
+  required TrackingCoordinates? fallbackEnd,
+}) {
+  if (routePoints.length >= 2) {
+    return routePoints
+        .map((point) => LatLng(point.latitude, point.longitude))
+        .toList(growable: false);
+  }
+  if (fallbackStart == null || fallbackEnd == null) {
+    return const [];
+  }
+  return [
+    LatLng(fallbackStart.latitude, fallbackStart.longitude),
+    LatLng(fallbackEnd.latitude, fallbackEnd.longitude),
+  ];
 }
 
 TrackingPulseAnchor resolveTrackingPulseAnchor({

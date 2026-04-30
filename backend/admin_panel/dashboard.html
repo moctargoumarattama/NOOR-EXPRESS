@@ -5,29 +5,41 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Dashboard - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
-<body>
-  <aside class="sidebar">
-    <h2>Noor Admin</h2>
-    <a class="active" href="dashboard.html">Dashboard</a>
-    <a href="zones.html">Zones & tarifs</a>
-    <a href="rides.html">Courses</a>
-    <a href="users.html">Users</a>
-    <a href="drivers.html">Drivers a valider</a>
-    <button onclick="AdminApi.logout()">Logout</button>
-  </aside>
+<body data-active-page="dashboard">
+  <aside class="sidebar" data-admin-sidebar></aside>
   <main class="content">
-    <h1>Dashboard</h1>
-    <section id="stats" class="cards"></section>
+    <div class="page-head">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="hint">Vue opérationnelle Noor Express.</p>
+      </div>
+      <button onclick="AdminApi.loadOperationsDashboard()">Actualiser</button>
+    </div>
+
+    <section class="metrics-grid" aria-label="Indicateurs opérations">
+      <article class="metric-card"><span>Courses aujourd'hui</span><strong id="metric-rides-today">-</strong></article>
+      <article class="metric-card"><span>Courses en cours</span><strong id="metric-active-rides">-</strong></article>
+      <article class="metric-card"><span>Chauffeurs en ligne</span><strong id="metric-online-drivers">-</strong></article>
+      <article class="metric-card"><span>Clients actifs</span><strong id="metric-active-clients">-</strong></article>
+      <article class="metric-card"><span>Revenus estimés</span><strong id="metric-revenue">-</strong></article>
+      <article class="metric-card"><span>Taux d'annulation</span><strong id="metric-cancel-rate">-</strong></article>
+    </section>
+
     <section class="panel">
-      <h2>Top drivers</h2>
+      <div class="page-head">
+        <h2>Top chauffeurs</h2>
+        <a class="ghost" href="drivers.html">Voir chauffeurs</a>
+      </div>
       <table>
-        <thead><tr><th>Driver</th><th>Courses complétées</th><th>Revenus</th></tr></thead>
+        <thead><tr><th>Chauffeur</th><th>Courses complétées</th><th>Revenus</th></tr></thead>
         <tbody id="top-drivers"></tbody>
       </table>
     </section>
   </main>
-  <script src="assets/api.js"></script>
-  <script>AdminApi.requireAuth(); AdminApi.loadDashboard();</script>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadOperationsDashboard();</script>
 </body>
 </html>

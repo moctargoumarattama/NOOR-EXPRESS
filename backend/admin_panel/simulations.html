@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Simulations DEV - Noor Express</title>
+  <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+</head>
+<body data-active-page="simulations">
+  <aside class="sidebar" data-admin-sidebar></aside>
+  <main class="content">
+    <div class="page-head">
+      <div>
+        <h1>Simulations DEV</h1>
+        <p class="hint">Visible pour l'admin, actif uniquement hors production avec ENABLE_DEV_SIMULATIONS=true.</p>
+      </div>
+      <span id="simulation-status" class="badge">-</span>
+    </div>
+    <section class="panel">
+      <div class="actions simulation-actions">
+        <button id="simulation-client" onclick="AdminApi.startClientSimulation()">Simuler client</button>
+        <button id="simulation-driver" onclick="AdminApi.startDriverSimulation()">Simuler chauffeur</button>
+        <button class="danger-soft" id="simulation-stop" onclick="AdminApi.stopSimulation()">Stop simulation</button>
+      </div>
+      <div id="simulation-logs" class="simulation-logs hint">Aucun log.</div>
+    </section>
+  </main>
+  <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
+  <script src="assets/api.js?v=20260425-admin-v2"></script>
+  <script>AdminApi.requireAuth(); AdminApi.loadSimulationStatus();</script>
+</body>
+</html>

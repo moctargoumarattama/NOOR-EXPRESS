@@ -1,10 +1,13 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/state/session_controller.dart';
+import '../../../map/models/route_result.dart';
+import '../../../map/services/routing_service.dart';
 import '../../data/datasources/tracking_remote_datasource.dart';
 import '../../data/datasources/tracking_websocket_datasource.dart';
 import '../../data/models/ride_tracking_model.dart';
@@ -42,9 +45,11 @@ class TrackingController extends StateNotifier<TrackingState> {
     required TrackingRemoteDatasource remoteDatasource,
     required TrackingWebSocketDatasource websocketDatasource,
     required LocationService locationService,
+    required RoutingService routingService,
   })  : _remoteDatasource = remoteDatasource,
         _websocketDatasource = websocketDatasource,
         _locationService = locationService,
+        _routingService = routingService,
         super(TrackingState.initial(mode));
 
   final Ref ref;
@@ -53,11 +58,18 @@ class TrackingController extends StateNotifier<TrackingState> {
   final TrackingRemoteDatasource _remoteDatasource;
   final TrackingWebSocketDatasource _websocketDatasource;
   final LocationService _locationService;
+  final RoutingService _routingService;
 
   StreamSubscription<TrackingSocketEvent>? _eventSubscription;
   StreamSubscription<TrackingConnectionState>? _connectionSubscription;
   StreamSubscription<LocationResult<Position>>? _locationSubscription;
   DateTime? _lastDriverPingAt;
+  DateTime? _lastCurrentPositionAt;
+  DateTime? _lastDriverPositionAt;
+  DateTime? _lastRouteRefreshAt;
+  TrackingCoordinates? _lastRouteOrigin;
+  TrackingCoordinates? _lastRouteTarget;
+  bool _isRouteRefreshInFlight = false;
   bool _started = false;
   bool _isDisposed = false;
   void Function()? _unregisterLifecycleResume;
@@ -148,7 +160,7 @@ class TrackingController extends StateNotifier<TrackingState> {
     if (!_isActive) {
       return;
     }
-    await _refreshSnapshot(this);
+    await _refreshSnapshot(this, requireActiveRide: true);
   }
 
   Future<void> cancelRide() async {
@@ -320,6 +332,7 @@ final trackingControllerProvider = StateNotifierProvider.autoDispose
         trackingWebsocketDatasourceProvider(scope.mode),
       ),
       locationService: ref.watch(locationServiceProvider),
+      routingService: ref.watch(routingServiceProvider),
     );
     return controller;
   },

@@ -79,6 +79,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
           Positioned.fill(
             child: MapView(
               status: ride?.status ?? RideTrackingStatus.accepted,
+              routePoints: state.routePoints,
               currentPosition: null,
               driverPosition: state.currentPosition,
               pickupPosition: pickup,
@@ -109,7 +110,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                 children: [
                   TrackingTopBar(
                     connectionState: state.connectionState,
-                    etaMinutes: state.etaMinutes,
+                    etaMinutes: state.isEtaReliable ? state.etaMinutes : null,
+                    distanceRemainingKm: state.distanceRemainingKm,
                     onBack: () {
                       if (context.canPop()) {
                         context.pop();
@@ -170,6 +172,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                 ride: ride,
                 counterpart: state.counterpart,
                 roleLabel: 'Client',
+                distanceRemainingKm: state.distanceRemainingKm,
+                statusLabel: trackingStatusLabel(ride.status),
               ),
             ),
         ],

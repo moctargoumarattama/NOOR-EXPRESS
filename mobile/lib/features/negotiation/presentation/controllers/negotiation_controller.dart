@@ -196,7 +196,7 @@ class NegotiationController extends StateNotifier<NegotiationState> {
       );
       if (nextConnectionState == NegotiationConnectionState.connected &&
           previousConnectionState == NegotiationConnectionState.reconnecting) {
-        unawaited(refresh());
+        unawaited(_resyncFromBackendTruth());
       }
     });
     _eventSubscription = _datasource.events.listen(_handleSocketEvent);

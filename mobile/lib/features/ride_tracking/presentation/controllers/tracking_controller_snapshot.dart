@@ -1,6 +1,9 @@
 part of 'tracking_controller.dart';
 
-Future<void> _refreshSnapshot(TrackingController controller) async {
+Future<void> _refreshSnapshot(
+  TrackingController controller, {
+  bool requireActiveRide = false,
+}) async {
   if (!controller._isActive) {
     return;
   }
@@ -14,7 +17,7 @@ Future<void> _refreshSnapshot(TrackingController controller) async {
         : RideTrackingModel.fromJson(activeRideJson);
 
     List<RideTrackingModel> rides = const [];
-    if (activeRide == null) {
+    if (activeRide == null && !requireActiveRide) {
       final ridesJson = controller.mode == TrackingMode.client
           ? await controller._remoteDatasource.fetchClientRides()
           : await controller._remoteDatasource.fetchDriverRides();
@@ -40,7 +43,9 @@ Future<void> _refreshSnapshot(TrackingController controller) async {
         clearRide: true,
         clearCounterpart: true,
         clearDriverPosition: true,
+        clearDistanceRemaining: true,
         clearEta: true,
+        clearRoute: true,
       ));
       return;
     }
@@ -152,14 +157,23 @@ void _recomputeDerivedState(TrackingController controller) {
     RideTrackingStatus.started => ride.dropoffPosition,
     _ => null,
   };
+  final progress = estimateTrackingProgress(
+    rideStatus: ride.status,
+    from: driverPosition,
+    to: target,
+  );
 
   controller._setStateIfAlive(currentState.copyWith(
-    etaMinutes: estimateTrackingEta(
-      rideStatus: ride.status,
-      from: driverPosition,
-      to: target,
-    ),
+    etaMinutes: progress?.etaMinutes,
+    distanceRemainingKm: progress?.distanceKm,
+    isEtaReliable: progress?.isEtaReliable ?? false,
+    clearEta: progress?.etaMinutes == null,
+    clearDistanceRemaining: progress == null,
+    clearRoute: target == null || driverPosition == null,
   ));
+  if (driverPosition != null && target != null) {
+    unawaited(_refreshReliableRoute(controller, ride, driverPosition, target));
+  }
 }
 
 double? _headingBetween(
@@ -167,4 +181,108 @@ double? _headingBetween(
   TrackingCoordinates? next,
 ) {
   return headingBetweenPoints(previous, next);
+}
+
+Future<void> _refreshReliableRoute(
+  TrackingController controller,
+  RideTrackingModel ride,
+  TrackingCoordinates origin,
+  TrackingCoordinates target,
+) async {
+  if (!controller._isActive || controller._isRouteRefreshInFlight) {
+    return;
+  }
+  final now = DateTime.now();
+  if (!_shouldRefreshTrackingRoute(
+    lastRefreshAt: controller._lastRouteRefreshAt,
+    lastOrigin: controller._lastRouteOrigin,
+    lastTarget: controller._lastRouteTarget,
+    nextOrigin: origin,
+    nextTarget: target,
+    now: now,
+  )) {
+    return;
+  }
+
+  controller._isRouteRefreshInFlight = true;
+  controller._lastRouteRefreshAt = now;
+  controller._lastRouteOrigin = origin;
+  controller._lastRouteTarget = target;
+
+  try {
+    final route = await controller._routingService.getRoute(
+      LatLng(origin.latitude, origin.longitude),
+      LatLng(target.latitude, target.longitude),
+    );
+    if (!controller._isActive || !route.hasReliableMetrics) {
+      return;
+    }
+    final currentState = controller._currentStateOrNull;
+    if (currentState?.ride?.id != ride.id) {
+      return;
+    }
+
+    final progress = estimateTrackingProgress(
+      rideStatus: ride.status,
+      from: origin,
+      to: target,
+      routeDistanceKm: route.distanceKm,
+      routeDurationMinutes: route.durationMinutes,
+      isRouteReliable: route.hasReliableMetrics,
+    );
+    if (progress == null) {
+      return;
+    }
+
+    controller._setStateIfAlive(currentState!.copyWith(
+      etaMinutes: progress.etaMinutes,
+      distanceRemainingKm: progress.distanceKm,
+      isEtaReliable: progress.isEtaReliable,
+      routePoints: _routeToTrackingCoordinates(route),
+    ));
+  } finally {
+    controller._isRouteRefreshInFlight = false;
+  }
+}
+
+bool _shouldRefreshTrackingRoute({
+  required DateTime? lastRefreshAt,
+  required TrackingCoordinates? lastOrigin,
+  required TrackingCoordinates? lastTarget,
+  required TrackingCoordinates nextOrigin,
+  required TrackingCoordinates nextTarget,
+  required DateTime now,
+}) {
+  if (lastRefreshAt != null &&
+      now.difference(lastRefreshAt) < const Duration(seconds: 8)) {
+    return false;
+  }
+  if (lastOrigin == null || lastTarget == null) {
+    return true;
+  }
+
+  final originMovedMeters = Geolocator.distanceBetween(
+    lastOrigin.latitude,
+    lastOrigin.longitude,
+    nextOrigin.latitude,
+    nextOrigin.longitude,
+  );
+  final targetMovedMeters = Geolocator.distanceBetween(
+    lastTarget.latitude,
+    lastTarget.longitude,
+    nextTarget.latitude,
+    nextTarget.longitude,
+  );
+  return originMovedMeters >= 80 || targetMovedMeters >= 25;
+}
+
+List<TrackingCoordinates> _routeToTrackingCoordinates(RouteResult route) {
+  return route.polylinePoints
+      .map(
+        (point) => TrackingCoordinates(
+          latitude: point.latitude,
+          longitude: point.longitude,
+        ),
+      )
+      .toList(growable: false);
 }

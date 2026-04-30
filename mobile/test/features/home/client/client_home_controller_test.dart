@@ -54,11 +54,34 @@ void main() {
 
       expect(controller.state.activeRide?.id, activeRide.id);
     });
+
+    test('clears a stale activeRide when backend active ride is empty',
+        () async {
+      final previousActiveRide = _ride(
+        id: 25,
+        status: 'accepted',
+        pickupLocation: 'Hassan',
+        createdAt: DateTime(2026, 4, 24, 9),
+      );
+      final repository = _FakeClientRidesRepository(
+        rides: [previousActiveRide],
+        activeRide: previousActiveRide,
+      );
+      final controller = ClientHomeController(repository: repository);
+
+      await controller.loadRides();
+      expect(controller.state.activeRide?.id, previousActiveRide.id);
+
+      repository.activeRide = null;
+
+      await controller.resumeFromLifecycle();
+
+      expect(controller.state.activeRide, isNull);
+    });
   });
 
   group('ClientHomeController.createRide', () {
-    test('stores the backend conflict code for active ride recovery',
-        () async {
+    test('stores the backend conflict code for active ride recovery', () async {
       final controller = ClientHomeController(
         repository: _FakeClientRidesRepository(
           rides: const [],
@@ -99,7 +122,7 @@ class _FakeClientRidesRepository extends ClientRidesRepository {
   }) : super(apiClient: ApiClient());
 
   final List<ClientRide> rides;
-  final ClientRide? activeRide;
+  ClientRide? activeRide;
   final ClientRideFailure? createRideFailure;
 
   @override

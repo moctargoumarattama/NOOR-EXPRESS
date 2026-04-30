@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Noor Express Admin</title>
   <link rel="stylesheet" href="assets/style.css">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
 </head>
 <body class="login-page">
   <main class="login-card">
@@ -21,7 +22,7 @@
     <p class="hint">Dev uniquement : le bouton crée le compte si aucun admin n'existe.</p>
     <p id="message" class="message"></p>
   </main>
-  <script src="assets/api.js"></script>
+  <script src="assets/api.js?v=20260425-simulations"></script>
   <script>
     AdminApi.showLoginMessage();
     document.getElementById('login-form').addEventListener('submit', async (event) => {
