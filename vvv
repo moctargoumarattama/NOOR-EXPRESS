@@ -117,3 +117,15 @@ REALTIME_STORE_BACKEND=redis
 git add .
 git commit -m "ton message ici"
 git push origin main
+
+
+
+
+
+DEMARRAGE MYSQL
+
+sc query MySQL80
+
+Lance :
+
+net start MySQL80
