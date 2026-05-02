@@ -11,6 +11,9 @@ class RouteSummaryCard extends StatelessWidget {
     this.durationMinutes,
     this.isRouteReliable = true,
     this.recommendedPrice,
+    this.minimumPrice,
+    this.maximumPrice,
+    this.availableDriversCount,
     this.reliabilityMessage,
     this.compact = false,
   });
@@ -21,6 +24,9 @@ class RouteSummaryCard extends StatelessWidget {
   final int? durationMinutes;
   final bool isRouteReliable;
   final double? recommendedPrice;
+  final double? minimumPrice;
+  final double? maximumPrice;
+  final int? availableDriversCount;
   final String? reliabilityMessage;
   final bool compact;
 
@@ -30,6 +36,7 @@ class RouteSummaryCard extends StatelessWidget {
     final reliableDuration =
         isRouteReliable && _isReliableDuration(durationMinutes);
     final reliablePrice = _isReliablePrice(recommendedPrice);
+    final reliableRange = _isReliablePriceRange(minimumPrice, maximumPrice);
 
     if (compact) {
       return _CompactRouteSummaryCard(
@@ -38,6 +45,9 @@ class RouteSummaryCard extends StatelessWidget {
         distanceKm: reliableDistance ? distanceKm : null,
         durationMinutes: reliableDuration ? durationMinutes : null,
         recommendedPrice: reliablePrice ? recommendedPrice : null,
+        minimumPrice: reliableRange ? minimumPrice : null,
+        maximumPrice: reliableRange ? maximumPrice : null,
+        availableDriversCount: _availabilityCount,
         reliabilityMessage: reliabilityMessage,
       );
     }
@@ -76,9 +86,26 @@ class RouteSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          if (reliablePrice) ...[
+          if (reliableRange) ...[
+            const SizedBox(height: 10),
+            _PriceRangeTile(
+              minimumPrice: minimumPrice!,
+              maximumPrice: maximumPrice!,
+            ),
+          ] else if (reliablePrice) ...[
             const SizedBox(height: 10),
             _RecommendedPriceTile(price: recommendedPrice!),
+          ],
+          if (_availabilityMessage != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              _availabilityMessage!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _availabilityColor,
+                    height: 1.35,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
           ],
           if (reliabilityMessage != null &&
               reliabilityMessage!.trim().isNotEmpty) ...[
@@ -108,6 +135,41 @@ class RouteSummaryCard extends StatelessWidget {
   bool _isReliablePrice(double? value) {
     return value != null && value.isFinite && value > 0 && value <= 500000;
   }
+
+  bool _isReliablePriceRange(double? minimumPrice, double? maximumPrice) {
+    return _isReliablePrice(minimumPrice) &&
+        _isReliablePrice(maximumPrice) &&
+        maximumPrice! >= minimumPrice!;
+  }
+
+  int? get _availabilityCount {
+    final count = availableDriversCount;
+    if (count == null || count < 0) {
+      return null;
+    }
+    return count;
+  }
+
+  String? get _availabilityMessage {
+    final count = _availabilityCount;
+    if (count == null) {
+      return null;
+    }
+    if (count == 0) {
+      return 'Aucun chauffeur disponible pour l\'instant';
+    }
+    if (count == 1) {
+      return '1 chauffeur disponible pres de vous';
+    }
+    return '$count chauffeurs disponibles pres de vous';
+  }
+
+  Color get _availabilityColor {
+    if (_availabilityCount == 0) {
+      return AppColors.coral;
+    }
+    return AppColors.emerald;
+  }
 }
 
 class _CompactRouteSummaryCard extends StatelessWidget {
@@ -117,6 +179,9 @@ class _CompactRouteSummaryCard extends StatelessWidget {
     required this.distanceKm,
     required this.durationMinutes,
     required this.recommendedPrice,
+    required this.minimumPrice,
+    required this.maximumPrice,
+    required this.availableDriversCount,
     required this.reliabilityMessage,
   });
 
@@ -125,13 +190,18 @@ class _CompactRouteSummaryCard extends StatelessWidget {
   final double? distanceKm;
   final int? durationMinutes;
   final double? recommendedPrice;
+  final double? minimumPrice;
+  final double? maximumPrice;
+  final int? availableDriversCount;
   final String? reliabilityMessage;
 
   @override
   Widget build(BuildContext context) {
-    final hasFullEstimate = distanceKm != null &&
-        durationMinutes != null &&
-        recommendedPrice != null;
+    final hasMetrics = distanceKm != null && durationMinutes != null;
+    final hasPriceRange = minimumPrice != null && maximumPrice != null;
+    final hasRecommendedPrice = recommendedPrice != null;
+    final hasFullEstimate =
+        hasMetrics && (hasPriceRange || hasRecommendedPrice);
 
     return Container(
       width: double.infinity,
@@ -181,7 +251,9 @@ class _CompactRouteSummaryCard extends StatelessWidget {
                       ),
                 ),
                 Text(
-                  'Prix recommande : ${recommendedPrice!.round()} FCFA',
+                  hasPriceRange
+                      ? 'Estimation : ${minimumPrice!.round()} - ${maximumPrice!.round()} FCFA'
+                      : 'Prix recommande : ${recommendedPrice!.round()} FCFA',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.emerald,
                         fontWeight: FontWeight.w900,
@@ -197,6 +269,16 @@ class _CompactRouteSummaryCard extends StatelessWidget {
                     fontWeight: FontWeight.w700,
                   ),
             ),
+          if (_availabilityMessage != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              _availabilityMessage!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: _availabilityColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+            ),
+          ],
         ],
       ),
     );
@@ -208,6 +290,27 @@ class _CompactRouteSummaryCard extends StatelessWidget {
       return message;
     }
     return 'Estimation indisponible';
+  }
+
+  String? get _availabilityMessage {
+    final count = availableDriversCount;
+    if (count == null || count < 0) {
+      return null;
+    }
+    if (count == 0) {
+      return 'Aucun chauffeur disponible pour l\'instant';
+    }
+    if (count == 1) {
+      return '1 chauffeur disponible pres de vous';
+    }
+    return '$count chauffeurs disponibles pres de vous';
+  }
+
+  Color get _availabilityColor {
+    if (availableDriversCount == 0) {
+      return AppColors.coral;
+    }
+    return AppColors.emerald;
   }
 }
 
@@ -365,6 +468,53 @@ class _RecommendedPriceTile extends StatelessWidget {
           const Spacer(),
           Text(
             '${price.round()} FCFA',
+            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: AppColors.emerald,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PriceRangeTile extends StatelessWidget {
+  const _PriceRangeTile({
+    required this.minimumPrice,
+    required this.maximumPrice,
+  });
+
+  final double minimumPrice;
+  final double maximumPrice;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.payments_rounded,
+            color: AppColors.emerald,
+            size: 18,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            'Fourchette estimee',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: AppColors.emerald,
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const Spacer(),
+          Text(
+            '${minimumPrice.round()} - ${maximumPrice.round()} FCFA',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
                   color: AppColors.emerald,
                   fontWeight: FontWeight.w900,

@@ -9,12 +9,15 @@ import '../../../../core/media/photo_picker_service.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
+import '../../data/models/driver_profile_model.dart';
 import '../controllers/onboarding_controller.dart';
 import '../widgets/onboarding_chrome.dart';
 import 'step1_personal_info.dart';
 import 'step2_id_card_photo.dart';
 import 'step3_selfie.dart';
 import 'step4_confirmation.dart';
+
+const _maxDocumentExpiryYears = 10;
 
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key});
@@ -111,8 +114,26 @@ class _DriverOnboardingScreenState
           onBack: () => _setStep(0),
           onNext: () => _setStep(2),
         ),
-      2 => Step3Selfie(
+      2 => StepLegalDocuments(
           key: const ValueKey('step-3'),
+          driverLicense: state.driverLicense,
+          vehicleRegistration: state.vehicleRegistration,
+          vehicleInsurance: state.vehicleInsurance,
+          technicalInspection: state.technicalInspection,
+          onCamera: (type) => _pickLegalDocument(
+            source: NoorPhotoSource.camera,
+            type: type,
+          ),
+          onGallery: (type) => _pickLegalDocument(
+            source: NoorPhotoSource.gallery,
+            type: type,
+          ),
+          onExpiryTap: _pickDocumentExpiry,
+          onBack: () => _setStep(1),
+          onNext: () => _setStep(3),
+        ),
+      3 => Step3Selfie(
+          key: const ValueKey('step-4'),
           photo: state.selfiePhoto,
           onCamera: () => _pickPhoto(
             source: NoorPhotoSource.camera,
@@ -123,8 +144,8 @@ class _DriverOnboardingScreenState
             source: NoorPhotoSource.gallery,
             target: _PhotoTarget.selfie,
           ),
-          onBack: () => _setStep(1),
-          onNext: () => _setStep(3),
+          onBack: () => _setStep(2),
+          onNext: () => _setStep(4),
         ),
       _ => Step4Confirmation(
           key: const ValueKey('step-4'),
@@ -132,8 +153,12 @@ class _DriverOnboardingScreenState
           address: state.address,
           idCardPhoto: state.idCardPhoto,
           selfiePhoto: state.selfiePhoto,
+          driverLicense: state.driverLicense,
+          vehicleRegistration: state.vehicleRegistration,
+          vehicleInsurance: state.vehicleInsurance,
+          technicalInspection: state.technicalInspection,
           isSubmitting: state.isSubmitting,
-          onBack: () => _setStep(2),
+          onBack: () => _setStep(3),
           onSubmit: _submit,
         ),
     };
@@ -176,13 +201,8 @@ class _DriverOnboardingScreenState
       }
       final encoded = base64Encode(photo.bytes);
       final controller = ref.read(driverOnboardingControllerProvider.notifier);
-      if (target == _PhotoTarget.idCard) {
-        controller.setIdCardPhoto(encoded);
-      } else {
-        controller.setSelfiePhoto(encoded);
-      }
+      _applyPickedPhoto(controller, target, encoded);
     } on NoorPhotoPickerFailure catch (error) {
-      debugPrint('Driver onboarding photo failed: ${error.message}');
       if (!mounted) {
         return;
       }
@@ -191,8 +211,7 @@ class _DriverOnboardingScreenState
         message: error.message,
         tone: AppSnackbarTone.error,
       );
-    } catch (error) {
-      debugPrint('Driver onboarding photo failed: $error');
+    } catch (_) {
       if (!mounted) {
         return;
       }
@@ -201,6 +220,62 @@ class _DriverOnboardingScreenState
         message: 'Photo impossible. Essayez la galerie si la camera bloque.',
         tone: AppSnackbarTone.error,
       );
+    }
+  }
+
+  Future<void> _pickLegalDocument({
+    required NoorPhotoSource source,
+    required DriverLegalDocumentType type,
+  }) {
+    return _pickPhoto(source: source, target: _photoTargetFor(type));
+  }
+
+  Future<void> _pickDocumentExpiry(DriverLegalDocumentType type) async {
+    final today = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: today,
+      lastDate: DateTime(today.year + _maxDocumentExpiryYears),
+      initialDate: today,
+    );
+    if (picked == null) {
+      return;
+    }
+    ref
+        .read(driverOnboardingControllerProvider.notifier)
+        .setLegalDocumentExpiration(type, picked);
+  }
+
+  void _applyPickedPhoto(
+    DriverOnboardingController controller,
+    _PhotoTarget target,
+    String encoded,
+  ) {
+    switch (target) {
+      case _PhotoTarget.idCard:
+        controller.setIdCardPhoto(encoded);
+      case _PhotoTarget.selfie:
+        controller.setSelfiePhoto(encoded);
+      case _PhotoTarget.driverLicense:
+        controller.setLegalDocumentFile(
+          DriverLegalDocumentType.driverLicense,
+          encoded,
+        );
+      case _PhotoTarget.vehicleRegistration:
+        controller.setLegalDocumentFile(
+          DriverLegalDocumentType.vehicleRegistration,
+          encoded,
+        );
+      case _PhotoTarget.vehicleInsurance:
+        controller.setLegalDocumentFile(
+          DriverLegalDocumentType.vehicleInsurance,
+          encoded,
+        );
+      case _PhotoTarget.technicalInspection:
+        controller.setLegalDocumentFile(
+          DriverLegalDocumentType.technicalInspection,
+          encoded,
+        );
     }
   }
 
@@ -221,4 +296,19 @@ class _DriverOnboardingScreenState
 enum _PhotoTarget {
   idCard,
   selfie,
+  driverLicense,
+  vehicleRegistration,
+  vehicleInsurance,
+  technicalInspection,
+}
+
+_PhotoTarget _photoTargetFor(DriverLegalDocumentType type) {
+  return switch (type) {
+    DriverLegalDocumentType.driverLicense => _PhotoTarget.driverLicense,
+    DriverLegalDocumentType.vehicleRegistration =>
+      _PhotoTarget.vehicleRegistration,
+    DriverLegalDocumentType.vehicleInsurance => _PhotoTarget.vehicleInsurance,
+    DriverLegalDocumentType.technicalInspection =>
+      _PhotoTarget.technicalInspection,
+  };
 }

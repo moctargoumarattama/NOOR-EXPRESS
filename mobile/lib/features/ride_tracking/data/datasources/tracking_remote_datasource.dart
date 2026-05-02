@@ -38,9 +38,18 @@ class TrackingRemoteDatasource {
     return (payload['average_rating_from_clients'] as num?)?.toDouble();
   }
 
-  Future<Map<String, dynamic>> cancelRide(int rideId) {
-    return _post('/ride-requests/$rideId/cancel',
-        data: const {'reason': 'Annulee depuis le tracking'});
+  Future<Map<String, dynamic>> cancelRide(
+    int rideId, {
+    String? reason,
+    String? reasonCode,
+  }) {
+    return _patch(
+      '/ride-requests/$rideId/cancel',
+      data: {
+        'reason': reason,
+        'reason_code': reasonCode,
+      },
+    );
   }
 
   Future<Map<String, dynamic>> markArrived(int rideId) {
@@ -83,6 +92,33 @@ class TrackingRemoteDatasource {
     );
   }
 
+  Future<Map<String, dynamic>> createRideShareLink(int rideId) {
+    return _post('/ride-requests/$rideId/share-link');
+  }
+
+  Future<Map<String, dynamic>> sendRideMessage({
+    required int rideId,
+    required String content,
+  }) {
+    return _post(
+      '/ride-requests/$rideId/messages',
+      data: {
+        'content': content,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> fetchRideMessages({
+    required int rideId,
+    int limit = 50,
+    int offset = 0,
+    bool markRead = true,
+  }) {
+    return _fetchMap(
+      '/ride-requests/$rideId/messages?limit=$limit&offset=$offset&mark_read=$markRead',
+    );
+  }
+
   Future<List<Map<String, dynamic>>> _fetchRideList(String path) async {
     try {
       final response = await _apiClient.dio.get<List<dynamic>>(path);
@@ -115,6 +151,24 @@ class TrackingRemoteDatasource {
   }) async {
     try {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
+        path,
+        data: data,
+      );
+      return response.data ?? <String, dynamic>{};
+    } on DioException catch (error) {
+      throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
+        error,
+        fallbackMessage: 'Cette action n est pas disponible pour le moment.',
+      ));
+    }
+  }
+
+  Future<Map<String, dynamic>> _patch(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final response = await _apiClient.dio.patch<Map<String, dynamic>>(
         path,
         data: data,
       );

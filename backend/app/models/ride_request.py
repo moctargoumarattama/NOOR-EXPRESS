@@ -3,11 +3,10 @@ from enum import Enum
 
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Enum as SqlEnum, Float, ForeignKey, Numeric, String, func
+from sqlalchemy import DateTime, Enum as SqlEnum, Float, ForeignKey, Integer, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
-from app.models.user import UserRole
 
 
 class RideRequestStatus(str, Enum):
@@ -19,6 +18,12 @@ class RideRequestStatus(str, Enum):
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     EXPIRED = "expired"
+
+
+class RideCancelledByRole(str, Enum):
+    PASSENGER = "passenger"
+    DRIVER = "driver"
+    SYSTEM = "system"
 
 
 class RideRequest(Base):
@@ -33,6 +38,8 @@ class RideRequest(Base):
     pickup_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     dropoff_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
     dropoff_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    distance_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     estimated_price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     agreed_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
     final_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
@@ -43,9 +50,9 @@ class RideRequest(Base):
     driver_rating_for_client: Mapped[float | None] = mapped_column(Float, nullable=True)
     driver_rating_comment: Mapped[str | None] = mapped_column(String(255), nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    cancelled_by_role: Mapped[UserRole | None] = mapped_column(
+    cancelled_by_role: Mapped[RideCancelledByRole | None] = mapped_column(
         SqlEnum(
-            UserRole,
+            RideCancelledByRole,
             values_callable=lambda enum_class: [item.value for item in enum_class],
         ),
         nullable=True,
@@ -62,4 +69,18 @@ class RideRequest(Base):
         DateTime,
         server_default=func.now(),
         nullable=False,
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
+    share_token: Mapped[str | None] = mapped_column(
+        String(36),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    share_token_created_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
     )

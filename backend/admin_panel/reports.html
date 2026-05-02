@@ -13,7 +13,7 @@
     <div class="page-head">
       <div>
         <h1>Signalements</h1>
-        <p class="hint">Tickets ouverts par clients ou chauffeurs.</p>
+        <p class="hint">Workflow support: statut, note admin, suspension rapide.</p>
       </div>
       <button onclick="AdminApi.loadReportsPage()">Actualiser</button>
     </div>
@@ -22,10 +22,14 @@
         <label>Statut
           <select id="report-status-filter" onchange="AdminApi.renderReportsPage()">
             <option value="">Tous</option>
-            <option value="ouvert">ouvert</option>
+            <option value="nouveau">nouveau</option>
             <option value="en_cours">en cours</option>
-            <option value="resolu">résolu</option>
+            <option value="resolu">resolu</option>
+            <option value="classe_sans_suite">classe sans suite</option>
           </select>
+        </label>
+        <label>Date
+          <input id="report-date-filter" type="date" onchange="AdminApi.renderReportsPage()">
         </label>
         <label>Type
           <select id="report-type-filter" onchange="AdminApi.renderReportsPage()">
@@ -34,21 +38,21 @@
             <option value="driver">chauffeur</option>
           </select>
         </label>
-        <label>Année archive
+        <label>Annee archive
           <input data-archive-year type="number" min="2020" max="2100" placeholder="2025" onchange="AdminApi.renderReportsPage()">
         </label>
         <label>Mois
           <select data-archive-month onchange="AdminApi.renderReportsPage()">
             <option value="">Tous les mois</option>
-            <option value="01">Janvier</option><option value="02">Février</option><option value="03">Mars</option>
+            <option value="01">Janvier</option><option value="02">Fevrier</option><option value="03">Mars</option>
             <option value="04">Avril</option><option value="05">Mai</option><option value="06">Juin</option>
-            <option value="07">Juillet</option><option value="08">Août</option><option value="09">Septembre</option>
-            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Décembre</option>
+            <option value="07">Juillet</option><option value="08">Aout</option><option value="09">Septembre</option>
+            <option value="10">Octobre</option><option value="11">Novembre</option><option value="12">Decembre</option>
           </select>
         </label>
       </div>
       <table>
-        <thead><tr><th>ID</th><th>Course</th><th>Type</th><th>Auteur</th><th>Raison</th><th>Statut</th><th>Date</th></tr></thead>
+        <thead><tr><th>ID</th><th>Course</th><th>Type</th><th>Auteur</th><th>Raison</th><th>Statut</th><th>Note admin</th><th>Date</th><th>Actions</th></tr></thead>
         <tbody id="reports-table"></tbody>
       </table>
     </section>

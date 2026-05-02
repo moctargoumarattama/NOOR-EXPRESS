@@ -1,4 +1,4 @@
-import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,19 +27,25 @@ class ClientProfileScreen extends ConsumerStatefulWidget {
 class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   final _nameController = TextEditingController();
   ProviderSubscription<ProfileState>? _subscription;
+  NoorPickedPhoto? _pendingPhoto;
+  String _initialFirstName = '';
 
   @override
   void initState() {
     super.initState();
+    _nameController.addListener(_onNameChanged);
     _subscription = ref.listenManual<ProfileState>(
       profileControllerProvider,
       (previous, next) {
         final profile = next.profile;
-        if (profile != null && previous?.profile?.name != profile.name) {
+        if (profile != null && previous?.profile != profile) {
           _nameController.text = profile.name ?? '';
+          _initialFirstName = (profile.name ?? '').trim();
         }
         final message = next.successMessage ?? next.errorMessage;
-        if (message != null && message != previous?.successMessage) {
+        final previousMessage =
+            previous?.successMessage ?? previous?.errorMessage;
+        if (message != null && message != previousMessage) {
           AppSnackbar.show(
             context,
             message: message,
@@ -47,6 +53,12 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                 ? AppSnackbarTone.success
                 : AppSnackbarTone.error,
           );
+          if (next.successMessage != null) {
+            setState(() {
+              _pendingPhoto = null;
+              _initialFirstName = (next.profile?.name ?? '').trim();
+            });
+          }
           ref.read(profileControllerProvider.notifier).consumeMessages();
         }
       },
@@ -57,23 +69,33 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
   @override
   void dispose() {
     _subscription?.close();
+    _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     super.dispose();
   }
 
+  void _onNameChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
   Future<void> _pickPhoto() async {
+    final selectedSource = await _pickPhotoSource();
+    if (selectedSource == null) {
+      return;
+    }
     try {
       final photo = await ref.read(noorPhotoPickerServiceProvider).pickPhoto(
-            source: NoorPhotoSource.gallery,
+            source: selectedSource,
             imageQuality: 45,
-            maxWidth: 256,
+            maxWidth: 1024,
           );
       if (photo == null) {
         return;
       }
-      await ref
-          .read(profileControllerProvider.notifier)
-          .updatePhoto(base64Encode(photo.bytes));
+      setState(() => _pendingPhoto = photo);
     } on NoorPhotoPickerFailure catch (error) {
       debugPrint('Client profile photo failed: ${error.message}');
       if (!mounted) {
@@ -96,10 +118,48 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
     }
   }
 
-  Future<void> _save(ClientProfileModel profile) async {
+  Future<NoorPhotoSource?> _pickPhotoSource() {
+    return showModalBottomSheet<NoorPhotoSource>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_camera_rounded),
+                title: const Text('Prendre une photo'),
+                onTap: () => Navigator.of(context).pop(NoorPhotoSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_rounded),
+                title: const Text('Choisir depuis la galerie'),
+                onTap: () => Navigator.of(context).pop(NoorPhotoSource.gallery),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  bool _hasChanges() {
+    final currentFirstName = _nameController.text.trim();
+    final initialFirstName = _initialFirstName;
+    if (currentFirstName != initialFirstName) {
+      return true;
+    }
+    return _pendingPhoto != null;
+  }
+
+  Future<void> _save() async {
+    final trimmedFirstName = _nameController.text.trim();
+    final firstNameToSave =
+        trimmedFirstName == _initialFirstName ? null : trimmedFirstName;
     await ref.read(profileControllerProvider.notifier).save(
-          name: _nameController.text.trim(),
-          profilePhoto: profile.profilePhoto,
+          firstName: firstNameToSave,
+          profilePhoto: _pendingPhoto,
         );
   }
 
@@ -129,8 +189,10 @@ class _ClientProfileScreenState extends ConsumerState<ClientProfileScreen> {
                       rides: state.rides,
                       nameController: _nameController,
                       isSaving: state.isSaving,
+                      isSaveEnabled: _hasChanges(),
+                      pendingPhotoBytes: _pendingPhoto?.bytes,
                       onPickPhoto: _pickPhoto,
-                      onSave: () => _save(profile),
+                      onSave: _save,
                       onLogout: () {
                         ref.read(sessionControllerProvider.notifier).logout();
                       },
@@ -176,6 +238,8 @@ class _ProfileContent extends StatelessWidget {
     required this.rides,
     required this.nameController,
     required this.isSaving,
+    required this.isSaveEnabled,
+    required this.pendingPhotoBytes,
     required this.onPickPhoto,
     required this.onSave,
     required this.onLogout,
@@ -186,6 +250,8 @@ class _ProfileContent extends StatelessWidget {
   final List<ClientProfileRideModel> rides;
   final TextEditingController nameController;
   final bool isSaving;
+  final bool isSaveEnabled;
+  final Uint8List? pendingPhotoBytes;
   final VoidCallback onPickPhoto;
   final VoidCallback onSave;
   final VoidCallback onLogout;
@@ -199,6 +265,7 @@ class _ProfileContent extends StatelessWidget {
         ProfileAvatar(
           initials: profile.initials,
           profilePhoto: profile.profilePhoto,
+          localPhotoBytes: pendingPhotoBytes,
           isLoading: isSaving,
           onTap: onPickPhoto,
         ),
@@ -217,7 +284,7 @@ class _ProfileContent extends StatelessWidget {
           controller: nameController,
           textAlign: TextAlign.center,
           decoration: const InputDecoration(
-            hintText: 'Nom complet',
+            hintText: 'Prenom',
             border: InputBorder.none,
           ),
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
@@ -249,8 +316,8 @@ class _ProfileContent extends StatelessWidget {
         ),
         const SizedBox(height: 22),
         AppButton(
-          label: isSaving ? 'Enregistrement...' : 'Modifier le profil',
-          onPressed: isSaving ? null : onSave,
+          label: isSaving ? 'Enregistrement...' : 'Enregistrer',
+          onPressed: isSaving || !isSaveEnabled ? null : onSave,
         ),
         const SizedBox(height: 28),
         ProfileRideHistory(rides: rides, onOpenRide: onOpenRide),

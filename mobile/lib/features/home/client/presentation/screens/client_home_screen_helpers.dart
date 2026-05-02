@@ -232,6 +232,100 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     await _estimateSuggestedPrice(pickup, dropoff);
   }
 
+  Future<void> _addDropoffToFavorites(AddressResult dropoff) async {
+    final initialLabel = _initialFavoriteLabel(dropoff);
+    final label = await _askFavoriteLabel(initialLabel);
+    if (label == null) {
+      return;
+    }
+
+    try {
+      await ref.read(addressSearchControllerProvider.notifier).addFavorite(
+            address: dropoff,
+            label: label,
+          );
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar(
+        'Adresse ajoutee aux favoris.',
+        tone: AppSnackbarTone.success,
+      );
+    } on AddressSearchFailure catch (error) {
+      if (!mounted) {
+        return;
+      }
+      _showSnackBar(
+        _humanizeMessage(
+          error.message,
+          fallback: 'Impossible d ajouter cette adresse aux favoris.',
+        ),
+        tone: AppSnackbarTone.error,
+      );
+    }
+  }
+
+  String _initialFavoriteLabel(AddressResult dropoff) {
+    final name = dropoff.name.trim();
+    return name.isEmpty ? 'Favori' : name;
+  }
+
+  Future<String?> _askFavoriteLabel(String initialLabel) async {
+    final controller = TextEditingController(text: initialLabel);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => _buildFavoriteLabelDialog(
+        dialogContext,
+        controller,
+      ),
+    );
+    controller.dispose();
+    final label = result?.trim();
+    if (label == null || label.isEmpty) {
+      return null;
+    }
+    return label;
+  }
+
+  AlertDialog _buildFavoriteLabelDialog(
+    BuildContext dialogContext,
+    TextEditingController controller,
+  ) {
+    return AlertDialog(
+      title: const Text('Ajouter aux favoris'),
+      content: TextField(
+        controller: controller,
+        autofocus: true,
+        textInputAction: TextInputAction.done,
+        decoration: const InputDecoration(
+          labelText: 'Nom du favori',
+          hintText: 'Maison, Bureau...',
+        ),
+        onSubmitted: (_) => _submitFavoriteLabel(dialogContext, controller),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(),
+          child: const Text('Annuler'),
+        ),
+        TextButton(
+          onPressed: () => _submitFavoriteLabel(dialogContext, controller),
+          child: const Text('Ajouter'),
+        ),
+      ],
+    );
+  }
+
+  void _submitFavoriteLabel(
+    BuildContext dialogContext,
+    TextEditingController controller,
+  ) {
+    final value = controller.text.trim();
+    if (value.isNotEmpty) {
+      Navigator.of(dialogContext).pop(value);
+    }
+  }
+
   Future<void> _submitRide() async {
     final currentState = ref.read(clientHomeControllerProvider);
     final currentActiveRide = currentState.activeRide;
@@ -254,6 +348,17 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (!success) {
       if (shouldRecoverExistingRideFromCreateError(nextState.createErrorCode)) {
         await _recoverExistingRideAfterCreateConflict();
+        return;
+      }
+      if (nextState.createErrorCode == 'ride_request_temporarily_blocked') {
+        _showSnackBar(
+          _humanizeMessage(
+            nextState.createError,
+            fallback:
+                'Blocage temporaire actif. Reessayez plus tard pour creer une course.',
+          ),
+          tone: AppSnackbarTone.info,
+        );
         return;
       }
 
@@ -324,10 +429,25 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       return;
     }
 
+    final cancellationDraft = await showRideCancellationBottomSheet(
+      context,
+      title: 'Pourquoi annuler la demande ?',
+      confirmLabel: 'Confirmer l annulation',
+      options: passengerCancellationReasonOptions,
+      reasonRequired: false,
+    );
+    if (!mounted || cancellationDraft == null) {
+      return;
+    }
+
     try {
       await ref
           .read(negotiationDatasourceProvider('client-home-cancel'))
-          .cancelRide(ride.id);
+          .cancelRide(
+            ride.id,
+            reason: cancellationDraft.reason,
+            reasonCode: cancellationDraft.reasonCode,
+          );
       if (!mounted) {
         return;
       }
@@ -659,7 +779,8 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     if (value.contains('expire')) {
       return RideUiCopy.offerExpired;
     }
-    if (value.contains('annul')) {
+    if (value.contains('course annulee') ||
+        value.contains('trajet a ete annule')) {
       return RideUiCopy.rideCancelled;
     }
     if (value.contains('indisponible') && value.contains('chauffeur')) {

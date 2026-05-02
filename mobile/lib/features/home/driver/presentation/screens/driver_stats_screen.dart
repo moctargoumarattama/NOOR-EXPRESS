@@ -1,11 +1,10 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/driver_repository.dart';
 import '../../data/models/driver_stats.dart';
-import '../../data/models/driver_ride.dart';
-import '../controllers/ride_driver_controller.dart';
-import '../widgets/driver_stats_summary.dart';
+import '../widgets/driver_stats_card.dart';
 
 class DriverStatsScreen extends ConsumerStatefulWidget {
   const DriverStatsScreen({super.key});
@@ -21,19 +20,10 @@ class _DriverStatsScreenState extends ConsumerState<DriverStatsScreen> {
   void initState() {
     super.initState();
     _statsFuture = ref.read(driverRepositoryProvider).fetchStats();
-    Future.microtask(() => ref.read(rideDriverProvider.notifier).loadRides());
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(rideDriverProvider);
-    final completed = state.rides.where((ride) => ride.status == 'completed');
-    final totalEarnings = completed.fold<double>(
-      0,
-      (sum, ride) => sum + _rideEarning(ride),
-    );
-    final weekCounts = _weekCounts(state.rides);
-
     return Scaffold(
       backgroundColor: const Color(0xFFF7F8FA),
       body: SafeArea(
@@ -42,19 +32,7 @@ class _DriverStatsScreenState extends ConsumerState<DriverStatsScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 14, 20, 26),
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    icon: const Icon(Icons.arrow_back_rounded),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Mes statistiques',
-                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
-                  ),
-                ],
-              ),
+              _Header(onBack: () => Navigator.of(context).pop()),
               const SizedBox(height: 20),
               FutureBuilder<DriverStats>(
                 future: _statsFuture,
@@ -65,39 +43,12 @@ class _DriverStatsScreenState extends ConsumerState<DriverStatsScreen> {
                       child: Center(child: CircularProgressIndicator()),
                     );
                   }
-                  if (snapshot.hasError) {
-                    return const DriverStatsErrorCard();
+                  if (snapshot.hasError || !snapshot.hasData) {
+                    return const _StatsErrorCard();
                   }
-                  return DriverStatsSummary(stats: snapshot.data);
+                  return _StatsContent(stats: snapshot.data!);
                 },
               ),
-              const SizedBox(height: 16),
-              _EarningsCard(totalEarnings: totalEarnings),
-              const SizedBox(height: 22),
-              const Text(
-                'Cette semaine',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-              ),
-              const SizedBox(height: 12),
-              for (final day in _days)
-                _WeekBar(
-                  label: day.label,
-                  count: weekCounts[day.index] ?? 0,
-                  max: weekCounts.values.fold<int>(1, (a, b) => a > b ? a : b),
-                ),
-              if (state.isLoadingHistory)
-                const Padding(
-                  padding: EdgeInsets.only(top: 24),
-                  child: Center(child: CircularProgressIndicator()),
-                ),
-              if (state.historyErrorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 18),
-                  child: Text(
-                    state.historyErrorMessage!,
-                    style: const TextStyle(color: Color(0xFFE53935)),
-                  ),
-                ),
             ],
           ),
         ),
@@ -105,68 +56,380 @@ class _DriverStatsScreenState extends ConsumerState<DriverStatsScreen> {
     );
   }
 
-  double _rideEarning(DriverRide ride) {
-    return ride.driverNetEarnings ?? ride.displayPrice;
-  }
-
   Future<void> _refresh() async {
     setState(() {
       _statsFuture = ref.read(driverRepositoryProvider).fetchStats();
     });
-    await ref.read(rideDriverProvider.notifier).loadRides();
-  }
-
-  Map<int, int> _weekCounts(List<DriverRide> rides) {
-    final now = DateTime.now();
-    final start = now.subtract(Duration(days: now.weekday - 1));
-    final result = <int, int>{};
-
-    for (final ride in rides) {
-      final date = ride.createdAt;
-      final sameWeek = date.isAfter(
-        DateTime(start.year, start.month, start.day),
-      );
-      if (!sameWeek) {
-        continue;
-      }
-      result[date.weekday] = (result[date.weekday] ?? 0) + 1;
-    }
-
-    return result;
+    await _statsFuture;
   }
 }
 
-class _EarningsCard extends StatelessWidget {
-  const _EarningsCard({required this.totalEarnings});
+class _Header extends StatelessWidget {
+  const _Header({required this.onBack});
 
-  final double totalEarnings;
+  final VoidCallback onBack;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        IconButton(
+          onPressed: onBack,
+          icon: const Icon(Icons.arrow_back_rounded),
+        ),
+        const SizedBox(width: 8),
+        const Text(
+          'Mes stats',
+          style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
+        ),
+      ],
+    );
+  }
+}
+
+class _StatsContent extends StatelessWidget {
+  const _StatsContent({required this.stats});
+
+  final DriverStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _RevenueSection(stats: stats),
+        const SizedBox(height: 18),
+        _RideStatusSection(stats: stats),
+        const SizedBox(height: 18),
+        _PeakHoursSection(stats: stats),
+        const SizedBox(height: 18),
+        _ProfitableZonesSection(stats: stats),
+        const SizedBox(height: 18),
+        _ReputationSection(stats: stats),
+      ],
+    );
+  }
+}
+
+class _RevenueSection extends StatelessWidget {
+  const _RevenueSection({required this.stats});
+
+  final DriverStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Revenus',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DriverStatsCard(
+                label: 'aujourd hui',
+                value: _formatFcfa(stats.revenue.today),
+                icon: Icons.today_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DriverStatsCard(
+                label: 'semaine',
+                value: _formatFcfa(stats.revenue.week),
+                icon: Icons.calendar_view_week_rounded,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DriverStatsCard(
+                label: 'mois',
+                value: _formatFcfa(stats.revenue.month),
+                icon: Icons.calendar_month_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DriverStatsCard(
+                label: 'total',
+                value: _formatFcfa(stats.revenue.total),
+                icon: Icons.savings_rounded,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _RideStatusSection extends StatelessWidget {
+  const _RideStatusSection({required this.stats});
+
+  final DriverStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Courses',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: DriverStatsCard(
+                label: 'completees',
+                value: '${stats.rides.completed}',
+                icon: Icons.check_circle_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DriverStatsCard(
+                label: 'annulees',
+                value: '${stats.rides.cancelled}',
+                icon: Icons.cancel_rounded,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DriverStatsCard(
+                label: 'refusees',
+                value: '${stats.rides.refused}',
+                icon: Icons.block_rounded,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PeakHoursSection extends StatelessWidget {
+  const _PeakHoursSection({required this.stats});
+
+  final DriverStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final maxRides = stats.peakHours.fold<int>(
+      1,
+      (current, item) => item.completedRides > current ? item.completedRides : current,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Heures de pointe',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 4),
+        const Text(
+          'Nombre de courses completees par heure',
+          style: TextStyle(color: Color(0xFF6B7280)),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.fromLTRB(10, 16, 10, 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: SizedBox(
+            height: 360,
+            child: RotatedBox(
+              quarterTurns: 1,
+              child: BarChart(
+                BarChartData(
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxRides.toDouble(),
+                  barTouchData: BarTouchData(enabled: false),
+                  borderData: FlBorderData(show: false),
+                  gridData: const FlGridData(show: false),
+                  titlesData: FlTitlesData(
+                    leftTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(showTitles: false),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: 36,
+                        getTitlesWidget: (value, meta) {
+                          final hour = value.toInt();
+                          if (hour % 3 != 0 || hour < 0 || hour > 23) {
+                            return const SizedBox.shrink();
+                          }
+                          return RotatedBox(
+                            quarterTurns: 3,
+                            child: Text(
+                              '${hour.toString().padLeft(2, '0')}h',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF6B7280),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                  barGroups: stats.peakHours
+                      .map(
+                        (item) => BarChartGroupData(
+                          x: item.hour,
+                          barRods: [
+                            BarChartRodData(
+                              toY: item.completedRides.toDouble(),
+                              width: 7,
+                              borderRadius: BorderRadius.circular(4),
+                              color: const Color(0xFF1B8A5A),
+                            ),
+                          ],
+                        ),
+                      )
+                      .toList(growable: false),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProfitableZonesSection extends StatelessWidget {
+  const _ProfitableZonesSection({required this.stats});
+
+  final DriverStats stats;
+
+  @override
+  Widget build(BuildContext context) {
+    final zones = stats.profitableZones;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Zones rentables',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: zones.isEmpty
+              ? const Text(
+                  'Aucune zone rentable disponible pour le moment.',
+                  style: TextStyle(color: Color(0xFF6B7280)),
+                )
+              : Column(
+                  children: [
+                    for (var index = 0; index < zones.length; index++) ...[
+                      _ZoneRow(rank: index + 1, zone: zones[index]),
+                      if (index < zones.length - 1) const Divider(height: 18),
+                    ],
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ZoneRow extends StatelessWidget {
+  const _ZoneRow({
+    required this.rank,
+    required this.zone,
+  });
+
+  final int rank;
+  final DriverProfitableZoneStat zone;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(
+          '#$rank',
+          style: const TextStyle(
+            color: Color(0xFF1B8A5A),
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            zone.zoneName,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+        ),
+        Text(
+          '${_formatFcfa(zone.averageRevenue)} / course',
+          style: const TextStyle(
+            color: Color(0xFF374151),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ReputationSection extends StatelessWidget {
+  const _ReputationSection({required this.stats});
+
+  final DriverStats stats;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(22),
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.06),
-            blurRadius: 18,
-            offset: const Offset(0, 10),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(20),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          const Text('Total gains', style: TextStyle(color: Color(0xFF757575))),
-          const SizedBox(height: 8),
-          Text(
-            '${totalEarnings.toStringAsFixed(0)} FCFA',
-            style: const TextStyle(
-              color: Color(0xFF1B8A5A),
-              fontSize: 28,
-              fontWeight: FontWeight.w900,
+          const Icon(Icons.star_rounded, color: Color(0xFFF5A623), size: 30),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Note 30 jours: ${stats.reputation.last30Days.toStringAsFixed(1)}',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Note globale: ${stats.reputation.globalAverage.toStringAsFixed(1)}',
+                  style: const TextStyle(color: Color(0xFF6B7280)),
+                ),
+              ],
             ),
           ),
         ],
@@ -175,59 +438,30 @@ class _EarningsCard extends StatelessWidget {
   }
 }
 
-class _WeekBar extends StatelessWidget {
-  const _WeekBar({
-    required this.label,
-    required this.count,
-    required this.max,
-  });
-
-  final String label;
-  final int count;
-  final int max;
+class _StatsErrorCard extends StatelessWidget {
+  const _StatsErrorCard();
 
   @override
   Widget build(BuildContext context) {
-    final ratio = count == 0 ? 0.04 : count / max;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        children: [
-          SizedBox(width: 36, child: Text(label)),
-          Expanded(
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: LinearProgressIndicator(
-                value: ratio.clamp(0.0, 1.0),
-                minHeight: 12,
-                backgroundColor: const Color(0xFFE6E8EC),
-                valueColor: const AlwaysStoppedAnimation(Color(0xFF1B8A5A)),
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-              width: 72, child: Text('$count course${count > 1 ? 's' : ''}')),
-        ],
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEBEE),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: const Text(
+        'Impossible de charger les stats pour le moment.',
+        style: TextStyle(color: Color(0xFFE53935)),
       ),
     );
   }
 }
 
-class _DayInfo {
-  const _DayInfo(this.index, this.label);
-
-  final int index;
-  final String label;
+String _formatFcfa(double value) {
+  final rounded = value.round().toString();
+  final withSpaces = rounded.replaceAllMapped(
+    RegExp(r'\B(?=(\d{3})+(?!\d))'),
+    (_) => ' ',
+  );
+  return '$withSpaces FCFA';
 }
-
-const _days = [
-  _DayInfo(1, 'Lun'),
-  _DayInfo(2, 'Mar'),
-  _DayInfo(3, 'Mer'),
-  _DayInfo(4, 'Jeu'),
-  _DayInfo(5, 'Ven'),
-  _DayInfo(6, 'Sam'),
-  _DayInfo(7, 'Dim'),
-];

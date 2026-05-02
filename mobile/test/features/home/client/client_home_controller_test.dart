@@ -5,6 +5,30 @@ import 'package:noor_express_mobile/features/home/client/data/models/client_ride
 import 'package:noor_express_mobile/features/home/client/presentation/controllers/client_home_controller.dart';
 
 void main() {
+  group('PriceEstimate', () {
+    test('parses the enriched ride estimate payload', () {
+      final estimate = PriceEstimate.fromJson(const {
+        'estimated_price': 2500,
+        'distance_km': 6.4,
+        'duration_min': 18,
+        'pickup_zone': 'Plateau',
+        'dropoff_zone': 'Aeroport',
+        'min_price': 2200,
+        'max_price': 2800,
+        'available_drivers_count': 2,
+        'search_radius_km': 10,
+      });
+
+      expect(estimate.estimatedPrice, 2500);
+      expect(estimate.distanceKm, 6.4);
+      expect(estimate.durationMin, 18);
+      expect(estimate.minPrice, 2200);
+      expect(estimate.maxPrice, 2800);
+      expect(estimate.availableDriversCount, 2);
+      expect(estimate.searchRadiusKm, 10);
+    });
+  });
+
   group('ClientHomeController.loadRides', () {
     test('keeps accepted ride history out of activeRide when backend has none',
         () async {

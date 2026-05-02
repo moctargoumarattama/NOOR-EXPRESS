@@ -96,7 +96,17 @@ async def driver_websocket(websocket: WebSocket, driver_id: int) -> None:
         return
 
     async with AsyncSessionLocal() as session:
-        await update_driver_status(session, driver_id, DriverStatus.ONLINE)
+        persisted_driver = await session.get(User, driver_id)
+        if (
+            persisted_driver is not None
+            and persisted_driver.driver_status != DriverStatus.PAUSED
+        ):
+            await update_driver_status(
+                session,
+                driver_id,
+                DriverStatus.ONLINE,
+                is_available=True,
+            )
 
     await realtime_gateway.connect_driver(driver_id, websocket)
     keepalive_task = asyncio.create_task(send_keepalive(websocket))
@@ -127,7 +137,12 @@ async def driver_websocket(websocket: WebSocket, driver_id: int) -> None:
         await stop_keepalive(keepalive_task)
         await realtime_gateway.disconnect_driver(driver_id)
         async with AsyncSessionLocal() as session:
-            await update_driver_status(session, driver_id, DriverStatus.OFFLINE)
+            await update_driver_status(
+                session,
+                driver_id,
+                DriverStatus.OFFLINE,
+                is_available=False,
+            )
 
 
 @router.websocket("/ws/clients/{client_id}")

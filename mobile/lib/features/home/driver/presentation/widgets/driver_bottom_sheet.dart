@@ -16,7 +16,7 @@ enum DriverRideSheetStage {
 class DriverBottomSheet extends StatelessWidget {
   const DriverBottomSheet({
     super.key,
-    required this.isOnline,
+    required this.driverStatus,
     required this.isBusy,
     required this.todayRides,
     required this.todayEarnings,
@@ -33,7 +33,7 @@ class DriverBottomSheet extends StatelessWidget {
     this.onBackToRideReceived,
   });
 
-  final bool isOnline;
+  final String driverStatus;
   final bool isBusy;
   final int todayRides;
   final double todayEarnings;
@@ -51,6 +51,8 @@ class DriverBottomSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isOnline = driverStatus == 'online';
+    final isPaused = driverStatus == 'paused';
     final activeFlowStage =
         pendingRide == null ? DriverRideSheetStage.idle : flowStage;
     final sizing = _sheetSizing(activeFlowStage, activeRide != null);
@@ -100,6 +102,13 @@ class DriverBottomSheet extends StatelessWidget {
                   todayRides: todayRides,
                   todayEarnings: todayEarnings,
                   onStop: onStop,
+                )
+              else if (isPaused)
+                _PausedPanel(
+                  isBusy: isBusy,
+                  todayRides: todayRides,
+                  todayEarnings: todayEarnings,
+                  onResume: onStart,
                 )
               else
                 _OfflinePanel(
@@ -512,21 +521,63 @@ class _OfflinePanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _StatusTitle(
-          icon: Icons.pause_circle,
-          text: 'Vous etes en pause',
-          color: Color(0xFFE53935),
+          icon: Icons.power_settings_new_rounded,
+          text: 'Vous etes hors ligne',
+          color: Color(0xFF8A8D93),
         ),
         const SizedBox(height: 8),
         Text(
-          'Passez disponible pour recevoir les prochaines courses.',
+          'Passez en ligne pour recevoir les prochaines courses.',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 18),
         AppButton(
-          label: 'Recevoir des courses',
+          label: 'Passer en ligne',
           icon: Icons.play_arrow_rounded,
           isLoading: isBusy,
           onPressed: isBusy ? null : onStart,
+        ),
+        const SizedBox(height: 16),
+        _StatsRow(todayRides: todayRides, todayEarnings: todayEarnings),
+      ],
+    );
+  }
+}
+
+class _PausedPanel extends StatelessWidget {
+  const _PausedPanel({
+    required this.isBusy,
+    required this.todayRides,
+    required this.todayEarnings,
+    required this.onResume,
+  });
+
+  final bool isBusy;
+  final int todayRides;
+  final double todayEarnings;
+  final VoidCallback onResume;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _StatusTitle(
+          icon: Icons.pause_circle_rounded,
+          text: 'Vous etes en pause',
+          color: Color(0xFFF29A2E),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Vous ne recevez plus de nouvelles courses pour le moment.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 18),
+        AppButton(
+          label: 'Repasser en ligne',
+          icon: Icons.play_arrow_rounded,
+          isLoading: isBusy,
+          onPressed: isBusy ? null : onResume,
         ),
         const SizedBox(height: 16),
         _StatsRow(todayRides: todayRides, todayEarnings: todayEarnings),

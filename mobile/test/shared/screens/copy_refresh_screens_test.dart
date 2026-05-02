@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:noor_express_mobile/features/auth/presentation/screens/login_screen.dart';
+import 'package:noor_express_mobile/features/auth/presentation/screens/register_screen.dart';
 import 'package:noor_express_mobile/shared/screens/help_screen.dart';
 import 'package:noor_express_mobile/shared/screens/notifications_screen.dart';
 import 'package:noor_express_mobile/shared/screens/settings_screen.dart';
@@ -37,6 +38,8 @@ void main() {
       find.text('Entrez votre numero pour continuer. On s occupe du reste.'),
       findsOneWidget,
     );
+    expect(find.text('CGU'), findsOneWidget);
+    expect(find.text('Politique de confidentialite'), findsOneWidget);
     expect(find.text('Numero de telephone'), findsOneWidget);
     expect(find.byType(NoorLogo), findsOneWidget);
   });
@@ -59,6 +62,23 @@ void main() {
     expect(find.text('Suivez votre trajet simplement'), findsOneWidget);
   });
 
+  testWidgets('RegisterScreen exposes legal links below the submit button', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: RegisterScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continuer'), findsOneWidget);
+    expect(find.text('CGU'), findsOneWidget);
+    expect(find.text('Politique de confidentialite'), findsOneWidget);
+  });
+
   testWidgets('SettingsScreen keeps the account copy human and clear', (
     tester,
   ) async {
@@ -75,10 +95,41 @@ void main() {
     expect(find.text('Position pendant un trajet'), findsOneWidget);
     expect(find.text('Version 1.2.3'), findsOneWidget);
     expect(find.text('Effacer les donnees temporaires'), findsOneWidget);
+    expect(find.text('Juridique'), findsOneWidget);
+    expect(find.text('CGU'), findsWidgets);
+    expect(find.text('Politique de confidentialite'), findsWidgets);
     expect(
-      find.text('Cette action vous deconnectera pour le moment.'),
+      find.text(
+        'Action irreversible. Vos donnees personnelles seront anonymisees.',
+      ),
       findsOneWidget,
     );
+  });
+
+  testWidgets('SettingsScreen account deletion uses a two-step confirmation', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: SettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Supprimer mon compte'));
+    await tester.pumpAndSettle();
+    expect(find.text('Etes-vous sur ?'), findsOneWidget);
+    expect(
+      find.text('La suppression anonymise votre compte et supprime :'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.text('Continuer'));
+    await tester.pumpAndSettle();
+    expect(find.text('Confirmation finale'), findsOneWidget);
+    expect(find.text('SUPPRIMER'), findsOneWidget);
   });
 
   testWidgets('NotificationsScreen uses calm and human labels', (

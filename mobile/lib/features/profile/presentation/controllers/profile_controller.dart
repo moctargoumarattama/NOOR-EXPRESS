@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/media/photo_picker_types.dart';
 import '../../data/datasources/profile_datasource.dart';
 import '../../data/models/client_profile_model.dart';
 
@@ -65,8 +66,8 @@ class ProfileController extends StateNotifier<ProfileState> {
   }
 
   Future<void> save({
-    String? name,
-    String? profilePhoto,
+    String? firstName,
+    NoorPickedPhoto? profilePhoto,
     String successMessage = 'Profil mis a jour.',
   }) async {
     state = state.copyWith(
@@ -76,7 +77,7 @@ class ProfileController extends StateNotifier<ProfileState> {
     );
     try {
       final profile = await _datasource.updateClientProfile(
-        name: name,
+        firstName: firstName,
         profilePhoto: profilePhoto,
       );
       state = state.copyWith(
@@ -87,14 +88,6 @@ class ProfileController extends StateNotifier<ProfileState> {
     } on ProfileFailure catch (error) {
       state = state.copyWith(isSaving: false, errorMessage: error.message);
     }
-  }
-
-  Future<void> updatePhoto(String profilePhoto) {
-    return save(
-      name: state.profile?.name,
-      profilePhoto: profilePhoto,
-      successMessage: 'Photo mise a jour.',
-    );
   }
 
   void consumeMessages() {

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     UPSTASH_REDIS_REST_URL: str | None = None
     UPSTASH_REDIS_REST_TOKEN: str | None = None
     FIREBASE_CREDENTIALS_PATH: str = "firebase_credentials.json"
+    SUPPORT_WHATSAPP_NUMBER: str = ""
+    SUPPORT_HOURS: str = "Tous les jours 06:00-23:00"
 
     class Config:
         env_file = Path(__file__).resolve().parents[2] / ".env"

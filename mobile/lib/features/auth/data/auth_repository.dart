@@ -33,12 +33,9 @@ class AuthRepository {
 
       return getCurrentSession(accessToken);
     } on DioException catch (error) {
-      final detail = error.response?.data;
-      if (detail is Map<String, dynamic>) {
-        final message = detail['detail'];
-        if (message is String && message.isNotEmpty) {
-          throw AuthFailure(message);
-        }
+      final message = _extractErrorMessage(error);
+      if (message != null) {
+        throw AuthFailure(message);
       }
 
       throw const AuthFailure('Connexion impossible pour le moment.');
@@ -86,16 +83,14 @@ class AuthRepository {
         token: activeToken,
         role: role,
         phoneNumber: phoneNumber,
-        name: payload['name'] as String?,
+        name:
+            (payload['first_name'] as String?) ?? (payload['name'] as String?),
         refreshToken: refreshToken,
       );
     } on DioException catch (error) {
-      final detail = error.response?.data;
-      if (detail is Map<String, dynamic>) {
-        final message = detail['detail'];
-        if (message is String && message.isNotEmpty) {
-          throw AuthFailure(message);
-        }
+      final message = _extractErrorMessage(error);
+      if (message != null) {
+        throw AuthFailure(message);
       }
 
       final statusCode = error.response?.statusCode;
@@ -113,5 +108,37 @@ class AuthRepository {
     } on DioException {
       // Logout local reste prioritaire si le token est deja expire.
     }
+  }
+
+  Future<void> deleteAccount() async {
+    try {
+      await _apiClient.dio.delete<void>('/users/me');
+    } on DioException catch (error) {
+      final message = _extractErrorMessage(error);
+      if (message != null) {
+        throw AuthFailure(message);
+      }
+      throw const AuthFailure(
+        'Suppression du compte impossible pour le moment.',
+      );
+    }
+  }
+
+  String? _extractErrorMessage(DioException error) {
+    final detail = error.response?.data;
+    if (detail is! Map<String, dynamic>) {
+      return null;
+    }
+
+    final payloadMessage = detail['message'];
+    if (payloadMessage is String && payloadMessage.isNotEmpty) {
+      return payloadMessage;
+    }
+
+    final errorDetail = detail['detail'];
+    if (errorDetail is String && errorDetail.isNotEmpty) {
+      return errorDetail;
+    }
+    return null;
   }
 }

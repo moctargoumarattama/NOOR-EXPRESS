@@ -14,6 +14,7 @@ class AddressSearchState {
   const AddressSearchState({
     required this.query,
     required this.results,
+    required this.favorites,
     required this.recents,
     required this.isLoading,
     required this.isResolvingCurrentLocation,
@@ -24,6 +25,7 @@ class AddressSearchState {
       : this(
           query: '',
           results: AddressModel.knownNiameyZones,
+          favorites: const [],
           recents: const [],
           isLoading: false,
           isResolvingCurrentLocation: false,
@@ -31,6 +33,7 @@ class AddressSearchState {
 
   final String query;
   final List<AddressResult> results;
+  final List<AddressResult> favorites;
   final List<AddressResult> recents;
   final bool isLoading;
   final bool isResolvingCurrentLocation;
@@ -39,6 +42,7 @@ class AddressSearchState {
   AddressSearchState copyWith({
     String? query,
     List<AddressResult>? results,
+    List<AddressResult>? favorites,
     List<AddressResult>? recents,
     bool? isLoading,
     bool? isResolvingCurrentLocation,
@@ -48,6 +52,7 @@ class AddressSearchState {
     return AddressSearchState(
       query: query ?? this.query,
       results: results ?? this.results,
+      favorites: favorites ?? this.favorites,
       recents: recents ?? this.recents,
       isLoading: isLoading ?? this.isLoading,
       isResolvingCurrentLocation:
@@ -75,6 +80,21 @@ class AddressSearchController extends StateNotifier<AddressSearchState> {
     final recents =
         rawItems.map(_decodeRecent).whereType<AddressModel>().toList();
     state = state.copyWith(recents: recents, clearError: true);
+  }
+
+  Future<void> loadFavorites() async {
+    try {
+      final favorites = await _datasource.fetchSavedAddresses();
+      state = state.copyWith(
+        favorites: favorites,
+        clearError: true,
+      );
+    } on AddressSearchFailure catch (error) {
+      state = state.copyWith(
+        favorites: const [],
+        errorMessage: error.message,
+      );
+    }
   }
 
   void search(String query) {
@@ -173,6 +193,32 @@ class AddressSearchController extends StateNotifier<AddressSearchState> {
       next.map((item) => jsonEncode(item.toJson())).toList(),
     );
     state = state.copyWith(recents: next);
+  }
+
+  Future<void> addFavorite({
+    required AddressResult address,
+    required String label,
+  }) async {
+    final trimmedLabel = label.trim();
+    if (trimmedLabel.isEmpty) {
+      throw const AddressSearchFailure('Le label du favori est obligatoire.');
+    }
+    final created = await _datasource.createSavedAddress(
+      label: trimmedLabel,
+      address: address,
+    );
+    final nextFavorites = [
+      created,
+      ...state.favorites.where(
+        (item) =>
+            item.name.toLowerCase() != created.name.toLowerCase() ||
+            item.displayName.toLowerCase() != created.displayName.toLowerCase(),
+      ),
+    ];
+    state = state.copyWith(
+      favorites: nextFavorites,
+      clearError: true,
+    );
   }
 
   List<AddressResult> _fallback(String query) {

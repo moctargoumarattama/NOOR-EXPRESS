@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:noor_express_mobile/core/theme/app_colors.dart';
 import 'package:noor_express_mobile/core/theme/app_theme.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/widgets/price_selector.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/widgets/route_summary_card.dart';
@@ -50,6 +51,32 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('price-selector-decrease')));
     await tester.pump();
     expect(controller.text, '2500');
+  });
+
+  testWidgets(
+      'RouteSummaryCard shows a discrete red message when no drivers are available',
+      (tester) async {
+    await tester.pumpWidget(
+      const _Harness(
+        child: RouteSummaryCard(
+          pickupLabel: 'Grand Marche',
+          dropoffLabel: 'Aeroport',
+          distanceKm: 6.4,
+          durationMinutes: 18,
+          recommendedPrice: 2500,
+          minimumPrice: 2200,
+          maximumPrice: 2800,
+          availableDriversCount: 0,
+          compact: true,
+        ),
+      ),
+    );
+
+    final message = find.text('Aucun chauffeur disponible pour l\'instant');
+    expect(message, findsOneWidget);
+
+    final text = tester.widget<Text>(message);
+    expect(text.style?.color, AppColors.coral);
   });
 }
 

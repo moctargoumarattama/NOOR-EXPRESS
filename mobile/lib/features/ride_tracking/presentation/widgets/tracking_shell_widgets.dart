@@ -41,7 +41,8 @@ class TrackingTopBar extends StatelessWidget {
               runSpacing: 8,
               children: [
                 if (distanceRemainingKm != null)
-                  EtaChip(label: '${distanceRemainingKm!.toStringAsFixed(1)} km'),
+                  EtaChip(
+                      label: '${distanceRemainingKm!.toStringAsFixed(1)} km'),
                 if (etaMinutes != null) EtaChip(label: 'Dans $etaMinutes min'),
                 ConnectionBadge(connectionState: connectionState),
               ],
@@ -49,6 +50,35 @@ class TrackingTopBar extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+class TrackingSupportButton extends StatelessWidget {
+  const TrackingSupportButton({
+    super.key,
+    required this.onPressed,
+  });
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black.withValues(alpha: 0.42),
+      shape: const CircleBorder(),
+      child: InkWell(
+        onTap: onPressed,
+        customBorder: const CircleBorder(),
+        child: const Padding(
+          padding: EdgeInsets.all(12),
+          child: Icon(
+            Icons.support_agent_rounded,
+            color: Colors.white,
+            size: 20,
+          ),
+        ),
+      ),
     );
   }
 }

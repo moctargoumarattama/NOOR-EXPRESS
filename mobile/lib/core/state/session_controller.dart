@@ -169,6 +169,23 @@ class SessionController extends StateNotifier<SessionState> {
     await forceLogout();
   }
 
+  Future<String?> deleteAccount() async {
+    final previousState = state;
+    state = state.copyWith(
+      status: SessionStatus.loading,
+      clearErrorMessage: true,
+    );
+
+    try {
+      await _authRepository.deleteAccount();
+      await forceLogout();
+      return null;
+    } on AuthFailure catch (error) {
+      state = previousState.copyWith(errorMessage: error.message);
+      return error.message;
+    }
+  }
+
   Future<void> forceLogout() async {
     _apiClient.clearAuthToken();
     await _storageService.clearSession();

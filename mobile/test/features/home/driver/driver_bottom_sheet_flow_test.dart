@@ -127,7 +127,7 @@ Future<void> _pumpSheet(
           child: Stack(
             children: [
               DriverBottomSheet(
-                isOnline: true,
+                driverStatus: 'online',
                 isBusy: false,
                 todayRides: 0,
                 todayEarnings: 0,
@@ -184,7 +184,7 @@ class _DriverFlowHarnessState extends State<_DriverFlowHarness> {
   @override
   Widget build(BuildContext context) {
     return DriverBottomSheet(
-      isOnline: true,
+      driverStatus: 'online',
       isBusy: false,
       todayRides: 0,
       todayEarnings: 0,

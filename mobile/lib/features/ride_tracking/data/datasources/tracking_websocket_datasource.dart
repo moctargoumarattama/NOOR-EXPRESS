@@ -15,6 +15,7 @@ import '../models/ride_tracking_model.dart';
 enum TrackingSocketEventType {
   rideStatus,
   driverLocation,
+  rideMessage,
 }
 
 class TrackingSocketEvent {
@@ -23,20 +24,31 @@ class TrackingSocketEvent {
     required this.status,
   })  : type = TrackingSocketEventType.rideStatus,
         driverId = null,
-        position = null;
+        position = null,
+        message = null;
 
   const TrackingSocketEvent.driverLocation({
     required this.driverId,
     required this.position,
   })  : type = TrackingSocketEventType.driverLocation,
         rideId = null,
-        status = null;
+        status = null,
+        message = null;
+
+  const TrackingSocketEvent.rideMessage({
+    required this.rideId,
+    required this.message,
+  })  : type = TrackingSocketEventType.rideMessage,
+        status = null,
+        driverId = null,
+        position = null;
 
   final TrackingSocketEventType type;
   final int? rideId;
   final String? status;
   final int? driverId;
   final TrackingCoordinates? position;
+  final RideChatMessageModel? message;
 }
 
 class TrackingWebSocketDatasource {
@@ -190,6 +202,22 @@ class TrackingWebSocketDatasource {
       if (rideId != null && status != null) {
         _eventsController.add(
           TrackingSocketEvent.rideStatus(rideId: rideId, status: status),
+        );
+        return;
+      }
+
+      if (message['type'] == 'ride_message') {
+        final messageJson = message['message'];
+        if (rideId == null || messageJson is! Map) {
+          return;
+        }
+        _eventsController.add(
+          TrackingSocketEvent.rideMessage(
+            rideId: rideId,
+            message: RideChatMessageModel.fromJson(
+              Map<String, dynamic>.from(messageJson),
+            ),
+          ),
         );
         return;
       }

@@ -55,6 +55,11 @@ class _ClientHistoryScreenState extends ConsumerState<ClientHistoryScreen> {
                   price: ride.displayPrice,
                   status: ride.status,
                   createdAt: ride.createdAt,
+                  displayedAt: ride.completedAt,
+                  details: [
+                    if (ride.clientRatingForDriver != null)
+                      'Note donnee: ${ride.clientRatingForDriver!.toStringAsFixed(1)}/5',
+                  ],
                   onTap: () => context.push(
                     AppRoutes.rideDetail(ride.id),
                     extra: _rideToJson(ride),
@@ -115,8 +120,12 @@ class _ClientHistoryScreenState extends ConsumerState<ClientHistoryScreen> {
       'estimated_price': ride.estimatedPrice,
       'agreed_price': ride.agreedPrice,
       'final_price': ride.finalPrice,
+      'distance_km': ride.distanceKm,
+      'duration_minutes': ride.durationMinutes,
+      'client_rating_for_driver': ride.clientRatingForDriver,
       'status': ride.status,
       'created_at': ride.createdAt.toIso8601String(),
+      'completed_at': ride.completedAt?.toIso8601String(),
     };
   }
 }
@@ -135,7 +144,7 @@ class _Header extends StatelessWidget {
           IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
           const SizedBox(width: 8),
           const Text(
-            'Mes trajets',
+            'Mes courses',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
         ],

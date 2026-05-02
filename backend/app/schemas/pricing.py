@@ -124,6 +124,7 @@ class TimePricingRuleUpdate(BaseModel):
 class PriceEstimateRead(BaseModel):
     estimated_price: float
     distance_km: float
+    duration_min: int
     pickup_zone: str | None
     dropoff_zone: str | None
     base_price: float
@@ -132,6 +133,10 @@ class PriceEstimateRead(BaseModel):
     applied_zone_rule: dict | None = None
     applied_time_rule: dict | None = None
     platform_commission_preview: float
+    min_price: float
+    max_price: float
+    available_drivers_count: int = Field(ge=0)
+    search_radius_km: float = Field(gt=0)
 
 
 class PricingPreviewRequest(BaseModel):

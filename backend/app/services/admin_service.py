@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+from datetime import datetime, timedelta
 from typing import Any
 
 import bcrypt
@@ -14,13 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.config import settings
+from app.core.firebase import notify_user, notify_users
 from app.db.database import get_db_session
 from app.models.admin import Admin
+from app.models.broadcast_history import BroadcastHistory
 from app.models.ride_report import RideReport, RideReportStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
-from app.models.user import DriverStatus, User
+from app.models.user import DriverStatus, User, UserRole, UserSuspension
 
 admin_bearer_scheme = HTTPBearer(auto_error=False)
+BROADCAST_LIMIT_PER_HOUR = 5
+BROADCAST_LIMIT_WINDOW = timedelta(hours=1)
 
 
 class AdminAlreadyExistsError(Exception):
@@ -33,6 +38,22 @@ class AdminUserDeleteBlockedError(Exception):
 
 class AdminUserNotFoundError(Exception):
     pass
+
+
+class AdminReportNotFoundError(Exception):
+    pass
+
+
+class AdminSuspensionInvalidError(Exception):
+    pass
+
+
+class AdminNotificationRateLimitError(Exception):
+    def __init__(self, retry_after_seconds: int) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__(
+            f"Broadcast limit reached. Retry in {retry_after_seconds} seconds."
+        )
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -67,7 +88,9 @@ def decode_admin_token(token: str) -> dict[str, Any]:
     try:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
     except ValueError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin token") from exc
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Invalid admin token"
+        ) from exc
 
     signing_input = f"{encoded_header}.{encoded_payload}".encode("utf-8")
     expected_signature = hmac.new(
@@ -75,7 +98,9 @@ def decode_admin_token(token: str) -> dict[str, Any]:
         signing_input,
         hashlib.sha256,
     ).digest()
-    if not hmac.compare_digest(expected_signature, _base64url_decode(encoded_signature)):
+    if not hmac.compare_digest(
+        expected_signature, _base64url_decode(encoded_signature)
+    ):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin token")
 
     payload = json.loads(_base64url_decode(encoded_payload))
@@ -125,7 +150,30 @@ async def get_all_users(session: AsyncSession) -> list[dict[str, Any]]:
             "name": user.name,
             "role": user.role.value,
             "is_blocked": bool(user.is_blocked),
+            "is_suspended": bool(user.is_suspended),
+            "suspended_until": user.suspended_until,
+            "suspension_reason": user.suspension_reason,
+            "deleted_at": user.deleted_at,
+            "deletion_reason": user.deletion_reason,
             "created_at": user.created_at,
+        }
+        for user in result.scalars().all()
+    ]
+
+
+async def get_deleted_users(session: AsyncSession) -> list[dict[str, Any]]:
+    result = await session.execute(
+        select(User)
+        .where(User.deleted_at.is_not(None))
+        .order_by(User.deleted_at.desc(), User.id.desc())
+    )
+    return [
+        {
+            "id": user.id,
+            "role": user.role.value,
+            "phone_hash": user.phone_number,
+            "deleted_at": user.deleted_at,
+            "deletion_reason": user.deletion_reason,
         }
         for user in result.scalars().all()
     ]
@@ -177,12 +225,11 @@ async def get_all_rides(session: AsyncSession) -> list[dict[str, Any]]:
     client = aliased(User)
     driver = aliased(User)
     report_counts_result = await session.execute(
-        select(RideReport.ride_request_id, func.count(RideReport.id))
-        .group_by(RideReport.ride_request_id)
+        select(RideReport.ride_request_id, func.count(RideReport.id)).group_by(
+            RideReport.ride_request_id
+        )
     )
-    report_counts = {
-        ride_id: count for ride_id, count in report_counts_result.all()
-    }
+    report_counts = {ride_id: count for ride_id, count in report_counts_result.all()}
     result = await session.execute(
         select(RideRequest, client.phone_number, driver.phone_number)
         .join(client, RideRequest.client_id == client.id)
@@ -207,7 +254,6 @@ async def get_all_reports(session: AsyncSession) -> list[dict[str, Any]]:
         select(RideReport, RideRequest, reporter.phone_number, reporter.role)
         .join(RideRequest, RideReport.ride_request_id == RideRequest.id)
         .join(reporter, RideReport.reported_by_id == reporter.id)
-        .where(RideReport.status == RideReportStatus.OUVERT)
         .order_by(RideReport.created_at.desc())
         .limit(500)
     )
@@ -220,18 +266,135 @@ async def get_all_reports(session: AsyncSession) -> list[dict[str, Any]]:
             "reason": report.reason.value,
             "description": report.description,
             "status": report.status.value,
+            "note_admin": report.note_admin,
             "created_at": report.created_at,
             "pickup_location": ride.pickup_location,
             "dropoff_location": ride.dropoff_location,
             "ride_status": ride.status.value,
+            "reported_user_id": _resolve_reported_user_id(
+                report=report,
+                ride_request=ride,
+            ),
+            "client_id": ride.client_id,
+            "driver_id": ride.driver_id,
         }
         for report, ride, reporter_phone, reporter_role in result.all()
     ]
 
 
+async def update_report(
+    session: AsyncSession,
+    report_id: int,
+    *,
+    status: RideReportStatus,
+    note_admin: str | None,
+) -> RideReport:
+    report = await session.get(RideReport, report_id)
+    if report is None:
+        raise AdminReportNotFoundError("Report not found")
+
+    previous_status = report.status
+    report.status = status
+    report.note_admin = note_admin
+    await session.commit()
+    await session.refresh(report)
+
+    if previous_status != report.status:
+        await _notify_report_status_change(session, report)
+    return report
+
+
+async def suspend_user(
+    session: AsyncSession,
+    user_id: int,
+    *,
+    reason: str,
+    duration_days: int | None,
+) -> User:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    suspension_reason = reason.strip()
+    if not suspension_reason:
+        raise AdminSuspensionInvalidError("Suspension reason is required")
+    if duration_days is not None and duration_days <= 0:
+        raise AdminSuspensionInvalidError("Suspension duration must be positive")
+
+    suspended_until = (
+        datetime.utcnow() + timedelta(days=duration_days)
+        if duration_days is not None
+        else None
+    )
+    user.is_suspended = True
+    user.suspended_until = suspended_until
+    user.suspension_reason = suspension_reason
+    user.refresh_token = None
+    if user.role == UserRole.DRIVER:
+        user.is_available = False
+        user.driver_status = DriverStatus.OFFLINE
+
+    session.add(
+        UserSuspension(
+            user_id=user.id,
+            reason=suspension_reason,
+            suspended_until=suspended_until,
+        )
+    )
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def unsuspend_user(session: AsyncSession, user_id: int) -> User:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    user.is_suspended = False
+    user.suspended_until = None
+    user.suspension_reason = None
+    latest_suspension = await _get_latest_open_suspension(session, user_id)
+    if latest_suspension is not None:
+        latest_suspension.lifted_at = datetime.utcnow()
+    await session.commit()
+    await session.refresh(user)
+    return user
+
+
+async def get_user_suspension_history(
+    session: AsyncSession,
+    user_id: int,
+) -> list[dict[str, Any]]:
+    user = await session.get(User, user_id)
+    if user is None:
+        raise AdminUserNotFoundError("User not found")
+
+    result = await session.execute(
+        select(UserSuspension)
+        .where(UserSuspension.user_id == user_id)
+        .order_by(UserSuspension.suspended_at.desc(), UserSuspension.id.desc())
+        .limit(100)
+    )
+    return [
+        {
+            "id": suspension.id,
+            "user_id": suspension.user_id,
+            "reason": suspension.reason,
+            "suspended_at": suspension.suspended_at,
+            "suspended_until": suspension.suspended_until,
+            "lifted_at": suspension.lifted_at,
+            "is_permanent": suspension.suspended_until is None,
+        }
+        for suspension in result.scalars().all()
+    ]
+
+
 async def get_dashboard_stats(session: AsyncSession) -> dict[str, Any]:
     grouped_result = await session.execute(
-        select(RideRequest.status, func.count(RideRequest.id)).group_by(RideRequest.status)
+        select(RideRequest.status, func.count(RideRequest.id)).group_by(
+            RideRequest.status
+        )
     )
     counts = {status.value: count for status, count in grouped_result.all()}
     revenue_result = await session.execute(
@@ -246,9 +409,7 @@ async def get_dashboard_stats(session: AsyncSession) -> dict[str, Any]:
                 ),
                 0.0,
             )
-        ).where(
-            RideRequest.status == RideRequestStatus.COMPLETED
-        )
+        ).where(RideRequest.status == RideRequestStatus.COMPLETED)
     )
     users_count = await session.execute(select(func.count(User.id)))
     return {
@@ -264,6 +425,140 @@ async def get_dashboard_stats(session: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def estimate_broadcast_recipients(
+    session: AsyncSession,
+    *,
+    target: str,
+    user_id: int | None = None,
+) -> int:
+    recipient_ids, _ = await _resolve_broadcast_recipient_ids(
+        session,
+        target=target,
+        user_id=user_id,
+        strict_user_target=False,
+    )
+    return len(recipient_ids)
+
+
+async def send_notification_broadcast(
+    session: AsyncSession,
+    *,
+    target: str,
+    user_id: int | None,
+    title: str,
+    message: str,
+    notification_type: str,
+) -> dict[str, Any]:
+    recipient_ids, history_target = await _resolve_broadcast_recipient_ids(
+        session,
+        target=target,
+        user_id=user_id,
+        strict_user_target=True,
+    )
+    await _enforce_broadcast_rate_limit(session)
+
+    history = BroadcastHistory(
+        target=history_target,
+        title=title,
+        message=message,
+        notification_type=notification_type,
+        estimated_recipients=len(recipient_ids),
+    )
+    session.add(history)
+    await notify_users(
+        session,
+        recipient_ids,
+        title=title,
+        body=message,
+        data={
+            "type": notification_type,
+            "target": history_target,
+            "scope": "admin_broadcast",
+        },
+    )
+    await session.commit()
+    await session.refresh(history)
+    return _broadcast_history_row(history)
+
+
+async def get_notification_broadcast_history(
+    session: AsyncSession,
+    *,
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    total_result = await session.execute(select(func.count(BroadcastHistory.id)))
+    total = int(total_result.scalar_one() or 0)
+    result = await session.execute(
+        select(BroadcastHistory)
+        .order_by(BroadcastHistory.sent_at.desc(), BroadcastHistory.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = [_broadcast_history_row(row) for row in result.scalars().all()]
+    return {
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
+
+
+def _resolve_reported_user_id(
+    *,
+    report: RideReport,
+    ride_request: RideRequest,
+) -> int | None:
+    if report.reported_by_id == ride_request.client_id:
+        return ride_request.driver_id
+    if report.reported_by_id == ride_request.driver_id:
+        return ride_request.client_id
+    return None
+
+
+async def _notify_report_status_change(
+    session: AsyncSession,
+    report: RideReport,
+) -> None:
+    ride_request = await session.get(RideRequest, report.ride_request_id)
+    if ride_request is None:
+        return
+    reported_user_id = _resolve_reported_user_id(
+        report=report,
+        ride_request=ride_request,
+    )
+    if reported_user_id is None:
+        return
+    await notify_user(
+        session,
+        reported_user_id,
+        title="Mise a jour signalement",
+        body=f"Un signalement vous concernant est passe au statut {report.status.value}.",
+        data={
+            "type": "report_status_updated",
+            "report_id": report.id,
+            "ride_id": report.ride_request_id,
+            "status": report.status.value,
+        },
+    )
+
+
+async def _get_latest_open_suspension(
+    session: AsyncSession,
+    user_id: int,
+) -> UserSuspension | None:
+    result = await session.execute(
+        select(UserSuspension)
+        .where(
+            UserSuspension.user_id == user_id,
+            UserSuspension.lifted_at.is_(None),
+        )
+        .order_by(UserSuspension.suspended_at.desc(), UserSuspension.id.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 def _ride_row(
     ride: RideRequest,
     client_phone: str,
@@ -277,10 +572,103 @@ def _ride_row(
         "driver": driver_phone,
         "pickup_location": ride.pickup_location,
         "dropoff_location": ride.dropoff_location,
+        "distance_km": ride.distance_km,
+        "duration_minutes": ride.duration_minutes,
         "estimated_price": ride.estimated_price,
         "agreed_price": ride.agreed_price,
         "final_price": ride.final_price,
+        "platform_commission": ride.platform_commission,
+        "driver_net_earnings": ride.driver_net_earnings,
         "status": ride.status.value,
         "created_at": ride.created_at,
+        "completed_at": ride.completed_at,
         "report_count": report_count,
+    }
+
+
+async def _enforce_broadcast_rate_limit(session: AsyncSession) -> None:
+    window_start = datetime.utcnow() - BROADCAST_LIMIT_WINDOW
+    count_result = await session.execute(
+        select(func.count(BroadcastHistory.id)).where(
+            BroadcastHistory.sent_at >= window_start
+        )
+    )
+    sent_in_window = int(count_result.scalar_one() or 0)
+    if sent_in_window < BROADCAST_LIMIT_PER_HOUR:
+        return
+
+    oldest_result = await session.execute(
+        select(BroadcastHistory.sent_at)
+        .where(BroadcastHistory.sent_at >= window_start)
+        .order_by(BroadcastHistory.sent_at.asc(), BroadcastHistory.id.asc())
+        .limit(1)
+    )
+    oldest_sent_at = oldest_result.scalar_one_or_none()
+    retry_after_seconds = int(BROADCAST_LIMIT_WINDOW.total_seconds())
+    if oldest_sent_at is not None:
+        retry_at = oldest_sent_at + BROADCAST_LIMIT_WINDOW
+        retry_after_seconds = max(
+            1,
+            int((retry_at - datetime.utcnow()).total_seconds()),
+        )
+    raise AdminNotificationRateLimitError(retry_after_seconds)
+
+
+async def _resolve_broadcast_recipient_ids(
+    session: AsyncSession,
+    *,
+    target: str,
+    user_id: int | None,
+    strict_user_target: bool,
+) -> tuple[list[int], str]:
+    if target == "all":
+        result = await session.execute(
+            select(User.id).where(User.fcm_token.is_not(None), User.fcm_token != "")
+        )
+        return [row[0] for row in result.all()], "all"
+
+    if target == "drivers":
+        result = await session.execute(
+            select(User.id).where(
+                User.role == UserRole.DRIVER,
+                User.fcm_token.is_not(None),
+                User.fcm_token != "",
+            )
+        )
+        return [row[0] for row in result.all()], "drivers"
+
+    if target == "passengers":
+        result = await session.execute(
+            select(User.id).where(
+                User.role == UserRole.CLIENT,
+                User.fcm_token.is_not(None),
+                User.fcm_token != "",
+            )
+        )
+        return [row[0] for row in result.all()], "passengers"
+
+    if target == "user_id":
+        if user_id is None:
+            raise ValueError("user_id is required when target is user_id")
+        user = await session.get(User, user_id)
+        if user is None:
+            if strict_user_target:
+                raise AdminUserNotFoundError("User not found")
+            return [], f"user_id:{user_id}"
+        if not user.fcm_token:
+            return [], f"user_id:{user.id}"
+        return [user.id], f"user_id:{user.id}"
+
+    raise ValueError(f"Unknown notification target: {target}")
+
+
+def _broadcast_history_row(history: BroadcastHistory) -> dict[str, Any]:
+    return {
+        "id": history.id,
+        "target": history.target,
+        "title": history.title,
+        "message": history.message,
+        "type": history.notification_type,
+        "sent_at": history.sent_at,
+        "estimated_recipients": history.estimated_recipients,
     }

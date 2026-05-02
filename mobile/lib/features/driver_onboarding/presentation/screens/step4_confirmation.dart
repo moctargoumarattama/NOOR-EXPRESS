@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../data/models/driver_profile_model.dart';
 
 class Step4Confirmation extends StatelessWidget {
   const Step4Confirmation({
@@ -12,6 +13,10 @@ class Step4Confirmation extends StatelessWidget {
     required this.address,
     required this.idCardPhoto,
     required this.selfiePhoto,
+    required this.driverLicense,
+    required this.vehicleRegistration,
+    required this.vehicleInsurance,
+    required this.technicalInspection,
     required this.isSubmitting,
     required this.onBack,
     required this.onSubmit,
@@ -21,6 +26,10 @@ class Step4Confirmation extends StatelessWidget {
   final String address;
   final String? idCardPhoto;
   final String? selfiePhoto;
+  final DriverLegalDocumentInput driverLicense;
+  final DriverLegalDocumentInput vehicleRegistration;
+  final DriverLegalDocumentInput vehicleInsurance;
+  final DriverLegalDocumentInput technicalInspection;
   final bool isSubmitting;
   final VoidCallback onBack;
   final VoidCallback onSubmit;
@@ -71,6 +80,14 @@ class Step4Confirmation extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 18),
+          _DocumentSummary(document: driverLicense, label: 'Permis'),
+          _DocumentSummary(document: vehicleRegistration, label: 'Carte grise'),
+          _DocumentSummary(document: vehicleInsurance, label: 'Assurance'),
+          _DocumentSummary(
+            document: technicalInspection,
+            label: 'Visite technique',
+          ),
+          const SizedBox(height: 18),
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -101,6 +118,33 @@ class Step4Confirmation extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _DocumentSummary extends StatelessWidget {
+  const _DocumentSummary({
+    required this.document,
+    required this.label,
+  });
+
+  final DriverLegalDocumentInput document;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final status = document.isComplete ? 'OK' : 'manquant';
+    final expiry = document.expiresAt == null
+        ? null
+        : '${document.expiresAt!.day.toString().padLeft(2, '0')}/'
+            '${document.expiresAt!.month.toString().padLeft(2, '0')}/'
+            '${document.expiresAt!.year}';
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: _InfoLine(
+        icon: Icons.description_rounded,
+        label: expiry == null ? '$label $status' : '$label $status - $expiry',
       ),
     );
   }

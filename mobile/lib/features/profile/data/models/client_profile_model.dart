@@ -36,9 +36,11 @@ class ClientProfileModel {
   }
 
   factory ClientProfileModel.fromJson(Map<String, dynamic> json) {
+    final firstName = json['first_name'] as String?;
+    final legacyName = json['name'] as String?;
     return ClientProfileModel(
       id: json['id'] as int? ?? 0,
-      name: json['name'] as String?,
+      name: firstName ?? legacyName,
       phoneNumber: json['phone_number'] as String? ?? '',
       profilePhoto: json['profile_photo'] as String?,
       createdAt:

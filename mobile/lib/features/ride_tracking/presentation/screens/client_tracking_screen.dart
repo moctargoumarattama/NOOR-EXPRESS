@@ -5,17 +5,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
+import '../../../../core/models/app_role.dart';
+import '../../../../core/services/support_contact_service.dart';
 import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 import '../controllers/tracking_controller.dart';
+import '../services/ride_share_service.dart';
+import 'ride_chat_screen.dart';
 import '../tracking_status_presenter.dart';
 import '../widgets/bottom_ride_sheet.dart';
 import '../widgets/map_view.dart';
 import '../widgets/rating_bottom_sheet.dart';
 import '../widgets/report_bottom_sheet.dart';
+import '../widgets/ride_chat_fab.dart';
 import '../widgets/ride_detail_section.dart';
 import '../widgets/ride_status_banner.dart';
 import '../widgets/tracking_shell_widgets.dart';
@@ -171,7 +176,16 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
             ),
           ),
           if (ride != null)
+            Positioned(
+              left: 18,
+              bottom: 154,
+              child: TrackingSupportButton(
+                onPressed: _openSupportChat,
+              ),
+            ),
+          if (ride != null)
             BottomRideSheet(
+              floatingAction: _buildChatAction(state),
               secondaryAction: _buildSecondaryActions(state),
               primaryAction: _buildPrimaryAction(state),
               child: RideDetailSection(
@@ -225,26 +239,36 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     }
 
     final actions = <Widget>[
+      if (_canShareRide(ride.status))
+        AppButton.secondary(
+          label: RideUiCopy.shareRideAction,
+          icon: Icons.share_outlined,
+          isLoading: state.isActionLoading,
+          onPressed: state.isActionLoading ? null : _shareRide,
+        ),
       if (_canReport(ride.status))
         RideReportActionButton(
           onPressed: state.isActionLoading ? null : _openReportSheet,
         ),
-      if (ride.canClientCancel) ...[
-        if (_canReport(ride.status)) const SizedBox(height: 10),
+      if (ride.canClientCancel)
         AppButton.danger(
           label: 'Annuler la course',
           isLoading: state.isActionLoading,
-          onPressed: state.isActionLoading
-              ? null
-              : () {
-                  ref
-                      .read(trackingControllerProvider(_scope).notifier)
-                      .cancelRide();
-                },
+          onPressed: state.isActionLoading ? null : _confirmAndCancelRide,
         ),
-      ],
     ];
-    return actions.isEmpty ? null : Column(children: actions);
+    return _buildActionColumn(actions);
+  }
+
+  Widget? _buildChatAction(TrackingState state) {
+    final ride = state.ride;
+    if (ride == null || !ride.canUseChat) {
+      return null;
+    }
+    return RideChatFab(
+      unreadCount: state.unreadChatCount,
+      onPressed: () => _openChat(),
+    );
   }
 
   Future<void> _openRatingSheet() async {
@@ -269,6 +293,72 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
             );
       },
     );
+  }
+
+  Future<void> _openChat() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RideChatScreen(
+          scope: _scope,
+          title: 'Votre chauffeur',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSupportChat() async {
+    final result = await ref
+        .read(supportContactServiceProvider)
+        .openSupportChat(AppRole.client);
+    if (!mounted || result.type != SupportContactResultType.failed) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir WhatsApp pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
+  }
+
+  Future<void> _confirmAndCancelRide() async {
+    final draft = await showRideCancellationBottomSheet(
+      context,
+      title: 'Pourquoi annuler la course ?',
+      confirmLabel: 'Confirmer l annulation',
+      options: passengerCancellationReasonOptions,
+      reasonRequired: false,
+    );
+    if (!mounted || draft == null) {
+      return;
+    }
+    await ref.read(trackingControllerProvider(_scope).notifier).cancelRide(
+          reason: draft.reason,
+          reasonCode: draft.reasonCode,
+        );
+  }
+
+  void _shareRide() {
+    ref.read(trackingControllerProvider(_scope).notifier).shareRide();
+  }
+
+  bool _canShareRide(RideTrackingStatus status) {
+    return ref.read(rideShareServiceProvider).canShareRide(status);
+  }
+
+  Widget? _buildActionColumn(List<Widget> actions) {
+    if (actions.isEmpty) {
+      return null;
+    }
+
+    final spacedActions = <Widget>[];
+    for (final action in actions) {
+      if (spacedActions.isNotEmpty) {
+        spacedActions.add(const SizedBox(height: 10));
+      }
+      spacedActions.add(action);
+    }
+
+    return Column(children: spacedActions);
   }
 
   bool _canReport(RideTrackingStatus status) {
@@ -312,7 +402,8 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     if (value.contains('gps')) {
       return RideUiCopy.gpsUnavailable;
     }
-    if (value.contains('annul')) {
+    if (value.contains('course annulee') ||
+        value.contains('trajet a ete annule')) {
       return RideUiCopy.rideCancelled;
     }
     return message;

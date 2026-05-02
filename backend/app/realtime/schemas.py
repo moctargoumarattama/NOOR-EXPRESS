@@ -1,3 +1,4 @@
+from typing import Any
 from datetime import datetime
 
 from pydantic import AliasChoices, BaseModel, Field
@@ -51,6 +52,14 @@ class NewOfferDriverPayload(BaseModel):
     driver_rating: float
     proposed_price: float
     driver_distance_km: float | None
+    driver_eta_minutes: int | None = None
+    driver_completed_rides: int = 0
+    driver_verified: bool = False
+    vehicle_brand: str | None = None
+    vehicle_model: str | None = None
+    vehicle_color: str | None = None
+    plate_number: str | None = None
+    vehicle_photo: str | None = None
 
 
 class NewOfferNotification(BaseModel):
@@ -79,3 +88,9 @@ class DriverPositionNotification(BaseModel):
     driver_id: int
     latitude: float
     longitude: float
+
+
+class RideMessageNotification(BaseModel):
+    type: str = "ride_message"
+    ride_request_id: int
+    message: dict[str, Any]

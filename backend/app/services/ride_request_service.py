@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta
+from uuid import UUID, uuid4
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
@@ -9,6 +10,7 @@ from app.models.ride_request import RideRequest, RideRequestStatus
 from app.models.ride_offer import RideOffer
 from app.models.ride_request_rejection import RideRequestRejection
 from app.models.user import User, UserRole
+from app.realtime.gateway import driver_locator
 from app.schemas.ride_request import (
     ClientRideRequestStatsRead,
     ClientRideRatingCreate,
@@ -27,6 +29,7 @@ from app.services.ride_policy import (
     CLIENT_ACTIVE_RIDE_STATUSES,
     DRIVER_ACTIVE_RIDE_STATUSES,
     NEGOTIABLE_RIDE_STATUSES,
+    TERMINAL_RIDE_STATUSES,
 )
 from app.services.user_service import is_driver_verified
 
@@ -59,12 +62,22 @@ class RideRequestAlreadyRatedError(Exception):
     pass
 
 RIDE_REQUEST_EXPIRATION_SECONDS = 300
+SHAREABLE_TRACKING_STATUSES = (
+    RideRequestStatus.ACCEPTED,
+    RideRequestStatus.ARRIVED,
+    RideRequestStatus.STARTED,
+)
+TRACK_RATE_LIMIT_SECONDS = 5
+DEFAULT_DRIVER_MAX_RADIUS_KM = 5
+MIN_DRIVER_MAX_RADIUS_KM = 1
+MAX_DRIVER_MAX_RADIUS_KM = 10
 CLIENT_ACTIVE_STATUSES = (
     *CLIENT_ACTIVE_RIDE_STATUSES,
 )
 DRIVER_ACTIVE_STATUSES = (
     *DRIVER_ACTIVE_RIDE_STATUSES,
 )
+_track_token_last_request_at: dict[str, datetime] = {}
 
 
 async def create_ride_request(
@@ -137,8 +150,14 @@ async def get_client_ride_history(
 ) -> list[RideRequest]:
     query: Select[tuple[RideRequest]] = (
         select(RideRequest)
-        .where(RideRequest.client_id == client_id)
-        .order_by(RideRequest.created_at.desc(), RideRequest.id.desc())
+        .where(
+            RideRequest.client_id == client_id,
+            RideRequest.status.in_(TERMINAL_RIDE_STATUSES),
+        )
+        .order_by(
+            func.coalesce(RideRequest.completed_at, RideRequest.created_at).desc(),
+            RideRequest.id.desc(),
+        )
         .offset(offset)
         .limit(limit)
     )
@@ -154,8 +173,14 @@ async def get_driver_ride_history(
 ) -> list[RideRequest]:
     query: Select[tuple[RideRequest]] = (
         select(RideRequest)
-        .where(RideRequest.driver_id == driver_id)
-        .order_by(RideRequest.created_at.desc(), RideRequest.id.desc())
+        .where(
+            RideRequest.driver_id == driver_id,
+            RideRequest.status.in_(TERMINAL_RIDE_STATUSES),
+        )
+        .order_by(
+            func.coalesce(RideRequest.completed_at, RideRequest.created_at).desc(),
+            RideRequest.id.desc(),
+        )
         .offset(offset)
         .limit(limit)
     )
@@ -201,6 +226,88 @@ async def get_active_ride_request(
     return ride_request
 
 
+async def create_ride_share_link(
+    session: AsyncSession,
+    *,
+    ride_id: int,
+    current_user: User,
+) -> tuple[str, str]:
+    ride_request = await session.get(RideRequest, ride_id)
+    if ride_request is None:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Ride request not found.",
+        )
+    if ride_request.client_id != current_user.id:
+        raise ApiError(
+            status_code=403,
+            code="ride_tracking_forbidden",
+            message="Only the ride passenger can share this tracking link.",
+        )
+    if ride_request.status not in SHAREABLE_TRACKING_STATUSES:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_active",
+            message="No active tracking link is available for this ride.",
+        )
+
+    if ride_request.share_token is None:
+        ride_request.share_token = str(uuid4())
+        ride_request.share_token_created_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(ride_request)
+
+    return ride_request.share_token, f"/track/{ride_request.share_token}/map"
+
+
+async def get_public_ride_tracking(
+    session: AsyncSession,
+    *,
+    token: str,
+) -> dict[str, object]:
+    validated_token = _validated_share_token(token)
+    _enforce_track_rate_limit(validated_token)
+
+    result = await session.execute(
+        select(RideRequest).where(RideRequest.share_token == validated_token)
+    )
+    ride_request = result.scalar_one_or_none()
+    if ride_request is None or ride_request.status not in SHAREABLE_TRACKING_STATUSES:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Tracking link not found.",
+        )
+
+    if ride_request.driver_id is None:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Tracking link not found.",
+        )
+
+    driver = await session.get(User, ride_request.driver_id)
+    if driver is None:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Tracking link not found.",
+        )
+
+    driver_position = await _read_public_driver_position(driver.id)
+    return {
+        "ride_id": ride_request.id,
+        "status": ride_request.status,
+        "driver": {
+            "first_name": _driver_first_name(driver.name, driver.phone_number),
+            "vehicle_model": driver.vehicle_model,
+            "plate_number": driver.plate_number,
+        },
+        "driver_position": driver_position,
+    }
+
+
 async def get_available_ride_requests(
     session: AsyncSession,
     current_user: User,
@@ -215,6 +322,10 @@ async def get_available_ride_requests(
             code="driver_not_verified",
             message="Driver verification is required.",
         )
+    driver_position = await _get_connected_driver_position(current_user.id)
+    if driver_position is None:
+        return []
+    max_radius_km = _normalized_driver_radius_km(current_user)
 
     rejected_ride_ids_query = select(RideRequestRejection.ride_request_id).where(
         RideRequestRejection.driver_id == current_user.id
@@ -242,6 +353,13 @@ async def get_available_ride_requests(
 
         ride_request = await expire_ride(session, ride_request.id) or ride_request
         if ride_request.status not in NEGOTIABLE_RIDE_STATUSES:
+            continue
+        if not _is_ride_within_driver_radius(
+            ride_request,
+            driver_latitude=driver_position[0],
+            driver_longitude=driver_position[1],
+            max_radius_km=max_radius_km,
+        ):
             continue
         available_ride_requests.append(ride_request)
 
@@ -545,6 +663,110 @@ async def get_revenue_stats(
         completed_rides=completed_rides,
         total_revenue=round(float(total_revenue or 0.0), 2),
     )
+
+
+def reset_track_rate_limit_cache() -> None:
+    _track_token_last_request_at.clear()
+
+
+def _validated_share_token(token: str) -> str:
+    token_value = token.strip()
+    if not token_value:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Tracking link not found.",
+        )
+    try:
+        return str(UUID(token_value))
+    except ValueError as exc:
+        raise ApiError(
+            status_code=404,
+            code="ride_tracking_not_found",
+            message="Tracking link not found.",
+        ) from exc
+
+
+def _enforce_track_rate_limit(token: str) -> None:
+    now = datetime.utcnow()
+    previous_request_at = _track_token_last_request_at.get(token)
+    if previous_request_at is not None:
+        elapsed_seconds = (now - previous_request_at).total_seconds()
+        if elapsed_seconds < TRACK_RATE_LIMIT_SECONDS:
+            wait_seconds = max(
+                1,
+                int(TRACK_RATE_LIMIT_SECONDS - elapsed_seconds + 0.999),
+            )
+            raise ApiError(
+                status_code=429,
+                code="track_rate_limited",
+                message=(
+                    "Too many requests for this tracking link. "
+                    f"Retry in {wait_seconds} seconds."
+                ),
+            )
+    _track_token_last_request_at[token] = now
+
+
+async def _read_public_driver_position(
+    driver_id: int,
+) -> dict[str, float] | None:
+    connected_drivers = await driver_locator.get_connected_drivers()
+    for connected_driver in connected_drivers:
+        if connected_driver.driver_id == driver_id:
+            return {
+                "latitude": connected_driver.latitude,
+                "longitude": connected_driver.longitude,
+            }
+    return None
+
+
+def _driver_first_name(name: str | None, fallback_phone: str) -> str:
+    normalized_name = (name or "").strip()
+    if not normalized_name:
+        return fallback_phone
+    return normalized_name.split()[0]
+
+
+async def _get_connected_driver_position(
+    driver_id: int,
+) -> tuple[float, float] | None:
+    connected_drivers = await driver_locator.get_connected_drivers()
+    for connected_driver in connected_drivers:
+        if connected_driver.driver_id == driver_id:
+            return connected_driver.latitude, connected_driver.longitude
+    return None
+
+
+def _is_ride_within_driver_radius(
+    ride_request: RideRequest,
+    *,
+    driver_latitude: float,
+    driver_longitude: float,
+    max_radius_km: float,
+) -> bool:
+    if ride_request.pickup_latitude is None or ride_request.pickup_longitude is None:
+        return False
+    distance_km = driver_locator._calculate_distance_km(  # noqa: SLF001
+        latitude_1=ride_request.pickup_latitude,
+        longitude_1=ride_request.pickup_longitude,
+        latitude_2=driver_latitude,
+        longitude_2=driver_longitude,
+    )
+    return distance_km <= max_radius_km
+
+
+def _normalized_driver_radius_km(driver: User) -> float:
+    raw_value = getattr(driver, "max_radius_km", None)
+    if raw_value is None:
+        return float(DEFAULT_DRIVER_MAX_RADIUS_KM)
+
+    radius = int(raw_value)
+    if radius < MIN_DRIVER_MAX_RADIUS_KM:
+        return float(MIN_DRIVER_MAX_RADIUS_KM)
+    if radius > MAX_DRIVER_MAX_RADIUS_KM:
+        return float(MAX_DRIVER_MAX_RADIUS_KM)
+    return float(radius)
 
 
 async def reject_ride_request(

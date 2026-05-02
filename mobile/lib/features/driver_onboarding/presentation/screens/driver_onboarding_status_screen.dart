@@ -71,6 +71,7 @@ class _StatusCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentProfile = profile;
     final content = _content(profile, errorMessage);
     return Container(
       padding: const EdgeInsets.all(26),
@@ -122,6 +123,11 @@ class _StatusCard extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+          if (currentProfile != null &&
+              currentProfile.documentExpiryAlerts.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            _ExpiryAlertBox(alerts: currentProfile.documentExpiryAlerts),
           ],
           const SizedBox(height: 24),
           AppButton(
@@ -182,6 +188,45 @@ class _StatusCard extends StatelessWidget {
           primaryTap: (context) => () => context.go(AppRoutes.driverHome),
         );
     }
+  }
+}
+
+class _ExpiryAlertBox extends StatelessWidget {
+  const _ExpiryAlertBox({required this.alerts});
+
+  final List<String> alerts;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF8E6),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Document a renouveler bientot',
+            style: TextStyle(
+              color: Color(0xFF8A5A00),
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final alert in alerts)
+            Text(
+              alert,
+              style: const TextStyle(
+                color: Color(0xFF8A5A00),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 

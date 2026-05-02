@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/services/support_contact_service.dart';
 import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_button.dart';
+import '../../../../shared/widgets/app_snackbar.dart';
 import '../../../../shared/widgets/app_surface_card.dart';
 import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/noor_logo.dart';
@@ -36,6 +38,30 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     await ref.read(sessionControllerProvider.notifier).login(
           phoneNumber: phoneNumber,
         );
+  }
+
+  Future<void> _openTerms() async {
+    await _openLegalLink(
+      open: () => ref.read(supportContactServiceProvider).openTermsPage(),
+    );
+  }
+
+  Future<void> _openPrivacy() async {
+    await _openLegalLink(
+      open: () => ref.read(supportContactServiceProvider).openPrivacyPage(),
+    );
+  }
+
+  Future<void> _openLegalLink({required Future<bool> Function() open}) async {
+    final opened = await open();
+    if (!mounted || opened) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir le lien legal pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
   }
 
   @override
@@ -121,6 +147,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ? 'Un instant...'
                                 : 'Continuer',
                             onPressed: sessionState.isBusy ? null : _submit,
+                          ),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            children: [
+                              TextButton(
+                                onPressed: _openTerms,
+                                child: const Text('CGU'),
+                              ),
+                              const Text('•'),
+                              TextButton(
+                                onPressed: _openPrivacy,
+                                child:
+                                    const Text('Politique de confidentialite'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

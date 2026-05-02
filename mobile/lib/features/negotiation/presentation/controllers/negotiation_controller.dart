@@ -154,10 +154,17 @@ class NegotiationController extends StateNotifier<NegotiationState> {
     }
   }
 
-  Future<void> cancelRide({String? reason}) async {
+  Future<void> cancelRide({
+    String? reason,
+    String? reasonCode,
+  }) async {
     state = state.copyWith(isSubmitting: true, clearError: true);
     try {
-      await _datasource.cancelRide(scope.rideId, reason: reason);
+      await _datasource.cancelRide(
+        scope.rideId,
+        reason: reason,
+        reasonCode: reasonCode,
+      );
       state = state.copyWith(
         isSubmitting: false,
         toastMessage: 'Demande annulee.',

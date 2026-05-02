@@ -13,6 +13,7 @@ from app.realtime.schemas import (
     NewOfferNotification,
     OfferAcceptedNotification,
     OfferRejectedNotification,
+    RideMessageNotification,
     RideStatusNotification,
 )
 from app.realtime.store import RealtimeStore, realtime_store
@@ -174,6 +175,34 @@ class RealtimeConnectionManager:
         self,
         driver_id: int,
         notification: OfferRejectedNotification,
+    ) -> None:
+        websocket = self._connection_registry.get_driver_connection(driver_id)
+        if websocket is None:
+            return
+
+        try:
+            await websocket.send_json(notification.model_dump())
+        except (RuntimeError, WebSocketDisconnect):
+            await self.disconnect_driver(driver_id)
+
+    async def send_ride_message_notification(
+        self,
+        client_id: int,
+        notification: RideMessageNotification,
+    ) -> None:
+        websocket = self._connection_registry.get_client_connection(client_id)
+        if websocket is None:
+            return
+
+        try:
+            await websocket.send_json(notification.model_dump())
+        except (RuntimeError, WebSocketDisconnect):
+            self.disconnect_client(client_id)
+
+    async def send_ride_message_notification_to_driver(
+        self,
+        driver_id: int,
+        notification: RideMessageNotification,
     ) -> None:
         websocket = self._connection_registry.get_driver_connection(driver_id)
         if websocket is None:

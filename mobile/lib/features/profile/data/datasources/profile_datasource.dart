@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/media/photo_picker_types.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/client_profile_model.dart';
 
@@ -31,22 +32,23 @@ class ProfileDatasource {
   }
 
   Future<ClientProfileModel> updateClientProfile({
-    String? name,
-    String? profilePhoto,
+    String? firstName,
+    NoorPickedPhoto? profilePhoto,
   }) async {
     try {
-      final response = await _apiClient.dio.put<Map<String, dynamic>>(
-        '/users/me/profile',
-        data: {
-          'name': name,
-          'profile_photo': profilePhoto,
-        },
+      final formData = FormData.fromMap({
+        if (firstName != null) 'first_name': firstName,
+        if (profilePhoto != null)
+          'profile_photo': MultipartFile.fromBytes(
+            profilePhoto.bytes,
+            filename: profilePhoto.name ?? 'profile_photo.jpg',
+          ),
+      });
+      await _apiClient.dio.patch<Map<String, dynamic>>(
+        '/users/me',
+        data: formData,
       );
-      final payload = response.data;
-      if (payload == null) {
-        throw const ProfileFailure('Mise a jour impossible.');
-      }
-      return ClientProfileModel.fromJson(payload);
+      return await fetchClientProfile();
     } on DioException catch (error) {
       throw ProfileFailure(
         _readError(error, 'Mise a jour du profil impossible.'),

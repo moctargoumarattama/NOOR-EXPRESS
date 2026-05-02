@@ -34,7 +34,7 @@ class DriverOnboardingStepper extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const labels = ['Infos', 'ID', 'Selfie', 'Envoi'];
+    const labels = ['Infos', 'ID', 'Docs', 'Selfie', 'Envoi'];
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

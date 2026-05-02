@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/config/app_config.dart';
+
 class HelpScreen extends StatelessWidget {
   const HelpScreen({super.key});
 
@@ -39,9 +41,9 @@ class HelpScreen extends StatelessWidget {
             const _HelpCard(
               icon: Icons.support_agent_rounded,
               title: 'Nous contacter',
-              children: [
+              children: <String>[
                 'contact@noorexpress.ne',
-                '+227 XX XX XX XX',
+                AppConstants.supportPhone,
               ],
             ),
           ],

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../../../../core/config/app_config.dart';
 import '../../../../core/theme/app_colors.dart';
 
 class ProfileAvatar extends StatelessWidget {
@@ -10,18 +11,22 @@ class ProfileAvatar extends StatelessWidget {
     super.key,
     required this.initials,
     this.profilePhoto,
+    this.localPhotoBytes,
     this.isLoading = false,
     this.onTap,
   });
 
   final String initials;
   final String? profilePhoto;
+  final Uint8List? localPhotoBytes;
   final bool isLoading;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    final bytes = _decodeImage(profilePhoto);
+    final bytes = localPhotoBytes ?? _decodeImage(profilePhoto);
+    final imageUrl =
+        localPhotoBytes == null ? _readImageUrl(profilePhoto) : null;
     final canTap = onTap != null && !isLoading;
 
     return Semantics(
@@ -54,13 +59,7 @@ class ProfileAvatar extends StatelessWidget {
                     ],
                   ),
                   child: ClipOval(
-                    child: bytes == null
-                        ? _InitialsAvatar(initials: initials)
-                        : Image.memory(
-                            bytes,
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                          ),
+                    child: _buildAvatarImage(bytes, imageUrl),
                   ),
                 ),
                 Positioned(
@@ -101,8 +100,30 @@ class ProfileAvatar extends StatelessWidget {
     );
   }
 
+  Widget _buildAvatarImage(Uint8List? bytes, String? imageUrl) {
+    if (bytes != null) {
+      return Image.memory(
+        bytes,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+      );
+    }
+    if (imageUrl != null) {
+      return Image.network(
+        imageUrl,
+        fit: BoxFit.cover,
+        gaplessPlayback: true,
+        errorBuilder: (_, __, ___) => _InitialsAvatar(initials: initials),
+      );
+    }
+    return _InitialsAvatar(initials: initials);
+  }
+
   Uint8List? _decodeImage(String? value) {
     if (value == null || value.isEmpty) {
+      return null;
+    }
+    if (_readImageUrl(value) != null) {
       return null;
     }
     try {
@@ -111,6 +132,20 @@ class ProfileAvatar extends StatelessWidget {
     } catch (_) {
       return null;
     }
+  }
+
+  String? _readImageUrl(String? value) {
+    if (value == null || value.isEmpty) {
+      return null;
+    }
+    final candidate = value.trim();
+    if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+      return candidate;
+    }
+    if (candidate.startsWith('/uploads/')) {
+      return '${AppConfig.apiBaseUrl}$candidate';
+    }
+    return null;
   }
 }
 

@@ -2,10 +2,16 @@ import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:noor_express_mobile/core/models/app_role.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:noor_express_mobile/core/location/location_service.dart';
 import 'package:noor_express_mobile/core/network/api_client.dart';
+import 'package:noor_express_mobile/core/notifications/fcm_service.dart';
+import 'package:noor_express_mobile/core/notifications/local_notification_service.dart';
+import 'package:noor_express_mobile/core/notifications/notification_handler.dart';
+import 'package:noor_express_mobile/core/state/session_controller.dart';
 import 'package:noor_express_mobile/core/storage/secure_storage_service.dart';
+import 'package:noor_express_mobile/features/auth/data/auth_repository.dart';
 import 'package:noor_express_mobile/features/ride_tracking/data/datasources/tracking_remote_datasource.dart';
 import 'package:noor_express_mobile/features/ride_tracking/data/datasources/tracking_websocket_datasource.dart';
 import 'package:noor_express_mobile/features/ride_tracking/domain/entities/tracking_state.dart';
@@ -133,6 +139,123 @@ void main() {
 
     expect(container.read(provider).ride, isNull);
   });
+
+  test('driver tracking starts and stops the foreground location service',
+      () async {
+    final activeRide = _rideJson(id: 81, status: 'accepted');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: const [],
+    );
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final foregroundGateway = _FakeForegroundLocationGateway();
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: websocketDatasource,
+      foregroundGateway: foregroundGateway,
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      trackingControllerProvider(
+        const TrackingControllerScope(mode: TrackingMode.driver),
+      ).notifier,
+    );
+
+    await controller.start();
+    expect(foregroundGateway.startCalls, 1);
+
+    await controller.stop();
+    expect(foregroundGateway.stopCalls, 1);
+  });
+
+  test('driver tracking recovers the foreground service after a crash',
+      () async {
+    final activeRide = _rideJson(id: 82, status: 'started');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: const [],
+    );
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final foregroundGateway = _FakeForegroundLocationGateway();
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: websocketDatasource,
+      foregroundGateway: foregroundGateway,
+    );
+    addTearDown(container.dispose);
+
+    final controller = container.read(
+      trackingControllerProvider(
+        const TrackingControllerScope(mode: TrackingMode.driver),
+      ).notifier,
+    );
+
+    await controller.start();
+    foregroundGateway.isRunning = false;
+    await controller.resumeFromLifecycle();
+
+    expect(foregroundGateway.startCalls, 2);
+  });
+
+  test('tracking hydrates unread chat count from the backend summary',
+      () async {
+    final activeRide = _rideJson(id: 83, status: 'accepted');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: [activeRide],
+      unreadChatCount: 2,
+    );
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: _FakeTrackingWebSocketDatasource(),
+      foregroundGateway: _FakeForegroundLocationGateway(),
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.client),
+    );
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+
+    expect(container.read(provider).unreadChatCount, 2);
+  });
+}
+
+ProviderContainer _trackingContainer({
+  required TrackingRemoteDatasource remoteDatasource,
+  required TrackingWebSocketDatasource websocketDatasource,
+  required _FakeForegroundLocationGateway foregroundGateway,
+}) {
+  final locationService = LocationService(
+    geolocatorGateway: _FakeGeolocatorGateway(),
+    permissionGateway: const _FakeLocationPermissionGateway(),
+  );
+  final foregroundService = ForegroundLocationService(
+    foregroundGateway: foregroundGateway,
+    permissionGateway: const _FakeForegroundTrackingPermissionGateway(),
+  );
+  return ProviderContainer(
+    overrides: [
+      sessionControllerProvider.overrideWith((ref) {
+        return _FakeSessionController();
+      }),
+      trackingRemoteDatasourceProvider.overrideWith((ref) {
+        return remoteDatasource;
+      }),
+      trackingWebsocketDatasourceProvider.overrideWith((ref, mode) {
+        return websocketDatasource;
+      }),
+      locationServiceProvider.overrideWith((ref) {
+        return locationService;
+      }),
+      foregroundLocationServiceProvider.overrideWith((ref) {
+        return foregroundService;
+      }),
+    ],
+  );
 }
 
 class _FakeTrackingRemoteDatasource extends TrackingRemoteDatasource {
@@ -166,7 +289,17 @@ class _FakeTrackingWebSocketDatasource extends TrackingWebSocketDatasource {
           storageService: const SecureStorageService(),
         );
 
+  final StreamController<TrackingSocketEvent> _events =
+      StreamController<TrackingSocketEvent>.broadcast();
+  final StreamController<TrackingConnectionState> _states =
+      StreamController<TrackingConnectionState>.broadcast();
   int resumeCalls = 0;
+
+  @override
+  Stream<TrackingSocketEvent> get events => _events.stream;
+
+  @override
+  Stream<TrackingConnectionState> get connectionStates => _states.stream;
 
   @override
   Future<void> connectForClient(int clientId) async {}
@@ -180,6 +313,10 @@ class _FakeTrackingWebSocketDatasource extends TrackingWebSocketDatasource {
   @override
   Future<void> resumeFromLifecycle() async {
     resumeCalls += 1;
+  }
+
+  void emitEvent(TrackingSocketEvent event) {
+    _events.add(event);
   }
 }
 
@@ -209,10 +346,12 @@ class _MutableTrackingRemoteDatasource extends TrackingRemoteDatasource {
   _MutableTrackingRemoteDatasource({
     required this.activeRide,
     required this.clientRides,
+    this.unreadChatCount = 0,
   }) : super(apiClient: ApiClient());
 
   Map<String, dynamic>? activeRide;
   List<Map<String, dynamic>> clientRides;
+  int unreadChatCount;
 
   @override
   Future<Map<String, dynamic>?> fetchActiveRide() async {
@@ -227,6 +366,51 @@ class _MutableTrackingRemoteDatasource extends TrackingRemoteDatasource {
   @override
   Future<List<Map<String, dynamic>>> fetchDriverRides() async {
     return const [];
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchRideMessages({
+    required int rideId,
+    int limit = 50,
+    int offset = 0,
+    bool markRead = true,
+  }) async {
+    return {
+      'items': const [],
+      'unread_count': unreadChatCount,
+      'limit': limit,
+      'offset': offset,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> fetchUser(int userId) async {
+    return {
+      'id': userId,
+      'name': 'Client Noor',
+      'phone_number': '+22790000000',
+    };
+  }
+}
+
+class _FakeSessionController extends SessionController {
+  _FakeSessionController()
+      : super(
+          authRepository: AuthRepository(apiClient: ApiClient()),
+          apiClient: ApiClient(),
+          fcmService: FcmService(
+            apiClient: ApiClient(),
+            localNotificationService: LocalNotificationService(),
+            notificationHandler: NotificationHandler(),
+          ),
+          storageService: const SecureStorageService(),
+        ) {
+    state = const SessionState(
+      status: SessionStatus.authenticated,
+      userId: 7,
+      role: AppRole.client,
+      token: 'token',
+    );
   }
 }
 
@@ -273,6 +457,42 @@ class _FakeLocationPermissionGateway implements LocationPermissionGateway {
   @override
   Future<bool> openAppSettings() async {
     return true;
+  }
+}
+
+class _FakeForegroundLocationGateway implements ForegroundLocationGateway {
+  int startCalls = 0;
+  int stopCalls = 0;
+  bool isRunning = false;
+
+  @override
+  Future<bool> get isServiceRunning async {
+    return isRunning;
+  }
+
+  @override
+  Future<void> start({
+    required String title,
+    required String body,
+  }) async {
+    startCalls += 1;
+    isRunning = true;
+  }
+
+  @override
+  Future<void> stop() async {
+    stopCalls += 1;
+    isRunning = false;
+  }
+}
+
+class _FakeForegroundTrackingPermissionGateway
+    implements ForegroundLocationPermissionGateway {
+  const _FakeForegroundTrackingPermissionGateway();
+
+  @override
+  Future<ForegroundLocationPermissionState> requestTrackingPermissions() async {
+    return ForegroundLocationPermissionState.granted;
   }
 }
 

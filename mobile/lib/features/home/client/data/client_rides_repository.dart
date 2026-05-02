@@ -91,7 +91,7 @@ class ClientRidesRepository {
   }) async {
     try {
       final response = await _apiClient.dio.get<Map<String, dynamic>>(
-        '/pricing/estimate',
+        '/rides/estimate',
         queryParameters: {
           'pickup_lat': pickupLat,
           'pickup_lng': pickupLng,

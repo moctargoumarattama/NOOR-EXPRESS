@@ -5,11 +5,15 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
+import '../../../../../core/models/app_role.dart';
+import '../../../../../core/services/support_contact_service.dart';
 import '../../../../../core/state/session_controller.dart';
 import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
 import '../../../../../shared/widgets/notification_card.dart';
+import '../../../../address_search/data/datasources/address_datasource.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
+import '../../../../address_search/presentation/controllers/address_search_controller.dart';
 import '../../../../address_search/presentation/screens/address_search_screen.dart';
 import '../../../../map/presentation/controllers/map_controller.dart';
 import '../../../../map/controllers/map_controller_provider.dart';
@@ -200,6 +204,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             onAcceptOffer: _acceptHomeOffer,
             onRejectOffer: _rejectHomeOffer,
             onViewAllOffers: () => _openRide(activeRide),
+            onAddToFavorites: _addDropoffToFavorites,
           ),
           HamburgerMenu(
             isOpen: _isMenuOpen,
@@ -229,7 +234,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             },
             onSupportTap: () {
               setState(() => _isMenuOpen = false);
-              context.push(AppRoutes.support);
+              unawaited(_openSupportChat());
             },
             onPolicyTap: () {
               setState(() => _isMenuOpen = false);
@@ -254,6 +259,20 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     if (mounted) {
       setState(callback);
     }
+  }
+
+  Future<void> _openSupportChat() async {
+    final result = await ref
+        .read(supportContactServiceProvider)
+        .openSupportChat(AppRole.client);
+    if (!mounted || result.type != SupportContactResultType.failed) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir WhatsApp pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
   }
 
   Future<void> _retryLocationAndRecenter() async {

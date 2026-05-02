@@ -7,6 +7,8 @@ const AdminApi = (() => {
   let reportsCache = [];
   let usersCache = [];
   let pendingDriversCache = [];
+  let paymentsDriversCache = [];
+  let commissionLedgerCache = null;
   let simulationsDisabled = false;
   let simulationStatusTimer = null;
   let ridesPage = 1;
@@ -100,11 +102,45 @@ const AdminApi = (() => {
   const isToday = (value) => value && new Date(value).toDateString() === new Date().toDateString();
   const statusTone = (status) => {
     if (['cancelled', 'rejected', 'blocked'].includes(status)) return 'danger';
-    if (['pending', 'offered', 'started', 'accepted', 'ouvert'].includes(status)) return 'warning';
+    if (['pending', 'offered', 'started', 'accepted', 'nouveau', 'en_cours'].includes(status)) return 'warning';
     return 'neutral';
   };
   const archiveYear = () => document.querySelector('[data-archive-year]')?.value || '';
   const archiveMonth = () => document.querySelector('[data-archive-month]')?.value || '';
+  const selectedPaymentDriverId = () => $('payments-driver-filter')?.value || '';
+  function commissionPeriodParams() {
+    const year = archiveYear();
+    const month = archiveMonth();
+    if (!year) return {};
+    if (!month) {
+      return {
+        date_from: `${year}-01-01`,
+        date_to: `${year}-12-31`,
+      };
+    }
+    const monthIndex = Number(month);
+    const lastDay = new Date(Number(year), monthIndex, 0).getDate();
+    return {
+      date_from: `${year}-${month}-01`,
+      date_to: `${year}-${month}-${String(lastDay).padStart(2, '0')}`,
+    };
+  }
+  async function ensurePaymentsDriverFilterLoaded() {
+    if (!$('payments-driver-filter')) return;
+    if (!paymentsDriversCache.length) {
+      paymentsDriversCache = await request('/admin/drivers').catch(() => []);
+    }
+    const currentValue = selectedPaymentDriverId();
+    $('payments-driver-filter').innerHTML = [`<option value="">Tous les chauffeurs</option>`]
+      .concat(paymentsDriversCache.map((driver) => {
+        const name = [driver.first_name, driver.last_name].filter(Boolean).join(' ').trim();
+        const label = name || driver.user_name || driver.phone_number || `#${driver.user_id}`;
+        const phone = driver.phone_number ? ` - ${driver.phone_number}` : '';
+        return `<option value="${driver.user_id}">${escapeHtml(label)}${escapeHtml(phone)}</option>`;
+      }))
+      .join('');
+    $('payments-driver-filter').value = currentValue;
+  }
   function applyArchiveFilters(rows, dateKey = 'created_at') {
     const year = archiveYear();
     const month = archiveMonth();
@@ -472,7 +508,7 @@ const AdminApi = (() => {
   }
   function renderReportBadge(ride) {
     const count = Number(ride.report_count || 0);
-    return count ? `<button class="danger-soft" onclick="AdminApi.openReportsModal(${ride.id})">${count} ouvert(s)</button>` : '<span class="badge">0</span>';
+    return count ? `<button class="danger-soft" onclick="AdminApi.openReportsModal(${ride.id})">${count} signalement(s)</button>` : '<span class="badge">0</span>';
   }
   function openRideDetail(rideId) {
     const ride = ridesCache.find((item) => item.id === rideId);
@@ -499,7 +535,7 @@ const AdminApi = (() => {
     const reports = reportsCache.filter((report) => report.ride_request_id === rideId);
     $('reports-modal-content').innerHTML = reports.length ? reports.map((report) =>
       `<article class="report-card"><strong>${report.reason}</strong><p>${report.description || 'Aucune description.'}</p></article>`).join('') :
-      '<p class="hint">Aucun signalement ouvert pour cette course.</p>';
+      '<p class="hint">Aucun signalement pour cette course.</p>';
     $('reports-modal').showModal();
   }
   function closeReportsModal() { $('reports-modal').close(); }
@@ -520,30 +556,60 @@ const AdminApi = (() => {
         <td>${escapeHtml(user.name || '-')}</td>
         <td>${escapeHtml(user.phone_number)}</td>
         <td><span class="badge">${escapeHtml(user.role)}</span></td>
-        <td>${ui().badge(user.is_blocked ? 'bloqué' : 'actif', user.is_blocked ? 'danger' : 'neutral')}</td>
+        <td>${renderUserStatusBadge(user)}</td>
         <td>${new Date(user.created_at).toLocaleString()}</td>
         <td><div class="actions">
           <button class="ghost" onclick="AdminApi.openUserProfile(${user.id})">Voir profil</button>
           ${user.is_blocked
             ? `<button class="ghost" onclick="AdminApi.unblockUser(${user.id})">Debloquer</button>`
             : `<button class="danger-soft" onclick="AdminApi.blockUser(${user.id})">Bloquer</button>`}
+          ${user.is_suspended
+            ? `<button class="ghost" onclick="AdminApi.unsuspendUser(${user.id})">Lever suspension</button>`
+            : `<button class="danger-soft" onclick="AdminApi.suspendUser(${user.id})">Suspendre</button>`}
           <button class="danger-soft" onclick="AdminApi.deleteUser(${user.id})">Supprimer</button>
         </div></td>
       </tr>`).join('')
-      : ui().emptyState('Aucun utilisateur à afficher.', 7);
+      : ui().emptyState('Aucun utilisateur a afficher.', 7);
   }
-  function openUserProfile(userId) {
+  function renderUserStatusBadge(user) {
+    if (user.is_blocked) return ui().badge('bloque', 'danger');
+    if (user.is_suspended) return ui().badge('suspendu', 'warning');
+    return ui().badge('actif', 'neutral');
+  }
+  async function openUserProfile(userId) {
     const user = usersCache.find((item) => item.id === userId);
     if (!user) return;
+    const history = await request(`/admin/users/${userId}/suspensions`).catch(() => []);
     $('user-profile-content').innerHTML = `
       <div class="form-grid">
         <p><strong>Profil</strong><br>${escapeHtml(user.role)}</p>
         <p><strong>Nom</strong><br>${escapeHtml(user.name || '-')}</p>
-        <p><strong>Téléphone</strong><br>${escapeHtml(user.phone_number)}</p>
-        <p><strong>Statut</strong><br>${ui().badge(user.is_blocked ? 'bloqué' : 'actif', user.is_blocked ? 'danger' : 'neutral')}</p>
+        <p><strong>Telephone</strong><br>${escapeHtml(user.phone_number)}</p>
+        <p><strong>Statut</strong><br>${renderUserStatusBadge(user)}</p>
         <p><strong>Inscription</strong><br>${new Date(user.created_at).toLocaleString()}</p>
-      </div>`;
+        <p><strong>Suspension active</strong><br>${escapeHtml(renderSuspensionSummary(user))}</p>
+      </div>
+      <h3>Historique des suspensions</h3>
+      ${renderSuspensionHistory(history)}
+    `;
     $('user-profile-modal').showModal();
+  }
+  function renderSuspensionSummary(user) {
+    if (!user.is_suspended) return 'Aucune';
+    const reason = user.suspension_reason || 'Motif non precise';
+    if (!user.suspended_until) return `${reason} (permanente)`;
+    return `${reason} (jusqu'au ${new Date(user.suspended_until).toLocaleString()})`;
+  }
+  function renderSuspensionHistory(history) {
+    if (!history.length) return '<p class="hint">Aucune suspension enregistree.</p>';
+    return `<table><thead><tr><th>Debut</th><th>Fin</th><th>Raison</th><th>Levee</th></tr></thead><tbody>${
+      history.map((item) => `<tr>
+        <td>${new Date(item.suspended_at).toLocaleString()}</td>
+        <td>${item.suspended_until ? new Date(item.suspended_until).toLocaleString() : 'Permanente'}</td>
+        <td>${escapeHtml(item.reason)}</td>
+        <td>${item.lifted_at ? new Date(item.lifted_at).toLocaleString() : '-'}</td>
+      </tr>`).join('')
+    }</tbody></table>`;
   }
   function closeUserProfile() {
     $('user-profile-modal').close();
@@ -565,6 +631,43 @@ const AdminApi = (() => {
     if (!window.confirm(`Debloquer ${label} ? Il pourra de nouveau se connecter.`)) return;
     try {
       await request(`/admin/users/${userId}/unblock`, { method: 'POST', body: JSON.stringify({}) });
+      await loadUsers();
+    } catch (error) {
+      window.alert(error.message);
+    }
+  }
+  async function suspendUser(userId, defaultReason = '') {
+    const user = usersCache.find((item) => item.id === userId);
+    const label = user ? `${user.name || user.phone_number || `#${userId}`}` : `#${userId}`;
+    const reason = window.prompt(`Raison de suspension pour ${label}:`, defaultReason || '');
+    if (reason === null) return;
+    const trimmedReason = reason.trim();
+    if (!trimmedReason) return window.alert('Raison obligatoire.');
+    const durationRaw = window.prompt('Duree en jours (laisser vide pour permanente):', '7');
+    if (durationRaw === null) return;
+    const durationTrimmed = durationRaw.trim();
+    const isPermanent = durationTrimmed.length === 0;
+    const payload = {
+      reason: trimmedReason,
+      is_permanent: isPermanent,
+      duration_days: isPermanent ? null : Number(durationTrimmed),
+    };
+    if (!isPermanent && (!Number.isInteger(payload.duration_days) || payload.duration_days <= 0)) {
+      return window.alert('Duree invalide. Entrez un entier positif.');
+    }
+    try {
+      await request(`/admin/users/${userId}/suspend`, { method: 'POST', body: JSON.stringify(payload) });
+      await loadUsers();
+    } catch (error) {
+      window.alert(error.message);
+    }
+  }
+  async function unsuspendUser(userId) {
+    const user = usersCache.find((item) => item.id === userId);
+    const label = user ? `${user.name || user.phone_number || `#${userId}`}` : `#${userId}`;
+    if (!window.confirm(`Lever la suspension de ${label} ?`)) return;
+    try {
+      await request(`/admin/users/${userId}/unsuspend`, { method: 'POST', body: JSON.stringify({}) });
       await loadUsers();
     } catch (error) {
       window.alert(error.message);
@@ -703,27 +806,33 @@ const AdminApi = (() => {
   }
 
   async function loadPayments() {
-    ridesCache = await request('/admin/rides').catch(() => []);
-    const completed = applyArchiveFilters(ridesCache, 'created_at').filter((ride) => ride.status === 'completed');
-    const totalCash = completed.reduce((sum, ride) => sum + priceOf(ride), 0);
-    const commission = Math.round(totalCash * 0.15);
+    await ensurePaymentsDriverFilterLoaded();
+    const params = new URLSearchParams({
+      limit: '200',
+      offset: '0',
+      ...commissionPeriodParams(),
+    });
+    if (selectedPaymentDriverId()) {
+      params.set('driver_id', selectedPaymentDriverId());
+    }
+    commissionLedgerCache = await request(`/admin/commissions/ledger?${params.toString()}`).catch(() => null);
+    const items = commissionLedgerCache?.items || [];
     if ($('payments-metrics')) $('payments-metrics').innerHTML = [
-      ui().statCard('Total courses', completed.length),
-      ui().statCard('Total cash', ui().money(totalCash)),
-      ui().statCard('Commission estimée', ui().money(commission), 'Estimation simple côté admin'),
+      ui().statCard('Total courses', commissionLedgerCache?.total_count || 0),
+      ui().statCard('Total cash', ui().money(commissionLedgerCache?.total_gross_amount || 0)),
+      ui().statCard('Commission admin', ui().money(commissionLedgerCache?.total_commission_amount || 0), 'Montant reel enregistre sur courses terminees'),
     ].join('');
-    if ($('payments-table')) $('payments-table').innerHTML = completed.length
-      ? completed.map((ride) => {
-        const cash = priceOf(ride);
-        return `<tr><td>${ride.id}</td><td>${escapeHtml(ride.client)}</td><td>${escapeHtml(ride.driver || '-')}</td><td>${ui().badge(ride.status, 'neutral')}</td><td>${ui().money(cash)}</td><td>${ui().money(cash * 0.15)}</td></tr>`;
+    if ($('payments-table')) $('payments-table').innerHTML = items.length
+      ? items.map((item) => {
+        return `<tr><td>${item.ride_id}</td><td>${escapeHtml(item.client_phone_number)}</td><td>${escapeHtml(item.driver_phone_number || '-')}</td><td>${ui().badge('completed', 'neutral')}</td><td>${ui().money(item.gross_amount)}</td><td>${ui().money(item.commission_amount)}</td></tr>`;
       }).join('')
       : ui().emptyState('Aucun paiement à afficher.', 6);
   }
 
   function exportPaymentsCsv() {
-    const rows = [['ride_id', 'client', 'driver', 'status', 'cash_total', 'estimated_commission']]
-      .concat(ridesCache.filter((ride) => ride.status === 'completed')
-        .map((ride) => [ride.id, ride.client, ride.driver || '', ride.status, priceOf(ride), Math.round(priceOf(ride) * 0.15)]));
+    const items = commissionLedgerCache?.items || [];
+    const rows = [['ride_id', 'client', 'driver', 'status', 'cash_total', 'commission_amount', 'net_amount', 'completed_at']]
+      .concat(items.map((item) => [item.ride_id, item.client_phone_number, item.driver_phone_number || '', 'completed', item.gross_amount, item.commission_amount, item.net_amount, item.completed_at || '']));
     const csv = rows.map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(',')).join('\n');
     const link = document.createElement('a');
     link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
@@ -739,9 +848,11 @@ const AdminApi = (() => {
 
   function renderReportsPage() {
     const status = $('report-status-filter')?.value || '';
+    const date = $('report-date-filter')?.value || '';
     const type = $('report-type-filter')?.value || '';
     const rows = applyArchiveFilters(reportsCache, 'created_at').filter((report) => {
       if (status && report.status !== status) return false;
+      if (date && (report.created_at || '').slice(0, 10) !== date) return false;
       if (type && report.reported_by_role !== type) return false;
       return true;
     });
@@ -754,16 +865,160 @@ const AdminApi = (() => {
         <td>${escapeHtml(report.reported_by)}</td>
         <td>${escapeHtml(report.reason)}</td>
         <td>${ui().badge(report.status, statusTone(report.status))}</td>
+        <td>${escapeHtml(report.note_admin || '-')}</td>
         <td>${new Date(report.created_at).toLocaleString()}</td>
+        <td><div class="actions">
+          <select id="report-next-status-${report.id}">
+            ${reportStatusOptions(report.status)}
+          </select>
+          <button class="ghost" onclick="AdminApi.applyReportUpdate(${report.id})">Mettre a jour</button>
+          ${report.reported_user_id
+            ? `<button class="danger-soft" onclick="AdminApi.suspendFromReport(${report.id})">Suspendre</button>`
+            : ''}
+        </div></td>
       </tr>`).join('')
-      : ui().emptyState('Aucun signalement à afficher.', 7);
+      : ui().emptyState('Aucun signalement a afficher.', 9);
+  }
+
+  function reportStatusOptions(currentStatus) {
+    return [
+      'nouveau',
+      'en_cours',
+      'resolu',
+      'classe_sans_suite',
+    ].map((status) =>
+      `<option value="${status}" ${status === currentStatus ? 'selected' : ''}>${status}</option>`
+    ).join('');
+  }
+
+  async function applyReportUpdate(reportId) {
+    const report = reportsCache.find((item) => item.id === reportId);
+    if (!report) return;
+    const status = $(`report-next-status-${reportId}`)?.value || report.status;
+    const noteAdmin = window.prompt('Note admin (optionnelle):', report.note_admin || '');
+    if (noteAdmin === null) return;
+    try {
+      await request(`/admin/reports/${reportId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          status,
+          note_admin: noteAdmin.trim() || null,
+        }),
+      });
+      await loadReportsPage();
+    } catch (error) {
+      window.alert(error.message);
+    }
+  }
+
+  async function suspendFromReport(reportId) {
+    const report = reportsCache.find((item) => item.id === reportId);
+    if (!report || !report.reported_user_id) return;
+    const defaultReason = `Signalement #${report.id}: ${report.reason}`;
+    await suspendUser(report.reported_user_id, defaultReason);
+  }
+
+  function buildNotificationPayload() {
+    const target = $('notification-target')?.value || 'all';
+    const userIdRaw = ($('notification-user-id')?.value || '').trim();
+    const payload = {
+      target,
+      title: ($('notification-title')?.value || '').trim(),
+      message: ($('notification-message')?.value || '').trim(),
+      type: $('notification-type')?.value || 'info',
+    };
+    if (target === 'user_id' && userIdRaw) payload.user_id = Number(userIdRaw);
+    return payload;
+  }
+
+  function updateNotificationPreview() {
+    const payload = buildNotificationPayload();
+    setText('notification-preview-title', payload.title || 'Noor Express');
+    setText('notification-preview-message', payload.message || 'Votre message apparaitra ici.');
+    setText('notification-preview-type', payload.type);
+    const previewTarget = payload.target === 'user_id' && payload.user_id
+      ? `user_id:${payload.user_id}`
+      : payload.target;
+    setText('notification-preview-target', previewTarget);
+  }
+
+  async function loadNotificationsPage() {
+    if (!$('notification-target')) return;
+    const refreshPreviewAndEstimate = async () => {
+      updateNotificationPreview();
+      await refreshNotificationEstimate();
+    };
+    $('notification-target').addEventListener('change', refreshPreviewAndEstimate);
+    $('notification-user-id').addEventListener('input', refreshPreviewAndEstimate);
+    $('notification-title').addEventListener('input', updateNotificationPreview);
+    $('notification-message').addEventListener('input', updateNotificationPreview);
+    $('notification-type').addEventListener('change', updateNotificationPreview);
+    updateNotificationPreview();
+    await refreshNotificationEstimate();
+    await loadNotificationHistory();
+  }
+
+  async function refreshNotificationEstimate() {
+    const payload = buildNotificationPayload();
+    const params = new URLSearchParams({ target: payload.target });
+    if (payload.target === 'user_id' && payload.user_id) {
+      params.set('user_id', String(payload.user_id));
+    }
+    try {
+      const estimate = await request(`/admin/notifications/estimate?${params.toString()}`);
+      setText('notification-estimated-recipients', estimate.estimated_recipients ?? 0);
+    } catch (_error) {
+      setText('notification-estimated-recipients', '0');
+    }
+  }
+
+  async function loadNotificationHistory() {
+    if (!$('notifications-history-body')) return;
+    const payload = await request('/admin/notifications/history?limit=50&offset=0').catch(() => ({ items: [], total: 0 }));
+    const rows = payload.items || [];
+    $('notifications-history-body').innerHTML = rows.length
+      ? rows.map((item) => `<tr>
+        <td>${item.sent_at ? new Date(item.sent_at).toLocaleString() : '-'}</td>
+        <td>${escapeHtml(item.target)}</td>
+        <td>${escapeHtml(item.title)}</td>
+        <td>${ui().badge(item.type, statusTone(item.type))}</td>
+        <td>${Number(item.estimated_recipients || 0)}</td>
+      </tr>`).join('')
+      : ui().emptyState('Aucun envoi pour le moment.', 5);
+    setText('notifications-history-total', Number(payload.total || 0));
   }
 
   async function sendAdminNotification() {
-    const target = $('notification-target')?.value || 'clients';
-    const message = $('notification-message')?.value.trim() || '';
-    if (!message) return setMessage('Message obligatoire.');
-    setMessage(`Notification préparée pour ${target}. Le broadcast serveur peut être branché sans changer cette page.`);
+    const payload = buildNotificationPayload();
+    if (!payload.title) return setMessage('Titre obligatoire.');
+    if (!payload.message) return setMessage('Message obligatoire.');
+    if (payload.target === 'user_id' && !payload.user_id) {
+      return setMessage('ID utilisateur obligatoire pour la cible utilisateur.');
+    }
+
+    await refreshNotificationEstimate();
+    const estimatedRecipients = Number($('notification-estimated-recipients')?.textContent || '0');
+    const confirmationLabel = payload.target === 'drivers'
+      ? `${estimatedRecipients} chauffeurs`
+      : payload.target === 'passengers'
+        ? `${estimatedRecipients} passagers`
+        : payload.target === 'user_id'
+          ? `utilisateur #${payload.user_id}`
+          : `${estimatedRecipients} utilisateurs`;
+    const confirmed = window.confirm(`Envoyer a ${confirmationLabel} ?`);
+    if (!confirmed) return;
+
+    try {
+      const response = await request('/admin/notifications/broadcast', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      setMessage(`Notification envoyee (${response.estimated_recipients} destinataires estimes).`);
+      await refreshNotificationEstimate();
+      await loadNotificationHistory();
+    } catch (error) {
+      setMessage(error.message);
+    }
   }
 
   async function loadSettingsPage() {
@@ -783,9 +1038,10 @@ const AdminApi = (() => {
     openFareModal, closeFareModal, saveFare, disableFare,
     openTimeRuleModal, closeTimeRuleModal, saveTimeRule, disableTimeRule,
     previewPricing, loadRides, renderRides, renderRidePagination, changeRidesPage, openRideDetail, closeRideDetail, openReportsModal, closeReportsModal,
-    loadUsers, setUsersRole, renderUsers, openUserProfile, closeUserProfile, blockUser, unblockUser, deleteUser,
+    loadUsers, setUsersRole, renderUsers, openUserProfile, closeUserProfile, blockUser, unblockUser, suspendUser, unsuspendUser, deleteUser,
     loadDrivers, renderDrivers, loadPendingDrivers, renderPendingDrivers,
     openDriverModal, closeDriverModal, saveDriverDossier, verifyDriver, rejectDriver, blockDriver, unblockDriver,
-    loadPayments, exportPaymentsCsv, loadReportsPage, renderReportsPage, applyArchiveFilters, sendAdminNotification, loadSettingsPage,
+    loadPayments, exportPaymentsCsv, loadReportsPage, renderReportsPage, applyReportUpdate, suspendFromReport, applyArchiveFilters,
+    loadNotificationsPage, sendAdminNotification, loadSettingsPage,
   };
 })();

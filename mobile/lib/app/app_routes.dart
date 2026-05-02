@@ -13,6 +13,7 @@ abstract final class AppRoutes {
   static const notifications = '/notifications';
   static const rideDetailBase = '/ride-detail';
   static const clientHome = '/client/home';
+  static const clientOnboarding = '/client/onboarding';
   static const clientHistory = '/client/history';
   static const clientMap = '/client/map';
   static const clientNegotiationBase = '/client/negotiation';
@@ -21,6 +22,7 @@ abstract final class AppRoutes {
   static const driverProfile = '/driver/profile';
   static const driverVehicle = '/driver/vehicle';
   static const driverStats = '/driver/stats';
+  static const driverEarnings = '/driver/earnings';
   static const driverHistory = '/driver/history';
   static const driverOnboarding = '/driver/onboarding';
   static const driverOnboardingStatus = '/driver/onboarding/status';

@@ -1,8 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../../../../../core/theme/app_colors.dart';
+import '../../../../../shared/widgets/app_surface_card.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_inline_feedback.dart';
+import '../../../../../shared/widgets/status_badge.dart';
 import '../../data/models/ride_offer_model.dart';
 
 class OfferCard extends StatelessWidget {
@@ -34,34 +39,17 @@ class OfferCard extends StatelessWidget {
     final padding = compact ? 14.0 : 18.0;
     final avatarSize = compact ? 44.0 : 50.0;
 
-    return Container(
+    return AppSurfaceCard(
       padding: EdgeInsets.all(padding),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x14000000),
-            blurRadius: 18,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: avatarSize,
-                height: avatarSize,
-                decoration: BoxDecoration(
-                  color: const Color(0x141B8A5A),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child:
-                    const Icon(Icons.person_rounded, color: AppColors.emerald),
+              _VehiclePhoto(
+                photo: offer.vehiclePhoto,
+                size: avatarSize,
               ),
               const SizedBox(width: 12),
               Expanded(child: _DriverInfo(offer: offer, compact: compact)),
@@ -198,7 +186,17 @@ class _DriverInfo extends StatelessWidget {
               icon: Icons.star_rounded,
               label: _ratingLabel,
             ),
-            _StatusPill(status: offer.status),
+            if (offer.driverCompletedRides > 0)
+              _InfoPill(
+                icon: Icons.route_rounded,
+                label: _completedRidesLabel,
+              ),
+            if (offer.isDriverVerified)
+              const _InfoPill(
+                icon: Icons.verified_rounded,
+                label: 'Verifie',
+              ),
+            StatusBadge(status: offer.status),
           ],
         ),
       ],
@@ -210,6 +208,47 @@ class _DriverInfo extends StatelessWidget {
       return 'Note a confirmer';
     }
     return offer.driverRating.toStringAsFixed(1);
+  }
+
+  String get _completedRidesLabel {
+    final count = offer.driverCompletedRides;
+    return count == 1 ? '1 course' : '$count courses';
+  }
+}
+
+class _VehiclePhoto extends StatelessWidget {
+  const _VehiclePhoto({
+    required this.photo,
+    required this.size,
+  });
+
+  final String? photo;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeVehiclePhoto(photo);
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: const Color(0x141B8A5A),
+        borderRadius: BorderRadius.circular(18),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: bytes == null
+          ? const Icon(Icons.directions_car_rounded, color: AppColors.emerald)
+          : Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) {
+                return const Icon(
+                  Icons.directions_car_rounded,
+                  color: AppColors.emerald,
+                );
+              },
+            ),
+    );
   }
 }
 
@@ -343,41 +382,6 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
-class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.status});
-
-  final String status;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEFF4FF),
-        borderRadius: BorderRadius.circular(999),
-      ),
-      child: Text(
-        _label,
-        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: const Color(0xFF315DB7),
-              fontWeight: FontWeight.w900,
-            ),
-      ),
-    );
-  }
-
-  String get _label {
-    switch (status) {
-      case 'accepted':
-        return 'Acceptee';
-      case 'rejected':
-        return 'Refusee';
-      default:
-        return 'En attente';
-    }
-  }
-}
-
 class _PlateBadge extends StatelessWidget {
   const _PlateBadge({required this.value});
 
@@ -410,5 +414,16 @@ class _PlateBadge extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+Uint8List? _decodeVehiclePhoto(String? value) {
+  if (value == null || value.trim().isEmpty) {
+    return null;
+  }
+  try {
+    return base64Decode(value);
+  } on FormatException {
+    return null;
   }
 }

@@ -36,6 +36,50 @@ class RecentAddressesList extends StatelessWidget {
   }
 }
 
+class FavoriteAddressesList extends StatelessWidget {
+  const FavoriteAddressesList({
+    super.key,
+    required this.favorites,
+    required this.onSelected,
+  });
+
+  final List<AddressResult> favorites;
+  final ValueChanged<AddressResult> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (favorites.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _SectionTitle(label: 'Favoris'),
+        ...favorites.map(
+          (result) => AddressResultTile(
+            key: ValueKey('favorite-${result.name}-${result.latitude}'),
+            result: result,
+            icon: _iconForLabel(result.name),
+            onTap: () => onSelected(result),
+          ),
+        ),
+      ],
+    );
+  }
+
+  IconData _iconForLabel(String label) {
+    final normalizedLabel = label.trim().toLowerCase();
+    if (normalizedLabel == 'maison') {
+      return Icons.home_rounded;
+    }
+    if (normalizedLabel == 'bureau') {
+      return Icons.business_rounded;
+    }
+    return Icons.bookmark_rounded;
+  }
+}
+
 class AddressSectionTitle extends StatelessWidget {
   const AddressSectionTitle({super.key, required this.label});
 

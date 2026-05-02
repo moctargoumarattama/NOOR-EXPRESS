@@ -34,7 +34,9 @@ class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
   void initState() {
     super.initState();
     Future.microtask(() {
-      ref.read(addressSearchControllerProvider.notifier).loadRecents();
+      ref.read(addressSearchControllerProvider.notifier)
+        ..loadFavorites()
+        ..loadRecents();
       _focusNode.requestFocus();
     });
   }
@@ -161,6 +163,11 @@ class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
                   keyboardDismissBehavior:
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   children: [
+                    if (state.query.trim().isEmpty)
+                      FavoriteAddressesList(
+                        favorites: state.favorites,
+                        onSelected: _select,
+                      ),
                     if (state.query.trim().isEmpty)
                       RecentAddressesList(
                         recents: state.recents,

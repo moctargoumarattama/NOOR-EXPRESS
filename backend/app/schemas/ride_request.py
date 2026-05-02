@@ -1,8 +1,9 @@
 from datetime import date, datetime
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.ride_request import RideRequestStatus
+from app.models.ride_request import RideCancelledByRole, RideRequestStatus
 from app.models.user import UserRole
 
 
@@ -25,7 +26,18 @@ class RideRequestCreate(BaseModel):
 
 
 class RideRequestCancel(BaseModel):
-    reason: str | None = None
+    reason: str | None = Field(default=None, max_length=200)
+    reason_code: str | None = Field(default=None, max_length=40)
+
+    @field_validator("reason", "reason_code", mode="before")
+    @classmethod
+    def normalize_optional_text(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("value must be a string")
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class RideRequestReject(BaseModel):
@@ -34,6 +46,24 @@ class RideRequestReject(BaseModel):
 
 class RideRequestComplete(BaseModel):
     pass
+
+
+class RideMessageCreate(BaseModel):
+    content: str = Field(min_length=1, max_length=500)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def normalize_content(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise TypeError("content must be a string")
+        return value.strip()
+
+    @field_validator("content")
+    @classmethod
+    def ensure_non_empty_content(cls, value: str) -> str:
+        if not value:
+            raise ValueError("content cannot be empty")
+        return value
 
 
 class ClientRideRatingCreate(BaseModel):
@@ -58,6 +88,8 @@ class RideRequestRead(BaseModel):
     pickup_longitude: float | None
     dropoff_latitude: float | None
     dropoff_longitude: float | None
+    distance_km: float | None
+    duration_minutes: int | None
     estimated_price: float
     agreed_price: float | None
     final_price: float | None
@@ -68,9 +100,10 @@ class RideRequestRead(BaseModel):
     driver_rating_for_client: float | None
     driver_rating_comment: str | None
     cancellation_reason: str | None
-    cancelled_by_role: UserRole | None
+    cancelled_by_role: RideCancelledByRole | None
     status: RideRequestStatus
     created_at: datetime
+    completed_at: datetime | None
 
     @field_validator(
         "estimated_price",
@@ -78,11 +111,31 @@ class RideRequestRead(BaseModel):
         "final_price",
         "platform_commission",
         "driver_net_earnings",
+        "distance_km",
         mode="before",
     )
     @classmethod
     def parse_price_fields(cls, value: object) -> float | None:
         return _round_optional_price(value)
+
+
+class RideMessageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    ride_id: int
+    sender_id: int
+    sender_role: UserRole
+    content: str
+    is_read: bool
+    created_at: datetime
+
+
+class RideMessagePageRead(BaseModel):
+    items: list[RideMessageRead]
+    unread_count: int
+    limit: int
+    offset: int
 
 
 class RideRequestStatsRead(BaseModel):
@@ -132,6 +185,43 @@ class RevenueStatsRead(BaseModel):
     date_to: date | None
     completed_rides: int
     total_revenue: float
+
+
+class RideShareLinkRead(BaseModel):
+    token: str
+    tracking_url: str
+
+    @field_validator("token")
+    @classmethod
+    def validate_token(cls, value: str) -> str:
+        UUID(value)
+        return value
+
+    @field_validator("tracking_url")
+    @classmethod
+    def validate_tracking_url(cls, value: str) -> str:
+        tracking_url = value.strip()
+        if not tracking_url:
+            raise ValueError("tracking_url cannot be empty")
+        return tracking_url
+
+
+class PublicTrackingDriverRead(BaseModel):
+    first_name: str
+    vehicle_model: str | None
+    plate_number: str | None
+
+
+class PublicTrackingPositionRead(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class PublicRideTrackingRead(BaseModel):
+    ride_id: int
+    status: RideRequestStatus
+    driver: PublicTrackingDriverRead
+    driver_position: PublicTrackingPositionRead | None
 
 
 def _round_optional_price(value: object) -> float | None:

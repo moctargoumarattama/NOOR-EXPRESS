@@ -5,16 +5,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
+import '../../../../core/models/app_role.dart';
+import '../../../../core/services/support_contact_service.dart';
 import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
 import '../controllers/tracking_controller.dart';
+import '../services/navigation_service.dart';
+import 'ride_chat_screen.dart';
 import '../tracking_status_presenter.dart';
 import '../widgets/bottom_ride_sheet.dart';
 import '../widgets/map_view.dart';
 import '../widgets/report_bottom_sheet.dart';
+import '../widgets/ride_chat_fab.dart';
 import '../widgets/ride_detail_section.dart';
 import '../widgets/ride_status_banner.dart';
 import '../widgets/tracking_shell_widgets.dart';
@@ -165,7 +170,16 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
             ),
           ),
           if (ride != null)
+            Positioned(
+              left: 18,
+              bottom: 154,
+              child: TrackingSupportButton(
+                onPressed: _openSupportChat,
+              ),
+            ),
+          if (ride != null)
             BottomRideSheet(
+              floatingAction: _buildChatAction(state),
               secondaryAction: _buildSecondaryActions(state),
               primaryAction: _buildPrimaryAction(state),
               child: RideDetailSection(
@@ -234,11 +248,38 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   Widget? _buildSecondaryActions(TrackingState state) {
     final ride = state.ride;
-    if (ride == null || !_canReport(ride.status)) {
+    if (ride == null) {
       return null;
     }
-    return RideReportActionButton(
-      onPressed: state.isActionLoading ? null : _openReportSheet,
+
+    final actions = <Widget>[
+      ..._buildNavigationActions(
+        ride: ride,
+        isActionLoading: state.isActionLoading,
+      ),
+      if (ride.canDriverCancel)
+        AppButton.danger(
+          label: 'Annuler la course',
+          isLoading: state.isActionLoading,
+          onPressed: state.isActionLoading ? null : _confirmAndCancelRide,
+        ),
+      if (_canReport(ride.status))
+        RideReportActionButton(
+          onPressed: state.isActionLoading ? null : _openReportSheet,
+        ),
+    ];
+
+    return _buildActionColumn(actions);
+  }
+
+  Widget? _buildChatAction(TrackingState state) {
+    final ride = state.ride;
+    if (ride == null || !ride.canUseChat) {
+      return null;
+    }
+    return RideChatFab(
+      unreadCount: state.unreadChatCount,
+      onPressed: () => _openChat(),
     );
   }
 
@@ -252,6 +293,158 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
             );
       },
     );
+  }
+
+  Future<void> _openChat() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => RideChatScreen(
+          scope: _scope,
+          title: 'Client',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openSupportChat() async {
+    final result = await ref
+        .read(supportContactServiceProvider)
+        .openSupportChat(AppRole.driver);
+    if (!mounted || result.type != SupportContactResultType.failed) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir WhatsApp pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
+  }
+
+  Future<void> _confirmAndCancelRide() async {
+    final draft = await showRideCancellationBottomSheet(
+      context,
+      title: 'Pourquoi annuler cette course ?',
+      confirmLabel: 'Confirmer l annulation',
+      options: driverCancellationReasonOptions,
+      reasonRequired: true,
+    );
+    if (!mounted || draft == null) {
+      return;
+    }
+    await ref.read(trackingControllerProvider(_scope).notifier).cancelRide(
+          reason: draft.reason,
+          reasonCode: draft.reasonCode,
+        );
+  }
+
+  List<Widget> _buildNavigationActions({
+    required RideTrackingModel ride,
+    required bool isActionLoading,
+  }) {
+    final navigationService = ref.read(navigationServiceProvider);
+    final actions = <Widget>[];
+
+    if (navigationService.canOpenPickupNavigation(ride.status)) {
+      actions.add(
+        AppButton.secondary(
+          label: RideUiCopy.navigateToPickup,
+          icon: Icons.person_pin_circle_outlined,
+          onPressed: isActionLoading ? null : () => _openPickupNavigation(ride),
+        ),
+      );
+    }
+
+    if (navigationService.canOpenDestinationNavigation(ride.status)) {
+      actions.add(
+        AppButton.secondary(
+          label: RideUiCopy.navigateToDestination,
+          icon: Icons.flag_circle_outlined,
+          onPressed:
+              isActionLoading ? null : () => _openDestinationNavigation(ride),
+        ),
+      );
+    }
+
+    return actions;
+  }
+
+  Widget? _buildActionColumn(List<Widget> actions) {
+    if (actions.isEmpty) {
+      return null;
+    }
+
+    final spacedActions = <Widget>[];
+    for (final action in actions) {
+      if (spacedActions.isNotEmpty) {
+        spacedActions.add(const SizedBox(height: 10));
+      }
+      spacedActions.add(action);
+    }
+
+    return Column(children: spacedActions);
+  }
+
+  Future<void> _openPickupNavigation(RideTrackingModel ride) async {
+    final pickup = ride.pickupPosition;
+    if (pickup == null) {
+      _showNavigationFeedback(RideUiCopy.pickupNavigationUnavailable);
+      return;
+    }
+    await _openNavigationForCoordinates(pickup);
+  }
+
+  Future<void> _openDestinationNavigation(RideTrackingModel ride) async {
+    final destination = ride.dropoffPosition;
+    if (destination == null) {
+      _showNavigationFeedback(RideUiCopy.destinationNavigationUnavailable);
+      return;
+    }
+    await _openNavigationForCoordinates(destination);
+  }
+
+  Future<void> _openNavigationForCoordinates(
+    TrackingCoordinates coordinates,
+  ) async {
+    final navigationService = ref.read(navigationServiceProvider);
+    final launchPlan = await navigationService.buildLaunchPlan(coordinates);
+    if (!mounted) {
+      return;
+    }
+
+    final selectedOption = await _selectNavigationOption(launchPlan);
+    if (selectedOption == null) {
+      return;
+    }
+
+    final launched =
+        await navigationService.openWithOption(selectedOption, coordinates);
+    if (!mounted || launched) {
+      return;
+    }
+
+    _showNavigationFeedback(RideUiCopy.navigationOpenFailed);
+  }
+
+  Future<NavigationOption?> _selectNavigationOption(
+    NavigationLaunchPlan launchPlan,
+  ) async {
+    if (!launchPlan.requiresUserChoice) {
+      return launchPlan.defaultOption;
+    }
+
+    return showModalBottomSheet<NavigationOption>(
+      context: context,
+      builder: (sheetContext) => _NavigationChoiceSheet(
+        options: launchPlan.options,
+      ),
+    );
+  }
+
+  void _showNavigationFeedback(String message) {
+    if (!mounted) {
+      return;
+    }
+    AppSnackbar.show(context, message: message);
   }
 
   bool _canReport(RideTrackingStatus status) {
@@ -295,9 +488,56 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     if (value.contains('gps')) {
       return RideUiCopy.gpsUnavailable;
     }
-    if (value.contains('annul')) {
+    if (value.contains('course annulee') ||
+        value.contains('trajet a ete annule')) {
       return RideUiCopy.rideCancelled;
     }
     return message;
+  }
+}
+
+class _NavigationChoiceSheet extends StatelessWidget {
+  const _NavigationChoiceSheet({
+    required this.options,
+  });
+
+  final List<NavigationOption> options;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(20, 20, 20, 10),
+            child: Text(
+              RideUiCopy.navigationChooserTitle,
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          for (final option in options)
+            ListTile(
+              leading: Icon(_iconForOption(option)),
+              title: Text(option.label),
+              onTap: () => Navigator.of(context).pop(option),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  IconData _iconForOption(NavigationOption option) {
+    switch (option.app) {
+      case NavigationApp.waze:
+        return Icons.navigation_outlined;
+      case NavigationApp.googleMaps:
+      case NavigationApp.web:
+        return Icons.map_outlined;
+    }
   }
 }

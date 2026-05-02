@@ -6,16 +6,19 @@ import 'package:latlong2/latlong.dart';
 import '../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../core/location/location_service.dart';
 import '../../../../core/state/session_controller.dart';
+import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../map/models/route_result.dart';
 import '../../../map/services/routing_service.dart';
 import '../../data/datasources/tracking_remote_datasource.dart';
 import '../../data/datasources/tracking_websocket_datasource.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../domain/entities/tracking_state.dart';
+import '../services/ride_share_service.dart';
 import 'tracking_controller_support.dart';
 
 part 'tracking_controller_realtime.dart';
 part 'tracking_controller_snapshot.dart';
+part 'tracking_controller_chat.dart';
 
 class TrackingControllerScope {
   const TrackingControllerScope({
@@ -45,11 +48,15 @@ class TrackingController extends StateNotifier<TrackingState> {
     required TrackingRemoteDatasource remoteDatasource,
     required TrackingWebSocketDatasource websocketDatasource,
     required LocationService locationService,
+    required ForegroundLocationService foregroundLocationService,
     required RoutingService routingService,
+    required RideShareService rideShareService,
   })  : _remoteDatasource = remoteDatasource,
         _websocketDatasource = websocketDatasource,
         _locationService = locationService,
+        _foregroundLocationService = foregroundLocationService,
         _routingService = routingService,
+        _rideShareService = rideShareService,
         super(TrackingState.initial(mode));
 
   final Ref ref;
@@ -58,7 +65,9 @@ class TrackingController extends StateNotifier<TrackingState> {
   final TrackingRemoteDatasource _remoteDatasource;
   final TrackingWebSocketDatasource _websocketDatasource;
   final LocationService _locationService;
+  final ForegroundLocationService _foregroundLocationService;
   final RoutingService _routingService;
+  final RideShareService _rideShareService;
 
   StreamSubscription<TrackingSocketEvent>? _eventSubscription;
   StreamSubscription<TrackingConnectionState>? _connectionSubscription;
@@ -125,6 +134,7 @@ class TrackingController extends StateNotifier<TrackingState> {
     await connectionSubscription?.cancel();
     await locationSubscription?.cancel();
     await _websocketDatasource.disconnect();
+    await _stopDriverForegroundLocation(this);
     if (_isDisposed || !resetState) {
       return;
     }
@@ -160,13 +170,24 @@ class TrackingController extends StateNotifier<TrackingState> {
     if (!_isActive) {
       return;
     }
+    await _recoverDriverForegroundLocation(this);
+    if (!_isActive) {
+      return;
+    }
     await _refreshSnapshot(this, requireActiveRide: true);
   }
 
-  Future<void> cancelRide() async {
+  Future<void> cancelRide({
+    String? reason,
+    String? reasonCode,
+  }) async {
     await _runRideAction(
       this,
-      action: (rideId) => _remoteDatasource.cancelRide(rideId),
+      action: (rideId) => _remoteDatasource.cancelRide(
+        rideId,
+        reason: reason,
+        reasonCode: reasonCode,
+      ),
       successMessage: 'Course annulee.',
     );
   }
@@ -264,6 +285,53 @@ class TrackingController extends StateNotifier<TrackingState> {
     }
   }
 
+  Future<void> shareRide() async {
+    if (!_isActive || mode != TrackingMode.client) {
+      return;
+    }
+    final currentState = _currentStateOrNull;
+    final ride = currentState?.ride;
+    if (currentState == null || ride == null) {
+      return;
+    }
+    if (!_rideShareService.canShareRide(ride.status)) {
+      return;
+    }
+
+    _setStateIfAlive(currentState.copyWith(isActionLoading: true, clearError: true));
+    await _requestAndShareRideLink(ride.id);
+  }
+
+  Future<void> _requestAndShareRideLink(int rideId) async {
+    try {
+      final payload = await _remoteDatasource.createRideShareLink(rideId);
+      if (!_isActive) {
+        return;
+      }
+      final trackingUrl = _readTrackingUrl(payload);
+      final shareResult = await _rideShareService.shareRideLink(trackingUrl);
+      if (!_isActive) {
+        return;
+      }
+      final nextState = _currentStateOrNull;
+      if (nextState == null) {
+        return;
+      }
+      _setStateIfAlive(nextState.copyWith(
+        isActionLoading: false,
+        toastMessage: _shareRideFeedback(shareResult),
+      ));
+    } on TrackingRemoteFailure catch (error) {
+      if (_isDisposed) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
+        isActionLoading: false,
+        errorMessage: error.message,
+      ));
+    }
+  }
+
   void acknowledgePassengerReady() {
     if (_isDisposed) {
       return;
@@ -278,11 +346,44 @@ class TrackingController extends StateNotifier<TrackingState> {
   Future<void> openLocationSettings() =>
       _locationService.openLocationSettings();
 
+  void setChatOpen(bool isOpen) {
+    if (_isDisposed) {
+      return;
+    }
+    _setStateIfAlive(state.copyWith(isChatOpen: isOpen));
+  }
+
+  void syncUnreadChatCount(int count) {
+    if (_isDisposed) {
+      return;
+    }
+    _setStateIfAlive(state.copyWith(unreadChatCount: count < 0 ? 0 : count));
+  }
+
   void consumeToast() {
     if (_isDisposed) {
       return;
     }
     _setStateIfAlive(state.copyWith(clearToast: true));
+  }
+
+  String _readTrackingUrl(Map<String, dynamic> payload) {
+    final trackingUrl = (payload['tracking_url'] as String? ?? '').trim();
+    if (trackingUrl.isEmpty) {
+      throw const TrackingRemoteFailure(RideUiCopy.shareRideLinkUnavailable);
+    }
+    return trackingUrl;
+  }
+
+  String _shareRideFeedback(RideShareResult result) {
+    switch (result.type) {
+      case RideShareResultType.openedWhatsApp:
+        return RideUiCopy.shareRideSent;
+      case RideShareResultType.copiedToClipboard:
+        return RideUiCopy.shareRideFallbackCopied;
+      case RideShareResultType.failed:
+        return RideUiCopy.shareRideFailed;
+    }
   }
 
   void _registerLifecycleResume() {
@@ -315,6 +416,7 @@ class TrackingController extends StateNotifier<TrackingState> {
     unawaited(connectionSubscription?.cancel() ?? Future<void>.value());
     unawaited(locationSubscription?.cancel() ?? Future<void>.value());
     unawaited(_websocketDatasource.disconnect());
+    unawaited(_stopDriverForegroundLocation(this));
 
     super.dispose();
   }
@@ -332,7 +434,9 @@ final trackingControllerProvider = StateNotifierProvider.autoDispose
         trackingWebsocketDatasourceProvider(scope.mode),
       ),
       locationService: ref.watch(locationServiceProvider),
+      foregroundLocationService: ref.watch(foregroundLocationServiceProvider),
       routingService: ref.watch(routingServiceProvider),
+      rideShareService: ref.watch(rideShareServiceProvider),
     );
     return controller;
   },

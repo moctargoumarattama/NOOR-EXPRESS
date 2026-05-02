@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/models/app_role.dart';
+import '../core/services/passenger_onboarding_service.dart';
 import '../core/state/session_controller.dart';
 import '../features/auth/presentation/screens/login_screen.dart';
 import '../features/auth/presentation/screens/otp_screen.dart';
@@ -13,6 +14,7 @@ import '../features/address_search/presentation/screens/address_search_screen.da
 import '../features/home/client/presentation/screens/client_history_screen.dart';
 import '../features/home/client/presentation/screens/client_home_screen.dart';
 import '../features/home/driver/presentation/screens/driver_history_screen.dart';
+import '../features/home/driver/presentation/screens/driver_earnings_screen.dart';
 import '../features/home/driver/presentation/screens/driver_home_screen.dart';
 import '../features/home/driver/presentation/screens/driver_profile_screen.dart';
 import '../features/home/driver/presentation/screens/driver_stats_screen.dart';
@@ -22,6 +24,7 @@ import '../features/driver_onboarding/presentation/screens/driver_onboarding_sta
 import '../features/history/screens/ride_detail_screen.dart';
 import '../features/negotiation/presentation/screens/client_negotiation_screen.dart';
 import '../features/negotiation/presentation/screens/driver_offer_screen.dart';
+import '../features/onboarding/presentation/screens/passenger_onboarding_screen.dart';
 import '../features/profile/presentation/screens/client_profile_screen.dart';
 import '../features/ride_tracking/presentation/screens/client_tracking_screen.dart';
 import '../features/ride_tracking/presentation/screens/driver_tracking_screen.dart';
@@ -36,6 +39,9 @@ final rootNavigatorKey = GlobalKey<NavigatorState>();
 
 final appRouterProvider = Provider<GoRouter>((ref) {
   final sessionState = ref.watch(sessionControllerProvider);
+  final onboardingCompletedState = ref.watch(
+    passengerOnboardingCompletedProvider,
+  );
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -81,6 +87,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _fastFadePage(
           key: state.pageKey,
           child: const ClientHomeScreen(),
+        ),
+      ),
+      GoRoute(
+        path: AppRoutes.clientOnboarding,
+        pageBuilder: (context, state) => _fastFadePage(
+          key: state.pageKey,
+          child: const PassengerOnboardingScreen(),
         ),
       ),
       GoRoute(
@@ -181,6 +194,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         ),
       ),
       GoRoute(
+        path: AppRoutes.driverEarnings,
+        pageBuilder: (context, state) => _fastFadePage(
+          key: state.pageKey,
+          child: const DriverEarningsScreen(),
+        ),
+      ),
+      GoRoute(
         path: AppRoutes.driverStats,
         pageBuilder: (context, state) => _fastFadePage(
           key: state.pageKey,
@@ -245,32 +265,64 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
     redirect: (context, state) {
-      final location = state.matchedLocation;
-      final isSplash = location == AppRoutes.splash;
-      final isLogin = location == AppRoutes.login;
-      final isAuthFlow = isLogin ||
-          location == AppRoutes.register ||
-          location == AppRoutes.otp ||
-          location == AppRoutes.roleSelect;
-
-      switch (sessionState.status) {
-        case SessionStatus.initial:
-        case SessionStatus.loading:
-          return isSplash ? null : AppRoutes.splash;
-        case SessionStatus.unauthenticated:
-          return isAuthFlow ? null : AppRoutes.register;
-        case SessionStatus.authenticated:
-          final homeRoute = sessionState.role == AppRole.driver
-              ? AppRoutes.driverHome
-              : AppRoutes.clientHome;
-          if (isSplash || isAuthFlow) {
-            return homeRoute;
-          }
-          return null;
-      }
+      return resolveAppRedirect(
+        sessionState: sessionState,
+        onboardingCompletedState: onboardingCompletedState,
+        location: state.matchedLocation,
+      );
     },
   );
 });
+
+String? resolveAppRedirect({
+  required SessionState sessionState,
+  required AsyncValue<bool> onboardingCompletedState,
+  required String location,
+}) {
+  final isSplash = location == AppRoutes.splash;
+  final isLogin = location == AppRoutes.login;
+  final isAuthFlow = isLogin ||
+      location == AppRoutes.register ||
+      location == AppRoutes.otp ||
+      location == AppRoutes.roleSelect;
+  final isPassengerOnboarding = location == AppRoutes.clientOnboarding;
+
+  switch (sessionState.status) {
+    case SessionStatus.initial:
+    case SessionStatus.loading:
+      return isSplash ? null : AppRoutes.splash;
+    case SessionStatus.unauthenticated:
+      if (isPassengerOnboarding) {
+        return AppRoutes.register;
+      }
+      return isAuthFlow ? null : AppRoutes.register;
+    case SessionStatus.authenticated:
+      final isClient = sessionState.role == AppRole.client;
+      if (isClient) {
+        if (onboardingCompletedState.isLoading) {
+          return isSplash ? null : AppRoutes.splash;
+        }
+        final onboardingCompleted = onboardingCompletedState.valueOrNull;
+        final mustShowOnboarding = onboardingCompleted != true;
+        if (mustShowOnboarding && !isPassengerOnboarding) {
+          return AppRoutes.clientOnboarding;
+        }
+        if (!mustShowOnboarding && isPassengerOnboarding) {
+          return AppRoutes.clientHome;
+        }
+      } else if (isPassengerOnboarding) {
+        return AppRoutes.driverHome;
+      }
+
+      final homeRoute = sessionState.role == AppRole.driver
+          ? AppRoutes.driverHome
+          : AppRoutes.clientHome;
+      if (isSplash || isAuthFlow) {
+        return homeRoute;
+      }
+      return null;
+  }
+}
 
 CustomTransitionPage<void> _fastFadePage({
   required LocalKey key,

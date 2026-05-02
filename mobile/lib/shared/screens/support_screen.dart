@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/models/app_role.dart';
+import '../../core/services/support_contact_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../widgets/app_snackbar.dart';
 
-class SupportScreen extends StatelessWidget {
+class SupportScreen extends ConsumerWidget {
   const SupportScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final supportService = ref.watch(supportContactServiceProvider);
     return Scaffold(
       backgroundColor: AppColors.cloud,
       body: SafeArea(
@@ -21,21 +26,46 @@ class SupportScreen extends StatelessWidget {
             const _InfoPanel(
               icon: Icons.support_agent_rounded,
               title: 'Assistance Noor Express',
-              body:
-                  'Notre equipe pourra vous aider ici. Pour le moment, utilisez '
-                  'Signaler un probleme si votre demande concerne une course.',
+              body: 'Contactez directement notre equipe sur WhatsApp pour '
+                  'obtenir une aide rapide.',
             ),
             const SizedBox(height: 14),
-            const _InfoPanel(
+            _InfoPanel(
               icon: Icons.mail_outline_rounded,
               title: 'Contact',
-              body: 'support@noorexpress.ne\n+227 XX XX XX XX',
+              body:
+                  'WhatsApp: ${supportService.supportPhone}\nHoraires: ${supportService.supportHours}',
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => _openSupportChat(context, ref),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.emerald,
+                foregroundColor: AppColors.pearl,
+                minimumSize: const Size.fromHeight(52),
+              ),
+              icon: const Icon(Icons.support_agent_rounded),
+              label: const Text('Contacter le support'),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+Future<void> _openSupportChat(BuildContext context, WidgetRef ref) async {
+  final result = await ref
+      .read(supportContactServiceProvider)
+      .openSupportChat(AppRole.client);
+  if (!context.mounted || result.type != SupportContactResultType.failed) {
+    return;
+  }
+  AppSnackbar.show(
+    context,
+    message: 'Impossible d ouvrir WhatsApp pour le moment.',
+    tone: AppSnackbarTone.error,
+  );
 }
 
 class _Header extends StatelessWidget {

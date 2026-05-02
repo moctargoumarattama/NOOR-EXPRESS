@@ -3,6 +3,7 @@ uvicorn[standard]
 httptools
 uvloop; sys_platform != "win32"
 pydantic
+python-multipart
 websockets
 sqlalchemy
 asyncmy
@@ -12,3 +13,5 @@ python-dotenv
 pydantic-settings
 firebase-admin
 upstash-redis
+alembic
+Pillow

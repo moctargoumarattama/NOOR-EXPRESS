@@ -55,6 +55,13 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
                   price: ride.displayPrice,
                   status: ride.status,
                   createdAt: ride.createdAt,
+                  displayedAt: ride.completedAt,
+                  details: [
+                    if (ride.platformCommission != null)
+                      'Commission deduite: ${ride.platformCommission!.toStringAsFixed(0)} FCFA',
+                    if (ride.ratingFromClient != null)
+                      'Note recue: ${ride.ratingFromClient!.toStringAsFixed(1)}/5',
+                  ],
                   onTap: () => context.push(
                     AppRoutes.rideDetail(ride.id),
                     extra: _rideToJson(ride),
@@ -115,9 +122,14 @@ class _DriverHistoryScreenState extends ConsumerState<DriverHistoryScreen> {
       'estimated_price': ride.estimatedPrice,
       'agreed_price': ride.agreedPrice,
       'final_price': ride.finalPrice,
+      'distance_km': ride.distanceKm,
+      'duration_minutes': ride.durationMinutes,
+      'platform_commission': ride.platformCommission,
       'driver_net_earnings': ride.driverNetEarnings,
+      'client_rating_for_driver': ride.ratingFromClient,
       'status': ride.status,
       'created_at': ride.createdAt.toIso8601String(),
+      'completed_at': ride.completedAt?.toIso8601String(),
     };
   }
 }
@@ -136,7 +148,7 @@ class _Header extends StatelessWidget {
           IconButton(onPressed: onBack, icon: const Icon(Icons.arrow_back)),
           const SizedBox(width: 8),
           const Text(
-            'Mes trajets',
+            'Mes courses',
             style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900),
           ),
         ],

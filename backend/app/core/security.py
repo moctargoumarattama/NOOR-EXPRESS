@@ -13,7 +13,7 @@ from app.core.api_errors import ApiError, forbidden, unauthorized
 from app.core.config import settings
 from app.db.database import get_db_session
 from app.models.user import User, UserRole
-from app.services.user_service import get_user_by_id
+from app.services.user_service import ensure_user_not_suspended, get_user_by_id
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -89,7 +89,15 @@ async def verify_token(token: str, session: AsyncSession) -> User | None:
         user_id = payload.get("sub")
         if user_id is None:
             return None
-        return await get_user_by_id(session, int(user_id))
+        user = await get_user_by_id(session, int(user_id))
+        if (
+            user is None
+            or bool(getattr(user, "is_blocked", False))
+            or getattr(user, "deleted_at", None) is not None
+        ):
+            return None
+        await ensure_user_not_suspended(session, user)
+        return user
     except (ApiError, TypeError, ValueError):
         return None
 
@@ -109,8 +117,11 @@ async def get_current_user(
     user = await get_user_by_id(session, int(user_id))
     if user is None:
         raise unauthorized("User not found")
+    if getattr(user, "deleted_at", None) is not None:
+        raise forbidden("Account is deleted")
     if user.is_blocked:
         raise forbidden("Account is blocked")
+    await ensure_user_not_suspended(session, user)
 
     return user
 

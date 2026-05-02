@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import logging
 import secrets
 
 from fastapi import HTTPException, status
@@ -10,9 +11,13 @@ from app.core.security import create_access_token
 from app.models.otp import OtpCode
 from app.models.user import DriverStatus, User, UserRole
 from app.schemas.user import TokenResponse
-from app.services.user_service import get_user_by_phone_number
+from app.services.user_service import (
+    ensure_user_not_suspended,
+    get_user_by_phone_number,
+)
 
 OTP_TTL_MINUTES = 10
+logger = logging.getLogger(__name__)
 
 
 def _create_refresh_token() -> str:
@@ -43,6 +48,7 @@ async def register(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is blocked.",
             )
+        await ensure_user_not_suspended(session, user)
         user.name = name
         user.role = role
         if role == UserRole.DRIVER:
@@ -82,6 +88,7 @@ async def send_otp(session: AsyncSession, phone_number: str) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is blocked.",
         )
+    await ensure_user_not_suspended(session, user)
 
     otp_code = settings.OTP_CODE_DEV
     otp = OtpCode(
@@ -92,8 +99,7 @@ async def send_otp(session: AsyncSession, phone_number: str) -> None:
     session.add(otp)
     await session.commit()
 
-    # TODO: brancher ici un vrai fournisseur SMS en production.
-    print(f"OTP pour {phone_number}: {otp_code}")
+    logger.info("OTP generated for %s", phone_number)
 
 
 async def verify_otp(
@@ -112,6 +118,7 @@ async def verify_otp(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is blocked.",
         )
+    await ensure_user_not_suspended(session, user)
 
     result = await session.execute(
         select(OtpCode)
@@ -153,7 +160,11 @@ async def refresh_token(
         select(User).where(User.refresh_token == current_refresh_token)
     )
     user = result.scalar_one_or_none()
-    if user is None or user.is_blocked or _is_refresh_token_expired(current_refresh_token):
+    if (
+        user is None
+        or user.is_blocked
+        or _is_refresh_token_expired(current_refresh_token)
+    ):
         if user is not None:
             user.refresh_token = None
             await session.commit()
@@ -161,6 +172,7 @@ async def refresh_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid refresh token.",
         )
+    await ensure_user_not_suspended(session, user)
 
     return TokenResponse(
         access_token=create_access_token(

@@ -41,8 +41,12 @@ class RideOfferDriverRead(BaseModel):
     vehicle_model: str | None
     vehicle_color: str | None
     plate_number: str | None
+    vehicle_photo: str | None = None
     proposed_price: float
     driver_distance_km: float | None
+    driver_eta_minutes: int | None = None
+    driver_completed_rides: int = 0
+    driver_verified: bool = False
     status: RideOfferStatus
     created_at: datetime
 

@@ -16,6 +16,7 @@ class _BookingPanel extends StatelessWidget {
     required this.onClearPickup,
     required this.onClearDropoff,
     required this.onSubmit,
+    this.onAddToFavorites,
     this.estimate,
   });
 
@@ -33,6 +34,7 @@ class _BookingPanel extends StatelessWidget {
   final VoidCallback onClearPickup;
   final VoidCallback onClearDropoff;
   final VoidCallback onSubmit;
+  final AddDropoffToFavorites? onAddToFavorites;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +62,7 @@ class _BookingPanel extends StatelessWidget {
       onClearPickup: onClearPickup,
       onClearDropoff: onClearDropoff,
       onSubmit: onSubmit,
+      onAddToFavorites: onAddToFavorites,
     );
   }
 
@@ -135,6 +138,7 @@ class _RoutePreviewPanel extends StatelessWidget {
     required this.onClearPickup,
     required this.onClearDropoff,
     required this.onSubmit,
+    this.onAddToFavorites,
     this.estimate,
   });
 
@@ -151,6 +155,7 @@ class _RoutePreviewPanel extends StatelessWidget {
   final VoidCallback onClearPickup;
   final VoidCallback onClearDropoff;
   final VoidCallback onSubmit;
+  final AddDropoffToFavorites? onAddToFavorites;
 
   @override
   Widget build(BuildContext context) {
@@ -167,6 +172,9 @@ class _RoutePreviewPanel extends StatelessWidget {
           durationMinutes: route?.durationMinutes,
           isRouteReliable: route?.hasReliableMetrics ?? false,
           recommendedPrice: reliableRecommendedPrice,
+          minimumPrice: _reliableMinimumPrice,
+          maximumPrice: _reliableMaximumPrice,
+          availableDriversCount: _availabilityCount,
           reliabilityMessage: isEstimatingPrice
               ? 'Estimation en cours...'
               : _reliabilityMessage,
@@ -179,6 +187,15 @@ class _RoutePreviewPanel extends StatelessWidget {
           enabled: !isCreating,
         ),
         const SizedBox(height: 12),
+        if (onAddToFavorites != null) ...[
+          AppButton.secondary(
+            label: 'Ajouter aux favoris',
+            icon: Icons.bookmark_add_rounded,
+            onPressed: isCreating ? null : () => onAddToFavorites!(dropoff!),
+          ),
+          const SizedBox(height: 10),
+        ],
+        const SizedBox(height: 2),
         AppButton(
           label: 'Trouver un chauffeur',
           icon: Icons.local_taxi_rounded,
@@ -202,6 +219,39 @@ class _RoutePreviewPanel extends StatelessWidget {
       return null;
     }
     return value;
+  }
+
+  double? get _reliableMinimumPrice {
+    final minimumPrice = estimate?.minPrice;
+    final maximumPrice = estimate?.maxPrice;
+    if (minimumPrice == null ||
+        maximumPrice == null ||
+        !_isReliableEstimatedPrice(minimumPrice) ||
+        !_isReliableEstimatedPrice(maximumPrice) ||
+        maximumPrice < minimumPrice) {
+      return null;
+    }
+    return minimumPrice;
+  }
+
+  double? get _reliableMaximumPrice {
+    final minimumPrice = _reliableMinimumPrice;
+    final maximumPrice = estimate?.maxPrice;
+    if (minimumPrice == null ||
+        maximumPrice == null ||
+        !_isReliableEstimatedPrice(maximumPrice) ||
+        maximumPrice < minimumPrice) {
+      return null;
+    }
+    return maximumPrice;
+  }
+
+  int? get _availabilityCount {
+    final count = estimate?.availableDriversCount;
+    if (count == null || count < 0) {
+      return null;
+    }
+    return count;
   }
 
   String? get _reliabilityMessage {
@@ -229,6 +279,10 @@ class _RoutePreviewPanel extends StatelessWidget {
       return cleanedRouteError;
     }
     return null;
+  }
+
+  bool _isReliableEstimatedPrice(double value) {
+    return value.isFinite && value > 0 && value <= 500000;
   }
 }
 

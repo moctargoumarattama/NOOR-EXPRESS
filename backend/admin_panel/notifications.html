@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
@@ -13,7 +13,7 @@
     <div class="page-head">
       <div>
         <h1>Notifications</h1>
-        <p class="hint">Préparation d'un message simple par cible.</p>
+        <p class="hint">Diffuse un message push aux chauffeurs, passagers ou a un utilisateur precis.</p>
       </div>
     </div>
     <p id="message" class="message"></p>
@@ -21,24 +21,66 @@
       <div class="form-grid">
         <label>Cible
           <select id="notification-target">
-            <option value="clients">clients</option>
+            <option value="all">tous</option>
             <option value="drivers">chauffeurs</option>
+            <option value="passengers">passagers</option>
+            <option value="user_id">utilisateur</option>
+          </select>
+        </label>
+        <label>Utilisateur (si cible utilisateur)
+          <input id="notification-user-id" type="number" min="1" placeholder="ID utilisateur">
+        </label>
+        <label>Type
+          <select id="notification-type">
+            <option value="info">info</option>
+            <option value="promo">promo</option>
+            <option value="alerte">alerte</option>
           </select>
         </label>
         <label>Titre
-          <input id="notification-title" value="Noor Express">
+          <input id="notification-title" value="Noor Express" maxlength="60" required>
         </label>
       </div>
       <label>Message
-        <textarea id="notification-message" rows="5" placeholder="Votre message..."></textarea>
+        <textarea id="notification-message" rows="5" maxlength="200" placeholder="Votre message..." required></textarea>
       </label>
+      <p class="hint">
+        Destinataires estimes: <strong id="notification-estimated-recipients">0</strong>
+      </p>
+      <div class="preview-card">
+        <strong>Apercu</strong>
+        <p><strong id="notification-preview-title">Noor Express</strong></p>
+        <p id="notification-preview-message">Votre message apparaitra ici.</p>
+        <p class="hint">Type: <span id="notification-preview-type">info</span> | Cible: <span id="notification-preview-target">all</span></p>
+      </div>
       <div class="actions">
         <button onclick="AdminApi.sendAdminNotification()">Envoyer notification</button>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Historique</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Cible</th>
+            <th>Titre</th>
+            <th>Type</th>
+            <th>Destinataires</th>
+          </tr>
+        </thead>
+        <tbody id="notifications-history-body"></tbody>
+      </table>
+      <div class="table-footer">
+        <small class="hint">Total: <span id="notifications-history-total">0</span></small>
       </div>
     </section>
   </main>
   <script src="assets/admin-ui.js?v=20260425-admin-v2"></script>
   <script src="assets/api.js?v=20260425-admin-v2"></script>
-  <script>AdminApi.requireAuth();</script>
+  <script>
+    AdminApi.requireAuth();
+    AdminApi.loadNotificationsPage();
+  </script>
 </body>
 </html>

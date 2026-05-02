@@ -17,9 +17,9 @@ from app.services.pricing_admin_service import (
 )
 from app.services.pricing_service import (
     PricingZoneNotFoundError,
-    estimate_price,
     get_all_zones,
 )
+from app.services.ride_lifecycle_service import estimate_ride_preview
 
 router = APIRouter(prefix="/pricing", tags=["pricing"])
 
@@ -55,12 +55,12 @@ async def estimate_price_endpoint(
     dropoff_lng: float,
     session: AsyncSession = Depends(get_db_session),
 ) -> PriceEstimateRead:
-    estimate = await estimate_price(
+    estimate = await estimate_ride_preview(
         session,
-        pickup_lat=pickup_lat,
-        pickup_lng=pickup_lng,
-        dropoff_lat=dropoff_lat,
-        dropoff_lng=dropoff_lng,
+        pickup_latitude=pickup_lat,
+        pickup_longitude=pickup_lng,
+        dropoff_latitude=dropoff_lat,
+        dropoff_longitude=dropoff_lng,
     )
     return PriceEstimateRead(**estimate)
 

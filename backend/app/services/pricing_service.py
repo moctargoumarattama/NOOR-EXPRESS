@@ -1,5 +1,5 @@
 from datetime import datetime, time
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 from math import asin, cos, radians, sin, sqrt
 
 from sqlalchemy import select
@@ -17,6 +17,7 @@ from app.models.pricing_zone import (
 DEFAULT_PRICE_PER_KM = Decimal("300.00")
 DEFAULT_MINIMUM_PRICE = Decimal("1500.00")
 DEFAULT_COMMISSION_PERCENT = Decimal("15.00")
+FCFA_PRICE_STEP = Decimal("100.00")
 
 
 class PricingNotFoundError(Exception):
@@ -37,6 +38,22 @@ class TimePricingRuleNotFoundError(PricingNotFoundError):
 
 def money(value: Decimal | float | int | str) -> Decimal:
     return Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def round_price_step_down(
+    value: Decimal | float | int | str,
+    step: Decimal = FCFA_PRICE_STEP,
+) -> float:
+    rounded = _round_price_step(value, step=step, rounding=ROUND_FLOOR)
+    return float(money(rounded))
+
+
+def round_price_step_up(
+    value: Decimal | float | int | str,
+    step: Decimal = FCFA_PRICE_STEP,
+) -> float:
+    rounded = _round_price_step(value, step=step, rounding=ROUND_CEILING)
+    return float(money(rounded))
 
 
 def calculate_distance_km(
@@ -99,8 +116,12 @@ async def calculate_ride_price(
 ) -> dict:
     settings = await get_settings(session)
     zones = await get_all_zones(session)
-    pickup_zone = await _resolve_zone(session, zones, pickup_zone_id, pickup_latitude, pickup_longitude)
-    dropoff_zone = await _resolve_zone(session, zones, dropoff_zone_id, dropoff_latitude, dropoff_longitude)
+    pickup_zone = await _resolve_zone(
+        session, zones, pickup_zone_id, pickup_latitude, pickup_longitude
+    )
+    dropoff_zone = await _resolve_zone(
+        session, zones, dropoff_zone_id, dropoff_latitude, dropoff_longitude
+    )
     resolved_distance = _resolve_distance(
         distance_km,
         pickup_latitude,
@@ -113,7 +134,11 @@ async def calculate_ride_price(
     zone_rule = None
     base_price = None
     applied_mode = mode
-    if mode in (PricingMode.ZONE.value, PricingMode.MIXED.value) and pickup_zone and dropoff_zone:
+    if (
+        mode in (PricingMode.ZONE.value, PricingMode.MIXED.value)
+        and pickup_zone
+        and dropoff_zone
+    ):
         zone_rule = await _find_zone_fare(session, pickup_zone.id, dropoff_zone.id)
         if zone_rule:
             base_price = money(zone_rule.fixed_price)
@@ -123,16 +148,25 @@ async def calculate_ride_price(
         if mode == PricingMode.ZONE.value:
             base_price = money(settings.minimum_price)
         else:
-            base_price = money(Decimal(str(resolved_distance)) * Decimal(settings.price_per_km))
-            applied_mode = "distance" if mode == PricingMode.DISTANCE.value else "mixed_distance"
+            base_price = money(
+                Decimal(str(resolved_distance)) * Decimal(settings.price_per_km)
+            )
+            applied_mode = (
+                "distance" if mode == PricingMode.DISTANCE.value else "mixed_distance"
+            )
 
     time_rule = await _find_time_rule(session, request_datetime or datetime.now())
     final_price = _apply_time_rule(base_price, time_rule)
     minimum = money(settings.minimum_price)
-    if estimated_duration_minutes and estimated_duration_minutes > settings.long_ride_threshold_minutes:
+    if (
+        estimated_duration_minutes
+        and estimated_duration_minutes > settings.long_ride_threshold_minutes
+    ):
         minimum = max(minimum, money(settings.long_ride_minimum_price))
     final_price = max(money(final_price), minimum)
-    commission = money(final_price * Decimal(settings.platform_commission_percent) / Decimal("100"))
+    commission = money(
+        final_price * Decimal(settings.platform_commission_percent) / Decimal("100")
+    )
 
     return {
         "base_price": float(money(base_price)),
@@ -173,7 +207,9 @@ async def get_platform_commission_percent(session: AsyncSession) -> Decimal:
     return Decimal(settings.platform_commission_percent)
 
 
-async def _resolve_zone(session, zones, zone_id, latitude, longitude) -> PricingZone | None:
+async def _resolve_zone(
+    session, zones, zone_id, latitude, longitude
+) -> PricingZone | None:
     if zone_id is not None:
         zone = await session.get(PricingZone, zone_id)
         return zone if zone and zone.is_active else None
@@ -182,15 +218,21 @@ async def _resolve_zone(session, zones, zone_id, latitude, longitude) -> Pricing
     return _detect_zone(zones, latitude, longitude)
 
 
-def _resolve_distance(distance_km, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng) -> Decimal:
+def _resolve_distance(
+    distance_km, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng
+) -> Decimal:
     if distance_km is not None:
         return Decimal(str(distance_km))
     if None in (pickup_lat, pickup_lng, dropoff_lat, dropoff_lng):
         return Decimal("0")
-    return Decimal(str(calculate_distance_km(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng)))
+    return Decimal(
+        str(calculate_distance_km(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng))
+    )
 
 
-async def _find_zone_fare(session: AsyncSession, origin_id: int, destination_id: int) -> ZoneFare | None:
+async def _find_zone_fare(
+    session: AsyncSession, origin_id: int, destination_id: int
+) -> ZoneFare | None:
     result = await session.execute(
         select(ZoneFare).where(
             ZoneFare.origin_zone_id == origin_id,
@@ -201,13 +243,19 @@ async def _find_zone_fare(session: AsyncSession, origin_id: int, destination_id:
     return result.scalar_one_or_none()
 
 
-async def _find_time_rule(session: AsyncSession, at_datetime: datetime) -> TimePricingRule | None:
+async def _find_time_rule(
+    session: AsyncSession, at_datetime: datetime
+) -> TimePricingRule | None:
     result = await session.execute(
         select(TimePricingRule).where(TimePricingRule.is_active.is_(True))
     )
     rules = list(result.scalars().all())
     now_time = at_datetime.time()
-    matches = [rule for rule in rules if _time_in_range(now_time, rule.start_time, rule.end_time)]
+    matches = [
+        rule
+        for rule in rules
+        if _time_in_range(now_time, rule.start_time, rule.end_time)
+    ]
     return matches[0] if matches else None
 
 
@@ -225,14 +273,26 @@ def _apply_time_rule(price: Decimal, rule: TimePricingRule | None) -> Decimal:
     return price + Decimal(rule.surcharge_value)
 
 
-def _detect_zone(zones: list[PricingZone], latitude: float, longitude: float) -> PricingZone | None:
+def _detect_zone(
+    zones: list[PricingZone], latitude: float, longitude: float
+) -> PricingZone | None:
     matches: list[tuple[float, PricingZone]] = []
     for zone in zones:
-        distance_km = calculate_distance_km(latitude, longitude, zone.latitude, zone.longitude)
+        distance_km = calculate_distance_km(
+            latitude, longitude, zone.latitude, zone.longitude
+        )
         if distance_km <= zone.radius_km:
             matches.append((distance_km, zone))
     matches.sort(key=lambda item: item[0])
     return matches[0][1] if matches else None
+
+
+def detect_pricing_zone(
+    zones: list[PricingZone],
+    latitude: float,
+    longitude: float,
+) -> PricingZone | None:
+    return _detect_zone(zones, latitude, longitude)
 
 
 def _zone_fare_dict(fare: ZoneFare | None) -> dict | None:
@@ -259,3 +319,13 @@ def _time_rule_dict(rule: TimePricingRule | None) -> dict | None:
         "surcharge_type": rule.surcharge_type,
         "surcharge_value": float(rule.surcharge_value),
     }
+
+
+def _round_price_step(
+    value: Decimal | float | int | str,
+    *,
+    step: Decimal,
+    rounding: str,
+) -> Decimal:
+    amount = Decimal(str(value))
+    return (amount / step).to_integral_value(rounding=rounding) * step

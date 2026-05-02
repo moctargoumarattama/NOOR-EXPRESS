@@ -9,6 +9,7 @@ class DriverState {
     required this.isLoading,
     required this.isUpdatingAvailability,
     required this.isSavingProfile,
+    required this.isSavingRadius,
     this.errorMessage,
   });
 
@@ -17,12 +18,14 @@ class DriverState {
           isLoading: false,
           isUpdatingAvailability: false,
           isSavingProfile: false,
+          isSavingRadius: false,
         );
 
   final DriverProfile? profile;
   final bool isLoading;
   final bool isUpdatingAvailability;
   final bool isSavingProfile;
+  final bool isSavingRadius;
   final String? errorMessage;
 
   DriverState copyWith({
@@ -30,6 +33,7 @@ class DriverState {
     bool? isLoading,
     bool? isUpdatingAvailability,
     bool? isSavingProfile,
+    bool? isSavingRadius,
     String? errorMessage,
     bool clearErrorMessage = false,
   }) {
@@ -39,7 +43,9 @@ class DriverState {
       isUpdatingAvailability:
           isUpdatingAvailability ?? this.isUpdatingAvailability,
       isSavingProfile: isSavingProfile ?? this.isSavingProfile,
-      errorMessage: clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      isSavingRadius: isSavingRadius ?? this.isSavingRadius,
+      errorMessage:
+          clearErrorMessage ? null : errorMessage ?? this.errorMessage,
     );
   }
 }
@@ -73,13 +79,18 @@ class DriverController extends StateNotifier<DriverState> {
   }
 
   Future<String?> updateAvailability(bool isAvailable) async {
+    final targetStatus = isAvailable ? 'online' : 'offline';
+    return updateStatus(targetStatus);
+  }
+
+  Future<String?> updateStatus(String status) async {
     state = state.copyWith(
       isUpdatingAvailability: true,
       clearErrorMessage: true,
     );
 
     try {
-      final profile = await _repository.updateAvailability(isAvailable);
+      final profile = await _repository.updateStatus(status);
       state = state.copyWith(
         profile: profile,
         isUpdatingAvailability: false,
@@ -117,8 +128,32 @@ class DriverController extends StateNotifier<DriverState> {
       return error.message;
     }
   }
+
+  Future<String?> updateMaxRadiusKm(int maxRadiusKm) async {
+    state = state.copyWith(
+      isSavingRadius: true,
+      clearErrorMessage: true,
+    );
+
+    try {
+      final profile = await _repository.updateMaxRadiusKm(maxRadiusKm);
+      state = state.copyWith(
+        profile: profile,
+        isSavingRadius: false,
+        clearErrorMessage: true,
+      );
+      return null;
+    } on DriverFailure catch (error) {
+      state = state.copyWith(
+        isSavingRadius: false,
+        errorMessage: error.message,
+      );
+      return error.message;
+    }
+  }
 }
 
-final driverProvider = StateNotifierProvider<DriverController, DriverState>((ref) {
+final driverProvider =
+    StateNotifierProvider<DriverController, DriverState>((ref) {
   return DriverController(repository: ref.watch(driverRepositoryProvider));
 });

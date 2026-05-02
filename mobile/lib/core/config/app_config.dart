@@ -49,3 +49,8 @@ abstract final class AppConfig {
     return value.replaceAll(RegExp(r'/$'), '');
   }
 }
+
+abstract final class AppConstants {
+  static const supportPhone = '+22790000000';
+  static const supportHours = 'Tous les jours 06:00-23:00';
+}

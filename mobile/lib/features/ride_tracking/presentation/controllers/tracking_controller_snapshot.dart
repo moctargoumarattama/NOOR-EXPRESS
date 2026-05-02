@@ -8,61 +8,19 @@ Future<void> _refreshSnapshot(
     return;
   }
   try {
-    final activeRideJson = await controller._remoteDatasource.fetchActiveRide();
-    if (!controller._isActive) {
-      return;
-    }
-    final activeRide = activeRideJson == null
-        ? null
-        : RideTrackingModel.fromJson(activeRideJson);
-
-    List<RideTrackingModel> rides = const [];
-    if (activeRide == null && !requireActiveRide) {
-      final ridesJson = controller.mode == TrackingMode.client
-          ? await controller._remoteDatasource.fetchClientRides()
-          : await controller._remoteDatasource.fetchDriverRides();
-      if (!controller._isActive) {
-        return;
-      }
-      rides = ridesJson.map(RideTrackingModel.fromJson).toList();
-    }
-
-    final ride = selectTrackingRide(
-      controller.mode,
-      rides,
-      preferredRideId: controller.preferredRideId,
-      activeRide: activeRide,
+    final ride = await _loadTrackingRide(
+      controller,
+      requireActiveRide: requireActiveRide,
     );
-
-    if (ride == null) {
-      final currentState = controller._currentStateOrNull;
-      if (currentState == null) {
-        return;
-      }
-      controller._setStateIfAlive(currentState.copyWith(
-        clearRide: true,
-        clearCounterpart: true,
-        clearDriverPosition: true,
-        clearDistanceRemaining: true,
-        clearEta: true,
-        clearRoute: true,
-      ));
-      return;
-    }
-
-    final counterpart = await _resolveCounterpart(controller, ride);
     if (!controller._isActive) {
       return;
     }
-    final currentState = controller._currentStateOrNull;
-    if (currentState == null) {
+    if (ride == null) {
+      await _clearTrackingRide(controller);
       return;
     }
-    controller._setStateIfAlive(currentState.copyWith(
-      ride: ride,
-      counterpart: counterpart,
-    ));
-    _recomputeDerivedState(controller);
+
+    await _applyTrackingRide(controller, ride);
   } on TrackingRemoteFailure catch (error) {
     final currentState = controller._currentStateOrNull;
     if (currentState == null) {
@@ -72,6 +30,86 @@ Future<void> _refreshSnapshot(
       currentState.copyWith(errorMessage: error.message),
     );
   }
+}
+
+Future<RideTrackingModel?> _loadTrackingRide(
+  TrackingController controller, {
+  required bool requireActiveRide,
+}) async {
+  final activeRideJson = await controller._remoteDatasource.fetchActiveRide();
+  if (!controller._isActive) {
+    return null;
+  }
+  final activeRide = activeRideJson == null
+      ? null
+      : RideTrackingModel.fromJson(activeRideJson);
+  final rides = await _loadCandidateRides(
+    controller,
+    hasActiveRide: activeRide != null,
+    requireActiveRide: requireActiveRide,
+  );
+  if (!controller._isActive) {
+    return null;
+  }
+  return selectTrackingRide(
+    controller.mode,
+    rides,
+    preferredRideId: controller.preferredRideId,
+    activeRide: activeRide,
+  );
+}
+
+Future<List<RideTrackingModel>> _loadCandidateRides(
+  TrackingController controller, {
+  required bool hasActiveRide,
+  required bool requireActiveRide,
+}) async {
+  if (hasActiveRide || requireActiveRide) {
+    return const [];
+  }
+  final ridesJson = controller.mode == TrackingMode.client
+      ? await controller._remoteDatasource.fetchClientRides()
+      : await controller._remoteDatasource.fetchDriverRides();
+  return ridesJson.map(RideTrackingModel.fromJson).toList();
+}
+
+Future<void> _clearTrackingRide(TrackingController controller) async {
+  final currentState = controller._currentStateOrNull;
+  if (currentState == null) {
+    return;
+  }
+  controller._setStateIfAlive(currentState.copyWith(
+    clearRide: true,
+    clearCounterpart: true,
+    clearDriverPosition: true,
+    clearDistanceRemaining: true,
+    clearEta: true,
+    clearRoute: true,
+    unreadChatCount: 0,
+    isChatOpen: false,
+  ));
+  await _syncDriverForegroundLocation(controller);
+}
+
+Future<void> _applyTrackingRide(
+  TrackingController controller,
+  RideTrackingModel ride,
+) async {
+  final counterpart = await _resolveCounterpart(controller, ride);
+  if (!controller._isActive) {
+    return;
+  }
+  final currentState = controller._currentStateOrNull;
+  if (currentState == null) {
+    return;
+  }
+  controller._setStateIfAlive(currentState.copyWith(
+    ride: ride,
+    counterpart: counterpart,
+  ));
+  _recomputeDerivedState(controller);
+  await _refreshChatUnreadCount(controller);
+  await _syncDriverForegroundLocation(controller);
 }
 
 Future<TrackingCounterpartModel?> _resolveCounterpart(

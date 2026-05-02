@@ -27,6 +27,8 @@ class TrackingState {
     this.distanceRemainingKm,
     this.isEtaReliable = false,
     this.routePoints = const [],
+    this.unreadChatCount = 0,
+    this.isChatOpen = false,
     this.errorMessage,
     this.toastMessage,
   });
@@ -52,6 +54,8 @@ class TrackingState {
   final double? distanceRemainingKm;
   final bool isEtaReliable;
   final List<TrackingCoordinates> routePoints;
+  final int unreadChatCount;
+  final bool isChatOpen;
   final String? errorMessage;
   final String? toastMessage;
 
@@ -70,6 +74,8 @@ class TrackingState {
     double? distanceRemainingKm,
     bool? isEtaReliable,
     List<TrackingCoordinates>? routePoints,
+    int? unreadChatCount,
+    bool? isChatOpen,
     String? errorMessage,
     String? toastMessage,
     bool clearRide = false,
@@ -103,6 +109,8 @@ class TrackingState {
           : distanceRemainingKm ?? this.distanceRemainingKm,
       isEtaReliable: isEtaReliable ?? this.isEtaReliable,
       routePoints: clearRoute ? const [] : routePoints ?? this.routePoints,
+      unreadChatCount: unreadChatCount ?? this.unreadChatCount,
+      isChatOpen: isChatOpen ?? this.isChatOpen,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       toastMessage: clearToast ? null : toastMessage ?? this.toastMessage,
     );

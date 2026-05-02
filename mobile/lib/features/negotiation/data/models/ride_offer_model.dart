@@ -72,10 +72,13 @@ class RideOfferModel {
     required this.status,
     this.driverDistanceKm,
     this.driverEtaMinutes,
+    this.driverCompletedRides = 0,
+    this.isDriverVerified = false,
     this.vehicleBrand,
     this.vehicleModel,
     this.vehicleColor,
     this.plateNumber,
+    this.vehiclePhoto,
   });
 
   final int offerId;
@@ -86,10 +89,13 @@ class RideOfferModel {
   final String status;
   final double? driverDistanceKm;
   final int? driverEtaMinutes;
+  final int driverCompletedRides;
+  final bool isDriverVerified;
   final String? vehicleBrand;
   final String? vehicleModel;
   final String? vehicleColor;
   final String? plateNumber;
+  final String? vehiclePhoto;
 
   String get vehicleLabel {
     final parts = [
@@ -115,10 +121,13 @@ class RideOfferModel {
             json['eta_minutes'] ??
             json['eta_min'],
       ),
+      driverCompletedRides: _asNullableInt(json['driver_completed_rides']) ?? 0,
+      isDriverVerified: json['driver_verified'] == true,
       vehicleBrand: json['vehicle_brand'] as String?,
       vehicleModel: json['vehicle_model'] as String?,
       vehicleColor: json['vehicle_color'] as String?,
       plateNumber: json['plate_number'] as String?,
+      vehiclePhoto: json['vehicle_photo'] as String?,
     );
   }
 
@@ -137,6 +146,13 @@ class RideOfferModel {
             json['eta_minutes'] ??
             json['eta_min'],
       ),
+      driverCompletedRides: _asNullableInt(json['driver_completed_rides']) ?? 0,
+      isDriverVerified: json['driver_verified'] == true,
+      vehicleBrand: json['vehicle_brand'] as String?,
+      vehicleModel: json['vehicle_model'] as String?,
+      vehicleColor: json['vehicle_color'] as String?,
+      plateNumber: json['plate_number'] as String?,
+      vehiclePhoto: json['vehicle_photo'] as String?,
     );
   }
 }

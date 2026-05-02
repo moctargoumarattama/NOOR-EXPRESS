@@ -168,18 +168,20 @@ class NegotiationDatasource {
   Future<void> cancelRide(
     int rideId, {
     String? reason,
+    String? reasonCode,
   }) =>
-      _postMap(
+      _patchMap(
         '/ride-requests/$rideId/cancel',
         data: {
           'reason': _cleanReason(reason),
+          'reason_code': reasonCode,
         },
       );
 
-  String _cleanReason(String? reason) {
+  String? _cleanReason(String? reason) {
     final value = reason?.trim();
     if (value == null || value.isEmpty) {
-      return 'Annulee par le client';
+      return null;
     }
     return value;
   }
@@ -273,6 +275,25 @@ class NegotiationDatasource {
     try {
       final response =
           await _apiClient.dio.post<Map<String, dynamic>>(path, data: data);
+      return response.data ?? <String, dynamic>{};
+    } on DioException catch (error) {
+      throw NegotiationFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage:
+              'Operation de negociation impossible pour le moment.',
+        ),
+      );
+    }
+  }
+
+  Future<Map<String, dynamic>> _patchMap(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
+    try {
+      final response =
+          await _apiClient.dio.patch<Map<String, dynamic>>(path, data: data);
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
       throw NegotiationFailure(

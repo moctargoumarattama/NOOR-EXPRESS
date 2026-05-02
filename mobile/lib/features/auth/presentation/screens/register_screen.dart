@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../app/app_routes.dart';
+import '../../../../core/services/support_contact_service.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../shared/widgets/app_snackbar.dart';
 import '../controllers/auth_controller.dart';
 import '../widgets/phone_input.dart';
 import '../widgets/register_screen_widgets.dart';
@@ -49,6 +51,30 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
     context.go(AppRoutes.otp);
+  }
+
+  Future<void> _openTerms() async {
+    await _openLegalLink(
+      open: () => ref.read(supportContactServiceProvider).openTermsPage(),
+    );
+  }
+
+  Future<void> _openPrivacy() async {
+    await _openLegalLink(
+      open: () => ref.read(supportContactServiceProvider).openPrivacyPage(),
+    );
+  }
+
+  Future<void> _openLegalLink({required Future<bool> Function() open}) async {
+    final opened = await open();
+    if (!mounted || opened) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir le lien legal pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
   }
 
   @override
@@ -180,6 +206,24 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                             label: 'Continuer',
                             isLoading: state.isLoading,
                             onPressed: state.isLoading ? null : _submit,
+                          ),
+                          const SizedBox(height: 10),
+                          Wrap(
+                            alignment: WrapAlignment.center,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            spacing: 8,
+                            children: [
+                              TextButton(
+                                onPressed: _openTerms,
+                                child: const Text('CGU'),
+                              ),
+                              const Text('•'),
+                              TextButton(
+                                onPressed: _openPrivacy,
+                                child:
+                                    const Text('Politique de confidentialite'),
+                              ),
+                            ],
                           ),
                         ],
                       ),

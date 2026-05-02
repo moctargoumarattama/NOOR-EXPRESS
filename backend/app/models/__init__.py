@@ -1,7 +1,15 @@
-from app.models.user import DriverStatus, User, UserRole
+from app.models.user import DriverStatus, SavedAddress, User, UserRole, UserSuspension
 from app.models.otp import OtpCode
 from app.models.admin import Admin
-from app.models.driver_profile import DriverProfile, DriverVerificationStatus
+from app.models.broadcast_history import BroadcastHistory
+from app.models.driver_profile import (
+    DriverDocumentStatus,
+    DriverDocumentType,
+    DriverProfile,
+    DriverVerificationStatus,
+)
+from app.models.driver_wallet import DriverWallet
+from app.models.ride_message import RideMessage
 from app.models.pricing_zone import (
     PricingMode,
     PricingSettings,
@@ -10,7 +18,11 @@ from app.models.pricing_zone import (
     TimeSurchargeType,
     ZoneFare,
 )
-from app.models.ride_request import RideRequest, RideRequestStatus
+from app.models.ride_request import (
+    RideCancelledByRole,
+    RideRequest,
+    RideRequestStatus,
+)
 from app.models.ride_request_rejection import RideRequestRejection
 from app.models.ride_report import RideReport, RideReportReason, RideReportStatus
 
@@ -18,10 +30,17 @@ __all__ = [
     "User",
     "UserRole",
     "DriverStatus",
+    "SavedAddress",
+    "UserSuspension",
     "OtpCode",
     "Admin",
+    "BroadcastHistory",
     "DriverProfile",
+    "DriverDocumentStatus",
+    "DriverDocumentType",
     "DriverVerificationStatus",
+    "DriverWallet",
+    "RideMessage",
     "PricingZone",
     "PricingSettings",
     "PricingMode",
@@ -30,6 +49,7 @@ __all__ = [
     "TimeSurchargeType",
     "RideRequest",
     "RideRequestStatus",
+    "RideCancelledByRole",
     "RideRequestRejection",
     "RideReport",
     "RideReportReason",

@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
+import '../../../../../core/models/app_role.dart';
+import '../../../../../core/services/support_contact_service.dart';
 import '../../../../../core/state/session_controller.dart';
 import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
@@ -41,6 +43,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   ProviderSubscription<DriverRealtimeState>? _realtimeSubscription;
   ProviderSubscription<NegotiationState>? _negotiationSubscription;
   Timer? _notificationTimer;
+  Timer? _pauseCountdownTimer;
   late Future<DriverOnboardingProfileModel?> _verificationFuture;
 
   bool _isMenuOpen = false;
@@ -57,12 +60,14 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     _verificationFuture =
         ref.read(driverProfileDatasourceProvider).fetchProfile();
     _listenRealtime();
+    _startPauseCountdownTicker();
     Future.microtask(_startScreen);
   }
 
   @override
   void dispose() {
     _notificationTimer?.cancel();
+    _pauseCountdownTimer?.cancel();
     _realtimeSubscription?.close();
     _releaseInlineNegotiation();
     super.dispose();
@@ -76,7 +81,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     final mapState = ref.watch(mapControllerProvider(MapMode.driver));
     final profile = driverState.profile;
     final activeRide = rideState.activeRide;
-    final isOnline = profile?.isAvailable ?? false;
+    final driverStatus = _normalizedDriverStatus(profile?.driverStatus);
+    final isOnline = driverStatus == 'online';
+    final pauseRemainingMinutes =
+        _pauseRemainingMinutes(profile?.pauseStartedAt);
+    final topNoticeOffset = MediaQuery.paddingOf(context).top + 154;
     final pendingRideBase = isOnline && activeRide == null
         ? driverPendingRide(rideState.availableRides, _pendingRideId) ??
             _pendingRideFromPayload()
@@ -97,11 +106,6 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             (rideState.isSubmittingAction &&
                 rideState.activeRideId == pendingRide.id))
         : driverState.isUpdatingAvailability;
-    final status = activeRide != null
-        ? 'busy'
-        : isOnline
-            ? 'online'
-            : 'offline';
 
     return Scaffold(
       backgroundColor: const Color(0xFF101820),
@@ -116,9 +120,31 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-              child: DriverStatusBar(
-                status: status,
-                onMenuTap: () => setState(() => _isMenuOpen = true),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DriverStatusBar(
+                    status: driverStatus,
+                    onMenuTap: () => setState(() => _isMenuOpen = true),
+                  ),
+                  const SizedBox(height: 10),
+                  _DriverStatusToggle(
+                    status: driverStatus,
+                    isBusy: driverState.isUpdatingAvailability,
+                    onSelectStatus: _setDriverStatus,
+                  ),
+                  if (driverStatus == 'paused' && pauseRemainingMinutes != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8, left: 6),
+                      child: Text(
+                        'Pause auto dans $pauseRemainingMinutes min',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
           ),
@@ -131,7 +157,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
           ),
           if (_notificationMessage != null)
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 84,
+              top: topNoticeOffset,
               left: 16,
               right: 16,
               child: NotificationCard(
@@ -143,7 +169,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             ),
           if (_notificationMessage == null && mapState.errorMessage != null)
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 84,
+              top: topNoticeOffset,
               left: 16,
               right: 16,
               child: NotificationCard(
@@ -158,7 +184,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             ),
           if (_notificationMessage == null && mapState.errorMessage == null)
             Positioned(
-              top: MediaQuery.paddingOf(context).top + 84,
+              top: topNoticeOffset,
               left: 16,
               right: 16,
               child: FutureBuilder<DriverOnboardingProfileModel?>(
@@ -181,7 +207,7 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
               ),
             ),
           DriverBottomSheet(
-            isOnline: isOnline,
+            driverStatus: driverStatus,
             isBusy: sheetBusy,
             todayRides: driverTodayRides(rideState.rides),
             todayEarnings: driverTodayEarnings(rideState.rides),
@@ -190,8 +216,8 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             flowStage: sheetStage,
             submittedOfferPrice:
                 negotiationState?.submittedPrice ?? _submittedOfferPrice,
-            onStart: () => _toggleAvailability(true),
-            onStop: () => _toggleAvailability(false),
+            onStart: () => _setDriverStatus('online'),
+            onStop: () => _setDriverStatus('paused'),
             onOpenTracking: () => _openTracking(activeRide),
             onProposePrice: pendingRide == null
                 ? null
@@ -211,11 +237,13 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
             onToggleAvailability: _toggleAvailability,
             onProfileTap: _openDriverProfile,
             onStatsTap: _openStats,
+            onEarningsTap: _openEarnings,
             onHistoryTap: _openDriverHistory,
             onVehicleTap: _openVehicleEditor,
             onNotificationsTap: _openNotifications,
             onSettingsTap: _openSettings,
             onHelpTap: _openHelp,
+            onSupportTap: _openSupportChat,
             onReportTap: _openGeneralReport,
             onPassengerModeTap: _openPassengerMode,
             onLogout: _logout,
@@ -265,22 +293,63 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
   }
 
-  Future<void> _toggleAvailability(bool value) async {
-    final error =
-        await ref.read(driverProvider.notifier).updateAvailability(value);
+  void _startPauseCountdownTicker() {
+    _pauseCountdownTimer?.cancel();
+    _pauseCountdownTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
+  }
+
+  String _normalizedDriverStatus(String? rawStatus) {
+    switch (rawStatus) {
+      case 'online':
+      case 'paused':
+      case 'offline':
+        return rawStatus!;
+      default:
+        return 'offline';
+    }
+  }
+
+  int? _pauseRemainingMinutes(DateTime? pauseStartedAt) {
+    if (pauseStartedAt == null) {
+      return null;
+    }
+    final elapsed = DateTime.now().difference(pauseStartedAt);
+    final remaining = const Duration(minutes: 30) - elapsed;
+    if (remaining.isNegative) {
+      return 0;
+    }
+    final minutes = (remaining.inSeconds / 60).ceil();
+    return minutes < 1 ? 1 : minutes;
+  }
+
+  Future<void> _setDriverStatus(String status) async {
+    final error = await ref.read(driverProvider.notifier).updateStatus(status);
     if (!mounted) {
       return;
     }
+
+    final fallbackMessage = switch (status) {
+      'online' => 'Vous etes en ligne.',
+      'paused' => 'Vous etes en pause.',
+      _ => 'Vous etes hors ligne.',
+    };
     AppSnackbar.show(
       context,
-      message: _humanizeMessage(
-        error,
-        fallback: value
-            ? 'Vous recevez maintenant les demandes.'
-            : 'Vous ne recevez plus de demande pour le moment.',
-      ),
+      message: _humanizeMessage(error, fallback: fallbackMessage),
       tone: error == null ? AppSnackbarTone.success : AppSnackbarTone.error,
     );
+  }
+
+  Future<void> _toggleAvailability(bool value) async {
+    final targetStatus = value ? 'online' : 'paused';
+    await _setDriverStatus(targetStatus);
   }
 
   Future<void> _skipRide(int rideId) async {
@@ -568,6 +637,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     context.push(AppRoutes.driverStats);
   }
 
+  void _openEarnings() {
+    _closeMenu();
+    context.push(AppRoutes.driverEarnings);
+  }
+
   void _openDriverProfile() {
     _closeMenu();
     context.push(AppRoutes.driverProfile);
@@ -583,6 +657,11 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     context.push(AppRoutes.help);
   }
 
+  void _openSupportChat() {
+    _closeMenu();
+    unawaited(_launchSupportChat());
+  }
+
   void _openSettings() {
     _closeMenu();
     context.push(AppRoutes.settings);
@@ -591,6 +670,20 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
   void _openNotifications() {
     _closeMenu();
     context.push(AppRoutes.notifications);
+  }
+
+  Future<void> _launchSupportChat() async {
+    final result = await ref
+        .read(supportContactServiceProvider)
+        .openSupportChat(AppRole.driver);
+    if (!mounted || result.type != SupportContactResultType.failed) {
+      return;
+    }
+    AppSnackbar.show(
+      context,
+      message: 'Impossible d ouvrir WhatsApp pour le moment.',
+      tone: AppSnackbarTone.error,
+    );
   }
 
   Future<void> _openGeneralReport() async {
@@ -680,5 +773,103 @@ class _DriverHomeScreenState extends ConsumerState<DriverHomeScreen> {
     }
 
     return trimmed;
+  }
+}
+
+class _DriverStatusToggle extends StatelessWidget {
+  const _DriverStatusToggle({
+    required this.status,
+    required this.isBusy,
+    required this.onSelectStatus,
+  });
+
+  final String status;
+  final bool isBusy;
+  final ValueChanged<String> onSelectStatus;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(4),
+        child: Row(
+          children: [
+            Expanded(
+              child: _StatusPillButton(
+                label: 'Hors ligne',
+                color: const Color(0xFF8A8D93),
+                isSelected: status == 'offline',
+                isBusy: isBusy,
+                onTap: () => onSelectStatus('offline'),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _StatusPillButton(
+                label: 'En ligne',
+                color: const Color(0xFF1B8A5A),
+                isSelected: status == 'online',
+                isBusy: isBusy,
+                onTap: () => onSelectStatus('online'),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: _StatusPillButton(
+                label: 'Pause',
+                color: const Color(0xFFF29A2E),
+                isSelected: status == 'paused',
+                isBusy: isBusy,
+                onTap: () => onSelectStatus('paused'),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusPillButton extends StatelessWidget {
+  const _StatusPillButton({
+    required this.label,
+    required this.color,
+    required this.isSelected,
+    required this.isBusy,
+    required this.onTap,
+  });
+
+  final String label;
+  final Color color;
+  final bool isSelected;
+  final bool isBusy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: isBusy ? null : onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 140),
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? color : Colors.white.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
   }
 }

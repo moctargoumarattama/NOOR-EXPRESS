@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -411,6 +411,16 @@ async def _create_fake_driver(
             first_name=name.split(" ", 1)[0],
             last_name=name.split(" ", 1)[1] if " " in name else "Test",
             address="Rabat Agdal",
+            id_card_photo="simulation-id-card",
+            selfie_photo="simulation-selfie",
+            driver_license_file="simulation-license",
+            driver_license_expires_at=_simulation_document_expiry(),
+            vehicle_registration_file="simulation-registration",
+            vehicle_registration_expires_at=_simulation_document_expiry(),
+            vehicle_insurance_file="simulation-insurance",
+            vehicle_insurance_expires_at=_simulation_document_expiry(),
+            technical_inspection_file="simulation-technical-inspection",
+            technical_inspection_expires_at=_simulation_document_expiry(),
         ),
     )
     await verify_driver(session, driver.id)
@@ -748,6 +758,10 @@ def _route_from_ride_or_default(
 def _fake_phone(*, index: int) -> str:
     seed = int(time.time() * 1000) % 1_000_000
     return f"{SIMULATION_USER_PHONE_PREFIX}{seed:06d}{index:02d}"
+
+
+def _simulation_document_expiry() -> date:
+    return datetime.utcnow().date() + timedelta(days=365)
 
 
 def _is_simulation_user(user: User) -> bool:

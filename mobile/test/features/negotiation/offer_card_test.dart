@@ -18,10 +18,13 @@ void main() {
           status: 'pending',
           driverDistanceKm: 1.7,
           driverEtaMinutes: 6,
+          driverCompletedRides: 128,
+          isDriverVerified: true,
           vehicleBrand: 'Toyota',
           vehicleModel: 'Corolla',
           vehicleColor: 'blanche',
           plateNumber: 'NE-2456',
+          vehiclePhoto: _transparentPixel,
         ),
       ),
     );
@@ -32,8 +35,10 @@ void main() {
     expect(find.text('2800 FCFA'), findsOneWidget);
     expect(find.text('1.7 km'), findsOneWidget);
     expect(find.text('6 min'), findsOneWidget);
+    expect(find.text('128 courses'), findsOneWidget);
+    expect(find.text('Verifie'), findsOneWidget);
     expect(find.text('NE-2456'), findsOneWidget);
-    expect(find.text('En attente'), findsOneWidget);
+    expect(find.text('On cherche'), findsOneWidget);
     expect(find.text('Refuser'), findsOneWidget);
     expect(find.text('Accepter'), findsOneWidget);
   });
@@ -157,3 +162,6 @@ RideOfferModel _offer({
 }
 
 void _noop() {}
+
+const _transparentPixel =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lT7uigAAAABJRU5ErkJggg==';

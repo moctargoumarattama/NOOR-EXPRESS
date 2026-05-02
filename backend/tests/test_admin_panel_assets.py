@@ -147,6 +147,29 @@ class AdminPanelAssetsTest(unittest.TestCase):
         self.assertIn("/admin/drivers/${userId}/profile", api_js)
         self.assertIn("/admin/users/${userId}/block", api_js)
 
+    def test_payments_page_exposes_driver_ledger_filter(self) -> None:
+        payments_html = (ADMIN_PANEL_DIR / "payments.html").read_text(encoding="utf-8")
+        api_js = (ADMIN_PANEL_DIR / "assets" / "api.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="payments-driver-filter"', payments_html)
+        self.assertIn("ensurePaymentsDriverFilterLoaded", api_js)
+        self.assertIn("selectedPaymentDriverId", api_js)
+        self.assertIn("driver_id", api_js)
+
+    def test_notifications_page_exposes_broadcast_form_and_history(self) -> None:
+        notifications_html = (ADMIN_PANEL_DIR / "notifications.html").read_text(
+            encoding="utf-8"
+        )
+        api_js = (ADMIN_PANEL_DIR / "assets" / "api.js").read_text(encoding="utf-8")
+
+        self.assertIn('id="notification-target"', notifications_html)
+        self.assertIn('id="notification-estimated-recipients"', notifications_html)
+        self.assertIn('id="notifications-history-body"', notifications_html)
+        self.assertIn("AdminApi.loadNotificationsPage()", notifications_html)
+        self.assertIn("/admin/notifications/broadcast", api_js)
+        self.assertIn("/admin/notifications/history", api_js)
+        self.assertIn("/admin/notifications/estimate", api_js)
+
 
 if __name__ == "__main__":
     unittest.main()

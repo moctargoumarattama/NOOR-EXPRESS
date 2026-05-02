@@ -9,6 +9,7 @@ import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_inline_feedback.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
+import '../../../ride_tracking/presentation/widgets/report_bottom_sheet.dart';
 import '../../data/models/ride_offer_model.dart';
 import '../../domain/entities/negotiation_state.dart';
 import '../controllers/negotiation_controller.dart';
@@ -311,7 +312,8 @@ class _ClientNegotiationScreenState
     if (value.contains('expire')) {
       return RideUiCopy.offerExpired;
     }
-    if (value.contains('annul')) {
+    if (value.contains('course annulee') ||
+        value.contains('trajet a ete annule')) {
       return RideUiCopy.rideCancelled;
     }
     if (value.contains('indisponible') && value.contains('chauffeur')) {
@@ -349,54 +351,26 @@ class _ClientNegotiationScreenState
       return;
     }
 
-    final reason = await _askCancellationReason();
+    final cancellationDraft = await showRideCancellationBottomSheet(
+      context,
+      title: 'Pourquoi annuler la demande ?',
+      confirmLabel: 'Confirmer l annulation',
+      options: passengerCancellationReasonOptions,
+      reasonRequired: false,
+    );
     if (!mounted) {
+      return;
+    }
+    if (cancellationDraft == null) {
       return;
     }
 
     await ref
         .read(negotiationControllerProvider(_scope).notifier)
-        .cancelRide(reason: reason);
-  }
-
-  Future<String?> _askCancellationReason() async {
-    final controller = TextEditingController();
-    final reason = await showDialog<String?>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Pourquoi annuler ?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Ce message est facultatif. Il nous aide simplement a mieux vous servir.',
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              minLines: 2,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Par exemple : trop long, erreur sur l adresse...',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(null),
-            child: const Text('Laisser vide'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Envoyer'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    return reason;
+        .cancelRide(
+          reason: cancellationDraft.reason,
+          reasonCode: cancellationDraft.reasonCode,
+        );
   }
 }
 

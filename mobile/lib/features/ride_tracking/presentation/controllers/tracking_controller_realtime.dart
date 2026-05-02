@@ -1,5 +1,8 @@
 part of 'tracking_controller.dart';
 
+const _foregroundLocationPermissionMessage =
+    'Autorisez la localisation en arriere-plan pour suivre la course.';
+
 Future<void> _bindRealtime(TrackingController controller) async {
   if (!controller._isActive) {
     return;
@@ -65,54 +68,89 @@ void _handleSocketEvent(
   }
   switch (event.type) {
     case TrackingSocketEventType.rideStatus:
-      final currentState = controller._currentStateOrNull;
-      final ride = currentState?.ride;
-      if (ride != null && ride.id == event.rideId) {
-        controller._setStateIfAlive(currentState!.copyWith(
-          ride: ride.copyWith(
-            status: RideTrackingModel.fromRawStatus(event.status),
-          ),
-          toastMessage: trackingStatusToast(event.status),
-        ));
-        _recomputeDerivedState(controller);
-      }
-      unawaited(_refreshSnapshot(controller));
+      _handleRideStatusEvent(controller, event);
       return;
     case TrackingSocketEventType.driverLocation:
-      final currentState = controller._currentStateOrNull;
-      if (currentState == null) {
-        return;
-      }
-      final ride = currentState.ride;
-      final position = event.position;
-      if (controller.mode != TrackingMode.client ||
-          position == null ||
-          ride == null ||
-          (ride.driverId != null &&
-              event.driverId != null &&
-              ride.driverId != event.driverId)) {
-        return;
-      }
-
-      final now = DateTime.now();
-      if (!isPlausibleTrackingUpdate(
-        previous: currentState.driverPosition,
-        next: position,
-        elapsed: controller._lastDriverPositionAt == null
-            ? null
-            : now.difference(controller._lastDriverPositionAt!),
-      )) {
-        return;
-      }
-      controller._lastDriverPositionAt = now;
-      controller._setStateIfAlive(currentState.copyWith(
-        driverHeadingDegrees:
-            _headingBetween(currentState.driverPosition, position),
-        driverPosition: position,
-      ));
-      _recomputeDerivedState(controller);
+      _handleDriverLocationEvent(controller, event);
+      return;
+    case TrackingSocketEventType.rideMessage:
+      _handleRideMessageEvent(controller, event);
       return;
   }
+}
+
+void _handleRideStatusEvent(
+  TrackingController controller,
+  TrackingSocketEvent event,
+) {
+  final currentState = controller._currentStateOrNull;
+  final ride = currentState?.ride;
+  if (ride != null && ride.id == event.rideId) {
+    controller._setStateIfAlive(currentState!.copyWith(
+      ride: ride.copyWith(
+        status: RideTrackingModel.fromRawStatus(event.status),
+      ),
+      toastMessage: trackingStatusToast(event.status),
+    ));
+    _recomputeDerivedState(controller);
+    unawaited(_syncDriverForegroundLocation(controller));
+  }
+  unawaited(_refreshSnapshot(controller));
+}
+
+void _handleDriverLocationEvent(
+  TrackingController controller,
+  TrackingSocketEvent event,
+) {
+  final currentState = controller._currentStateOrNull;
+  final position = event.position;
+  if (currentState == null ||
+      position == null ||
+      !_isRelevantDriverLocation(controller, currentState, event)) {
+    return;
+  }
+  final now = DateTime.now();
+  if (!_isPlausibleDriverLocation(controller, currentState, position, now)) {
+    return;
+  }
+  controller._lastDriverPositionAt = now;
+  controller._setStateIfAlive(currentState.copyWith(
+    driverHeadingDegrees: _headingBetween(
+      currentState.driverPosition,
+      position,
+    ),
+    driverPosition: position,
+  ));
+  _recomputeDerivedState(controller);
+}
+
+bool _isRelevantDriverLocation(
+  TrackingController controller,
+  TrackingState currentState,
+  TrackingSocketEvent event,
+) {
+  final ride = currentState.ride;
+  if (controller.mode != TrackingMode.client || ride == null) {
+    return false;
+  }
+  return ride.driverId == null ||
+      event.driverId == null ||
+      ride.driverId == event.driverId;
+}
+
+bool _isPlausibleDriverLocation(
+  TrackingController controller,
+  TrackingState currentState,
+  TrackingCoordinates position,
+  DateTime now,
+) {
+  return isPlausibleTrackingUpdate(
+    previous: currentState.driverPosition,
+    next: position,
+    elapsed: controller._lastDriverPositionAt == null
+        ? null
+        : now.difference(controller._lastDriverPositionAt!),
+  );
 }
 
 void _startLocationTracking(TrackingController controller) {
@@ -188,4 +226,60 @@ void _applyCurrentPosition(
   }
 
   _recomputeDerivedState(controller);
+}
+
+Future<void> _syncDriverForegroundLocation(
+  TrackingController controller,
+) async {
+  if (controller.mode != TrackingMode.driver) {
+    return;
+  }
+  if (!_shouldRunDriverForegroundLocation(controller)) {
+    await controller._foregroundLocationService.stopDriverTracking();
+    return;
+  }
+  final result =
+      await controller._foregroundLocationService.startDriverTracking();
+  if (result == ForegroundLocationStartResult.started ||
+      result == ForegroundLocationStartResult.unsupported ||
+      !controller._isActive) {
+    return;
+  }
+  final currentState = controller._currentStateOrNull;
+  if (currentState == null) {
+    return;
+  }
+  controller._setStateIfAlive(
+    currentState.copyWith(errorMessage: _foregroundLocationPermissionMessage),
+  );
+}
+
+Future<void> _recoverDriverForegroundLocation(
+  TrackingController controller,
+) async {
+  if (controller.mode != TrackingMode.driver ||
+      !_shouldRunDriverForegroundLocation(controller)) {
+    return;
+  }
+  await controller._foregroundLocationService.recoverDriverTrackingIfNeeded();
+}
+
+Future<void> _stopDriverForegroundLocation(
+  TrackingController controller,
+) async {
+  if (controller.mode != TrackingMode.driver) {
+    return;
+  }
+  await controller._foregroundLocationService.stopDriverTracking();
+}
+
+bool _shouldRunDriverForegroundLocation(TrackingController controller) {
+  final ride = controller._currentStateOrNull?.ride;
+  return switch (ride?.status) {
+    RideTrackingStatus.accepted ||
+    RideTrackingStatus.arrived ||
+    RideTrackingStatus.started =>
+      true,
+    _ => false,
+  };
 }

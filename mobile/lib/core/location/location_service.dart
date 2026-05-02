@@ -2,15 +2,40 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart'
     as permission_handler;
+
+const driverForegroundLocationNotificationTitle = 'Noor Express actif';
+const driverForegroundLocationNotificationBody =
+    'Votre position chauffeur est partagee pendant la course.';
+
+const _foregroundLocationChannelName = 'noor_express/foreground_location';
+const _foregroundLocationStartMethod = 'start';
+const _foregroundLocationStopMethod = 'stop';
+const _foregroundLocationIsRunningMethod = 'isRunning';
+const _foregroundLocationTitleArgument = 'title';
+const _foregroundLocationBodyArgument = 'body';
 
 enum LocationPermissionState {
   granted,
   denied,
   deniedForever,
   serviceDisabled,
+}
+
+enum ForegroundLocationPermissionState {
+  granted,
+  denied,
+  deniedForever,
+  unsupported,
+}
+
+enum ForegroundLocationStartResult {
+  started,
+  permissionDenied,
+  unsupported,
 }
 
 enum LocationFailureType {
@@ -153,6 +178,190 @@ class DefaultLocationPermissionGateway implements LocationPermissionGateway {
   @override
   Future<bool> openAppSettings() {
     return permission_handler.openAppSettings();
+  }
+}
+
+abstract class ForegroundLocationGateway {
+  Future<bool> get isServiceRunning;
+
+  Future<void> start({
+    required String title,
+    required String body,
+  });
+
+  Future<void> stop();
+}
+
+class MethodChannelForegroundLocationGateway
+    implements ForegroundLocationGateway {
+  const MethodChannelForegroundLocationGateway({
+    MethodChannel channel = const MethodChannel(_foregroundLocationChannelName),
+  }) : _channel = channel;
+
+  final MethodChannel _channel;
+
+  @override
+  Future<bool> get isServiceRunning async {
+    if (!_isAndroidPlatform) {
+      return false;
+    }
+    return await _channel.invokeMethod<bool>(
+          _foregroundLocationIsRunningMethod,
+        ) ??
+        false;
+  }
+
+  @override
+  Future<void> start({
+    required String title,
+    required String body,
+  }) async {
+    if (!_isAndroidPlatform) {
+      return;
+    }
+    await _channel.invokeMethod<void>(_foregroundLocationStartMethod, {
+      _foregroundLocationTitleArgument: title,
+      _foregroundLocationBodyArgument: body,
+    });
+  }
+
+  @override
+  Future<void> stop() async {
+    if (!_isAndroidPlatform) {
+      return;
+    }
+    await _channel.invokeMethod<void>(_foregroundLocationStopMethod);
+  }
+}
+
+abstract class ForegroundLocationPermissionGateway {
+  Future<ForegroundLocationPermissionState> requestTrackingPermissions();
+}
+
+class DefaultForegroundLocationPermissionGateway
+    implements ForegroundLocationPermissionGateway {
+  const DefaultForegroundLocationPermissionGateway();
+
+  @override
+  Future<ForegroundLocationPermissionState> requestTrackingPermissions() async {
+    if (!_isAndroidPlatform) {
+      return ForegroundLocationPermissionState.unsupported;
+    }
+    final foreground = await _request(
+      permission_handler.Permission.locationWhenInUse,
+    );
+    if (foreground != ForegroundLocationPermissionState.granted) {
+      return foreground;
+    }
+    final background = await _request(
+      permission_handler.Permission.locationAlways,
+    );
+    if (background != ForegroundLocationPermissionState.granted) {
+      return background;
+    }
+    return _request(permission_handler.Permission.notification);
+  }
+
+  Future<ForegroundLocationPermissionState> _request(
+    permission_handler.Permission permission,
+  ) async {
+    final current = await permission.status;
+    if (_isGranted(current)) {
+      return ForegroundLocationPermissionState.granted;
+    }
+    if (current.isPermanentlyDenied) {
+      return ForegroundLocationPermissionState.deniedForever;
+    }
+    return _mapPermissionStatus(await permission.request());
+  }
+
+  ForegroundLocationPermissionState _mapPermissionStatus(
+    permission_handler.PermissionStatus status,
+  ) {
+    if (_isGranted(status)) {
+      return ForegroundLocationPermissionState.granted;
+    }
+    if (status.isPermanentlyDenied) {
+      return ForegroundLocationPermissionState.deniedForever;
+    }
+    return ForegroundLocationPermissionState.denied;
+  }
+
+  bool _isGranted(permission_handler.PermissionStatus status) {
+    return status.isGranted || status.isLimited || status.isProvisional;
+  }
+}
+
+class ForegroundLocationService {
+  ForegroundLocationService({
+    required ForegroundLocationGateway foregroundGateway,
+    required ForegroundLocationPermissionGateway permissionGateway,
+  })  : _foregroundGateway = foregroundGateway,
+        _permissionGateway = permissionGateway;
+
+  final ForegroundLocationGateway _foregroundGateway;
+  final ForegroundLocationPermissionGateway _permissionGateway;
+  bool _shouldRun = false;
+
+  Future<ForegroundLocationStartResult> startDriverTracking() async {
+    if (_shouldRun && await _foregroundGateway.isServiceRunning) {
+      return ForegroundLocationStartResult.started;
+    }
+
+    final permissionState =
+        await _permissionGateway.requestTrackingPermissions();
+    if (permissionState != ForegroundLocationPermissionState.granted) {
+      _shouldRun = false;
+      return _mapStartResult(permissionState);
+    }
+
+    _shouldRun = true;
+    final startResult = await _startNativeForegroundService();
+    if (startResult != ForegroundLocationStartResult.started) {
+      _shouldRun = false;
+      return startResult;
+    }
+    return ForegroundLocationStartResult.started;
+  }
+
+  Future<void> stopDriverTracking() async {
+    _shouldRun = false;
+    await _foregroundGateway.stop();
+  }
+
+  Future<void> recoverDriverTrackingIfNeeded() async {
+    if (!_shouldRun || await _foregroundGateway.isServiceRunning) {
+      return;
+    }
+    await startDriverTracking();
+  }
+
+  ForegroundLocationStartResult _mapStartResult(
+    ForegroundLocationPermissionState permissionState,
+  ) {
+    return switch (permissionState) {
+      ForegroundLocationPermissionState.unsupported =>
+        ForegroundLocationStartResult.unsupported,
+      ForegroundLocationPermissionState.granted =>
+        ForegroundLocationStartResult.started,
+      ForegroundLocationPermissionState.denied ||
+      ForegroundLocationPermissionState.deniedForever =>
+        ForegroundLocationStartResult.permissionDenied,
+    };
+  }
+
+  Future<ForegroundLocationStartResult> _startNativeForegroundService() async {
+    try {
+      await _foregroundGateway.start(
+        title: driverForegroundLocationNotificationTitle,
+        body: driverForegroundLocationNotificationBody,
+      );
+      return ForegroundLocationStartResult.started;
+    } on MissingPluginException {
+      return ForegroundLocationStartResult.unsupported;
+    } on PlatformException {
+      return ForegroundLocationStartResult.permissionDenied;
+    }
   }
 }
 
@@ -365,9 +574,31 @@ final locationPermissionGatewayProvider =
   return const DefaultLocationPermissionGateway();
 });
 
+final foregroundLocationGatewayProvider =
+    Provider<ForegroundLocationGateway>((ref) {
+  return const MethodChannelForegroundLocationGateway();
+});
+
+final foregroundLocationPermissionGatewayProvider =
+    Provider<ForegroundLocationPermissionGateway>((ref) {
+  return const DefaultForegroundLocationPermissionGateway();
+});
+
+final foregroundLocationServiceProvider =
+    Provider<ForegroundLocationService>((ref) {
+  return ForegroundLocationService(
+    foregroundGateway: ref.watch(foregroundLocationGatewayProvider),
+    permissionGateway: ref.watch(foregroundLocationPermissionGatewayProvider),
+  );
+});
+
 final locationServiceProvider = Provider<LocationService>((ref) {
   return LocationService(
     geolocatorGateway: ref.watch(geolocatorGatewayProvider),
     permissionGateway: ref.watch(locationPermissionGatewayProvider),
   );
 });
+
+bool get _isAndroidPlatform {
+  return !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+}

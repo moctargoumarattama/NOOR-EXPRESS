@@ -14,6 +14,8 @@ import 'price_selector.dart';
 
 part 'search_bottom_sheet_sections.dart';
 
+typedef AddDropoffToFavorites = Future<void> Function(AddressResult dropoff);
+
 class SearchBottomSheet extends StatelessWidget {
   const SearchBottomSheet({
     super.key,
@@ -44,6 +46,7 @@ class SearchBottomSheet extends StatelessWidget {
     this.onAcceptOffer,
     this.onRejectOffer,
     this.onViewAllOffers,
+    this.onAddToFavorites,
   });
 
   final AddressResult? pickup;
@@ -70,6 +73,7 @@ class SearchBottomSheet extends StatelessWidget {
   final ValueChanged<RideOfferModel>? onAcceptOffer;
   final ValueChanged<RideOfferModel>? onRejectOffer;
   final VoidCallback? onViewAllOffers;
+  final AddDropoffToFavorites? onAddToFavorites;
   final PriceEstimate? estimate;
   final String? estimateError;
   final String? routeError;
@@ -147,6 +151,7 @@ class SearchBottomSheet extends StatelessWidget {
                         onClearPickup: onClearPickup,
                         onClearDropoff: onClearDropoff,
                         onSubmit: onSubmit,
+                        onAddToFavorites: onAddToFavorites,
                       ),
       ),
     );

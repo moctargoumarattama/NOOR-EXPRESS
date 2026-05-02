@@ -15,8 +15,10 @@ class RideReportReason(str, Enum):
 
 
 class RideReportStatus(str, Enum):
-    OUVERT = "ouvert"
-    TRAITE = "traite"
+    NOUVEAU = "nouveau"
+    EN_COURS = "en_cours"
+    RESOLU = "resolu"
+    CLASSE_SANS_SUITE = "classe_sans_suite"
 
 
 class RideReport(Base):
@@ -45,8 +47,9 @@ class RideReport(Base):
             values_callable=lambda enum_class: [item.value for item in enum_class],
         ),
         nullable=False,
-        default=RideReportStatus.OUVERT,
+        default=RideReportStatus.NOUVEAU,
     )
+    note_admin: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=func.now(),

@@ -15,11 +15,13 @@ class DriverHamburgerMenu extends StatelessWidget {
     required this.onToggleAvailability,
     required this.onProfileTap,
     required this.onStatsTap,
+    required this.onEarningsTap,
     required this.onHistoryTap,
     required this.onVehicleTap,
     required this.onNotificationsTap,
     required this.onSettingsTap,
     required this.onHelpTap,
+    required this.onSupportTap,
     required this.onReportTap,
     required this.onPassengerModeTap,
     required this.onLogout,
@@ -34,11 +36,13 @@ class DriverHamburgerMenu extends StatelessWidget {
   final ValueChanged<bool> onToggleAvailability;
   final VoidCallback onProfileTap;
   final VoidCallback onStatsTap;
+  final VoidCallback onEarningsTap;
   final VoidCallback onHistoryTap;
   final VoidCallback onVehicleTap;
   final VoidCallback onNotificationsTap;
   final VoidCallback onSettingsTap;
   final VoidCallback onHelpTap;
+  final VoidCallback onSupportTap;
   final VoidCallback onReportTap;
   final VoidCallback onPassengerModeTap;
   final VoidCallback onLogout;
@@ -98,8 +102,13 @@ class DriverHamburgerMenu extends StatelessWidget {
                               onTap: onStatsTap,
                             ),
                             _MenuItem(
+                              icon: Icons.payments_rounded,
+                              label: 'Mes revenus',
+                              onTap: onEarningsTap,
+                            ),
+                            _MenuItem(
                               icon: Icons.history_rounded,
-                              label: 'Mes trajets',
+                              label: 'Mes courses',
                               onTap: onHistoryTap,
                             ),
                             _MenuItem(
@@ -121,6 +130,11 @@ class DriverHamburgerMenu extends StatelessWidget {
                               icon: Icons.help_outline_rounded,
                               label: 'Aide',
                               onTap: onHelpTap,
+                            ),
+                            _MenuItem(
+                              icon: Icons.support_agent_rounded,
+                              label: 'Assistance',
+                              onTap: onSupportTap,
                             ),
                             _MenuItem(
                               icon: Icons.warning_amber_rounded,

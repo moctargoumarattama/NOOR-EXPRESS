@@ -11,6 +11,22 @@ class DriverOnboardingState {
     this.address = '',
     this.idCardPhoto,
     this.selfiePhoto,
+    this.driverLicense = const DriverLegalDocumentInput(
+      file: null,
+      expiresAt: null,
+    ),
+    this.vehicleRegistration = const DriverLegalDocumentInput(
+      file: null,
+      expiresAt: null,
+    ),
+    this.vehicleInsurance = const DriverLegalDocumentInput(
+      file: null,
+      expiresAt: null,
+    ),
+    this.technicalInspection = const DriverLegalDocumentInput(
+      file: null,
+      expiresAt: null,
+    ),
     this.profile,
     this.isLoading = false,
     this.isSubmitting = false,
@@ -23,6 +39,10 @@ class DriverOnboardingState {
   final String address;
   final String? idCardPhoto;
   final String? selfiePhoto;
+  final DriverLegalDocumentInput driverLicense;
+  final DriverLegalDocumentInput vehicleRegistration;
+  final DriverLegalDocumentInput vehicleInsurance;
+  final DriverLegalDocumentInput technicalInspection;
   final DriverOnboardingProfileModel? profile;
   final bool isLoading;
   final bool isSubmitting;
@@ -33,6 +53,28 @@ class DriverOnboardingState {
       lastName.trim().isNotEmpty &&
       address.trim().isNotEmpty;
 
+  bool get hasLegalDocuments =>
+      driverLicense.isComplete &&
+      vehicleRegistration.isComplete &&
+      vehicleInsurance.isComplete &&
+      technicalInspection.isComplete;
+
+  String? get legalDocumentsError {
+    final documents = {
+      DriverLegalDocumentType.driverLicense: driverLicense,
+      DriverLegalDocumentType.vehicleRegistration: vehicleRegistration,
+      DriverLegalDocumentType.vehicleInsurance: vehicleInsurance,
+      DriverLegalDocumentType.technicalInspection: technicalInspection,
+    };
+    for (final entry in documents.entries) {
+      final message = entry.value.validationMessage(entry.key.label);
+      if (message != null) {
+        return message;
+      }
+    }
+    return null;
+  }
+
   DriverOnboardingState copyWith({
     int? step,
     String? firstName,
@@ -40,6 +82,10 @@ class DriverOnboardingState {
     String? address,
     String? idCardPhoto,
     String? selfiePhoto,
+    DriverLegalDocumentInput? driverLicense,
+    DriverLegalDocumentInput? vehicleRegistration,
+    DriverLegalDocumentInput? vehicleInsurance,
+    DriverLegalDocumentInput? technicalInspection,
     DriverOnboardingProfileModel? profile,
     bool? isLoading,
     bool? isSubmitting,
@@ -53,6 +99,10 @@ class DriverOnboardingState {
       address: address ?? this.address,
       idCardPhoto: idCardPhoto ?? this.idCardPhoto,
       selfiePhoto: selfiePhoto ?? this.selfiePhoto,
+      driverLicense: driverLicense ?? this.driverLicense,
+      vehicleRegistration: vehicleRegistration ?? this.vehicleRegistration,
+      vehicleInsurance: vehicleInsurance ?? this.vehicleInsurance,
+      technicalInspection: technicalInspection ?? this.technicalInspection,
       profile: profile ?? this.profile,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
@@ -69,7 +119,7 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
   final DriverProfileDatasource _datasource;
 
   void setStep(int step) {
-    state = state.copyWith(step: step.clamp(0, 3), clearError: true);
+    state = state.copyWith(step: step.clamp(0, 4), clearError: true);
   }
 
   void setPersonalInfo({
@@ -93,6 +143,15 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
     state = state.copyWith(selfiePhoto: value, clearError: true);
   }
 
+  void setLegalDocumentFile(DriverLegalDocumentType type, String value) {
+    _setLegalDocument(type, _documentFor(type).copyWith(file: value));
+  }
+
+  void setLegalDocumentExpiration(
+      DriverLegalDocumentType type, DateTime value) {
+    _setLegalDocument(type, _documentFor(type).copyWith(expiresAt: value));
+  }
+
   Future<void> load() async {
     state = state.copyWith(isLoading: true, clearError: true);
     try {
@@ -104,6 +163,12 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
         address: profile?.address ?? state.address,
         idCardPhoto: profile?.idCardPhoto ?? state.idCardPhoto,
         selfiePhoto: profile?.selfiePhoto ?? state.selfiePhoto,
+        driverLicense: profile?.driverLicense ?? state.driverLicense,
+        vehicleRegistration:
+            profile?.vehicleRegistration ?? state.vehicleRegistration,
+        vehicleInsurance: profile?.vehicleInsurance ?? state.vehicleInsurance,
+        technicalInspection:
+            profile?.technicalInspection ?? state.technicalInspection,
         isLoading: false,
       );
     } on DriverProfileFailure catch (error) {
@@ -112,10 +177,9 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
   }
 
   Future<DriverOnboardingProfileModel?> submit() async {
-    if (!state.hasPersonalInfo ||
-        state.idCardPhoto == null ||
-        state.selfiePhoto == null) {
-      state = state.copyWith(errorMessage: 'Completez toutes les etapes.');
+    final missingMessage = _missingSubmissionMessage();
+    if (missingMessage != null) {
+      state = state.copyWith(errorMessage: missingMessage);
       return null;
     }
 
@@ -128,6 +192,10 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
           address: state.address.trim(),
           idCardPhoto: state.idCardPhoto!,
           selfiePhoto: state.selfiePhoto!,
+          driverLicense: state.driverLicense,
+          vehicleRegistration: state.vehicleRegistration,
+          vehicleInsurance: state.vehicleInsurance,
+          technicalInspection: state.technicalInspection,
         ),
       );
       state = state.copyWith(
@@ -143,6 +211,40 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
       );
       return null;
     }
+  }
+
+  DriverLegalDocumentInput _documentFor(DriverLegalDocumentType type) {
+    return switch (type) {
+      DriverLegalDocumentType.driverLicense => state.driverLicense,
+      DriverLegalDocumentType.vehicleRegistration => state.vehicleRegistration,
+      DriverLegalDocumentType.vehicleInsurance => state.vehicleInsurance,
+      DriverLegalDocumentType.technicalInspection => state.technicalInspection,
+    };
+  }
+
+  void _setLegalDocument(
+    DriverLegalDocumentType type,
+    DriverLegalDocumentInput document,
+  ) {
+    state = switch (type) {
+      DriverLegalDocumentType.driverLicense =>
+        state.copyWith(driverLicense: document, clearError: true),
+      DriverLegalDocumentType.vehicleRegistration =>
+        state.copyWith(vehicleRegistration: document, clearError: true),
+      DriverLegalDocumentType.vehicleInsurance =>
+        state.copyWith(vehicleInsurance: document, clearError: true),
+      DriverLegalDocumentType.technicalInspection =>
+        state.copyWith(technicalInspection: document, clearError: true),
+    };
+  }
+
+  String? _missingSubmissionMessage() {
+    if (!state.hasPersonalInfo ||
+        state.idCardPhoto == null ||
+        state.selfiePhoto == null) {
+      return 'Completez toutes les etapes.';
+    }
+    return state.legalDocumentsError;
   }
 }
 
