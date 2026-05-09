@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_inline_feedback.dart';
 import '../../domain/entities/tracking_state.dart';
@@ -26,9 +27,10 @@ class TrackingTopBar extends StatelessWidget {
         IconButton.filledTonal(
           onPressed: onBack,
           style: IconButton.styleFrom(
-            backgroundColor: Colors.black.withValues(alpha: 0.34),
+            backgroundColor: AppColors.pearl.withValues(alpha: 0.92),
           ),
-          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_rounded,
+              color: AppColors.textPrimary),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -65,7 +67,7 @@ class TrackingSupportButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.black.withValues(alpha: 0.42),
+      color: AppColors.nigerGreen,
       shape: const CircleBorder(),
       child: InkWell(
         onTap: onPressed,
@@ -74,7 +76,7 @@ class TrackingSupportButton extends StatelessWidget {
           padding: EdgeInsets.all(12),
           child: Icon(
             Icons.support_agent_rounded,
-            color: Colors.white,
+            color: AppColors.pearl,
             size: 20,
           ),
         ),
@@ -117,30 +119,30 @@ class ConnectionBadge extends StatelessWidget {
       case TrackingConnectionState.connected:
         return const _ConnectionPalette(
           label: 'En direct',
-          background: Color(0x1A1B8A5A),
-          border: Color(0x661B8A5A),
-          foreground: Colors.white,
+          background: AppColors.nigerGreenSoft,
+          border: AppColors.nigerGreenBorder,
+          foreground: AppColors.nigerGreen,
         );
       case TrackingConnectionState.reconnecting:
         return const _ConnectionPalette(
           label: 'Ca revient',
-          background: Color(0x1AF5A623),
-          border: Color(0x66F5A623),
-          foreground: Colors.white,
+          background: AppColors.warningSoft,
+          border: AppColors.warningBorder,
+          foreground: AppColors.warning,
         );
       case TrackingConnectionState.connecting:
         return const _ConnectionPalette(
           label: 'Mise en route',
-          background: Color(0x1A8DB3FF),
-          border: Color(0x668DB3FF),
-          foreground: Colors.white,
+          background: AppColors.infoSoft,
+          border: AppColors.infoBorder,
+          foreground: AppColors.info,
         );
       case TrackingConnectionState.disconnected:
         return const _ConnectionPalette(
           label: 'Sans connexion',
-          background: Color(0x1AD94F4F),
-          border: Color(0x66D94F4F),
-          foreground: Colors.white,
+          background: AppColors.errorSoft,
+          border: AppColors.error,
+          foreground: AppColors.error,
         );
     }
   }

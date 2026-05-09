@@ -13,6 +13,7 @@ class Step4Confirmation extends StatelessWidget {
     required this.address,
     required this.idCardPhoto,
     required this.selfiePhoto,
+    required this.vehiclePhoto,
     required this.driverLicense,
     required this.vehicleRegistration,
     required this.vehicleInsurance,
@@ -26,6 +27,7 @@ class Step4Confirmation extends StatelessWidget {
   final String address;
   final String? idCardPhoto;
   final String? selfiePhoto;
+  final String? vehiclePhoto;
   final DriverLegalDocumentInput driverLicense;
   final DriverLegalDocumentInput vehicleRegistration;
   final DriverLegalDocumentInput vehicleInsurance;
@@ -79,6 +81,8 @@ class Step4Confirmation extends StatelessWidget {
               Expanded(child: _MiniPhoto(label: 'Selfie', photo: selfiePhoto)),
             ],
           ),
+          const SizedBox(height: 12),
+          _MiniPhoto(label: 'Vehicule', photo: vehiclePhoto),
           const SizedBox(height: 18),
           _DocumentSummary(document: driverLicense, label: 'Permis'),
           _DocumentSummary(document: vehicleRegistration, label: 'Carte grise'),

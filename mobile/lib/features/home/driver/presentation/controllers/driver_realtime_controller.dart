@@ -1,14 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:latlong2/latlong.dart';
 
+import '../../../../../core/location/device_location_service.dart';
 import '../../../../../core/lifecycle/app_lifecycle_recovery_service.dart';
 import '../../../../../core/network/api_client.dart';
 import '../../../../../core/services/websocket_service.dart';
 import '../../../../../core/state/session_controller.dart';
 import '../../../../../core/storage/secure_storage_service.dart';
-import '../../../../map/services/location_service.dart';
 import 'ride_driver_controller.dart';
 
 class DriverRealtimeState {
@@ -17,6 +16,9 @@ class DriverRealtimeState {
     this.lastMessage,
     this.pendingRideId,
     this.pendingRidePayload,
+    this.lastPositionSentAt,
+    this.hasPositionFix = false,
+    this.locationProblemDetected = false,
   });
 
   const DriverRealtimeState.initial()
@@ -26,14 +28,21 @@ class DriverRealtimeState {
   final String? lastMessage;
   final int? pendingRideId;
   final Map<String, dynamic>? pendingRidePayload;
+  final DateTime? lastPositionSentAt;
+  final bool hasPositionFix;
+  final bool locationProblemDetected;
 
   DriverRealtimeState copyWith({
     WebSocketStatus? connectionStatus,
     String? lastMessage,
     int? pendingRideId,
     Map<String, dynamic>? pendingRidePayload,
+    DateTime? lastPositionSentAt,
+    bool? hasPositionFix,
+    bool? locationProblemDetected,
     bool clearLastMessage = false,
     bool clearPendingRide = false,
+    bool clearGpsState = false,
   }) {
     return DriverRealtimeState(
       connectionStatus: connectionStatus ?? this.connectionStatus,
@@ -43,6 +52,13 @@ class DriverRealtimeState {
       pendingRidePayload: clearPendingRide
           ? null
           : pendingRidePayload ?? this.pendingRidePayload,
+      lastPositionSentAt:
+          clearGpsState ? null : lastPositionSentAt ?? this.lastPositionSentAt,
+      hasPositionFix:
+          clearGpsState ? false : hasPositionFix ?? this.hasPositionFix,
+      locationProblemDetected: clearGpsState
+          ? false
+          : locationProblemDetected ?? this.locationProblemDetected,
     );
   }
 }
@@ -66,7 +82,7 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
 
   StreamSubscription<Map<String, dynamic>>? _messageSubscription;
   StreamSubscription<WebSocketStatus>? _statusSubscription;
-  StreamSubscription<LatLng>? _positionSubscription;
+  StreamSubscription<DevicePosition>? _positionSubscription;
   Timer? _ridesRefreshTimer;
   int? _currentDriverId;
   void Function()? _unregisterLifecycleResume;
@@ -202,26 +218,61 @@ class DriverRealtimeController extends StateNotifier<DriverRealtimeState> {
     await _positionSubscription?.cancel();
     _positionSubscription = null;
 
-    final locationService = _ref.read(mapLocationServiceProvider);
+    final locationService = _ref.read(deviceLocationServiceProvider);
+    final accessState = await locationService.ensurePermission();
+    if (accessState != DeviceLocationAccessState.granted) {
+      state = state.copyWith(
+        locationProblemDetected: true,
+        lastMessage:
+            'GPS inactif. Activez la localisation pour recevoir des courses.',
+      );
+      return;
+    }
+
     final currentPosition = await locationService.getCurrentPosition();
-    _sendPosition(currentPosition);
+    if (currentPosition != null) {
+      _sendPosition(
+        latitude: currentPosition.latitude,
+        longitude: currentPosition.longitude,
+      );
+    } else {
+      state = state.copyWith(
+        locationProblemDetected: true,
+        lastMessage: 'Votre position GPS est indisponible pour le moment.',
+      );
+    }
 
     _positionSubscription = locationService.watchPosition().listen(
-      _sendPosition,
+      (position) => _sendPosition(
+        latitude: position.latitude,
+        longitude: position.longitude,
+      ),
       onError: (_) {
         state = state.copyWith(
+          locationProblemDetected: true,
           lastMessage: 'Votre position ne s envoie plus pour le moment.',
         );
+      },
+      onDone: () {
+        state = state.copyWith(locationProblemDetected: true);
       },
     );
   }
 
-  void _sendPosition(LatLng position) {
+  void _sendPosition({
+    required double latitude,
+    required double longitude,
+  }) {
+    state = state.copyWith(
+      lastPositionSentAt: DateTime.now(),
+      hasPositionFix: true,
+      locationProblemDetected: false,
+    );
     _websocketService.sendJson(
       {
         'type': 'location_update',
-        'lat': position.latitude,
-        'lng': position.longitude,
+        'lat': latitude,
+        'lng': longitude,
       },
     );
   }

@@ -15,10 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
 from app.core.config import settings
-from app.core.firebase import notify_user, notify_users
+from app.core.firebase import (
+    FIREBASE_NOT_CONFIGURED_REASON,
+    firebase_readiness_error,
+    is_firebase_ready,
+    notify_user,
+    notify_users_with_result,
+)
+from app.core.messages import Messages
 from app.db.database import get_db_session
 from app.models.admin import Admin
-from app.models.broadcast_history import BroadcastHistory
+from app.models.broadcast_history import BroadcastFCMStatus, BroadcastHistory
 from app.models.ride_report import RideReport, RideReportStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
 from app.models.user import DriverStatus, User, UserRole, UserSuspension
@@ -51,9 +58,7 @@ class AdminSuspensionInvalidError(Exception):
 class AdminNotificationRateLimitError(Exception):
     def __init__(self, retry_after_seconds: int) -> None:
         self.retry_after_seconds = retry_after_seconds
-        super().__init__(
-            f"Broadcast limit reached. Retry in {retry_after_seconds} seconds."
-        )
+        super().__init__(Messages.BROADCAST_LIMIT_REACHED)
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -89,7 +94,7 @@ def decode_admin_token(token: str) -> dict[str, Any]:
         encoded_header, encoded_payload, encoded_signature = token.split(".")
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_401_UNAUTHORIZED, "Invalid admin token"
+            status.HTTP_401_UNAUTHORIZED, Messages.INVALID_ADMIN_TOKEN
         ) from exc
 
     signing_input = f"{encoded_header}.{encoded_payload}".encode("utf-8")
@@ -101,11 +106,11 @@ def decode_admin_token(token: str) -> dict[str, Any]:
     if not hmac.compare_digest(
         expected_signature, _base64url_decode(encoded_signature)
     ):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, Messages.INVALID_ADMIN_TOKEN)
 
     payload = json.loads(_base64url_decode(encoded_payload))
     if payload.get("role") != "admin" or int(payload.get("exp", 0)) < int(time.time()):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin token")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, Messages.INVALID_ADMIN_TOKEN)
     return payload
 
 
@@ -113,14 +118,14 @@ async def require_admin(
     credentials: HTTPAuthorizationCredentials | None = Depends(admin_bearer_scheme),
 ) -> dict[str, Any]:
     if credentials is None or credentials.scheme.lower() != "bearer":
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Admin token required")
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, Messages.ADMIN_TOKEN_REQUIRED)
     return decode_admin_token(credentials.credentials)
 
 
 async def create_admin(session: AsyncSession, username: str, password: str) -> Admin:
     count_result = await session.execute(select(func.count(Admin.id)))
     if count_result.scalar_one() > 0:
-        raise AdminAlreadyExistsError("Admin already initialized")
+        raise AdminAlreadyExistsError(Messages.ADMIN_ALREADY_INITIALIZED)
 
     password_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode()
     admin = Admin(username=username, password_hash=password_hash)
@@ -137,7 +142,10 @@ async def login_admin(session: AsyncSession, username: str, password: str) -> st
         password.encode("utf-8"),
         admin.password_hash.encode("utf-8"),
     ):
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid admin credentials")
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            Messages.INVALID_ADMIN_CREDENTIALS,
+        )
     return create_admin_token(admin)
 
 
@@ -182,7 +190,7 @@ async def get_deleted_users(session: AsyncSession) -> list[dict[str, Any]]:
 async def block_user(session: AsyncSession, user_id: int) -> User:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     user.is_blocked = True
     user.refresh_token = None
@@ -198,7 +206,7 @@ async def block_user(session: AsyncSession, user_id: int) -> User:
 async def unblock_user(session: AsyncSession, user_id: int) -> User:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     user.is_blocked = False
     await session.commit()
@@ -209,7 +217,7 @@ async def unblock_user(session: AsyncSession, user_id: int) -> User:
 async def delete_user(session: AsyncSession, user_id: int) -> None:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     await session.delete(user)
     try:
@@ -217,7 +225,7 @@ async def delete_user(session: AsyncSession, user_id: int) -> None:
     except IntegrityError as exc:
         await session.rollback()
         raise AdminUserDeleteBlockedError(
-            "User has related data. Block this account instead."
+            "Utilisateur lie a des donnees actives. Bloquez ce compte a la place."
         ) from exc
 
 
@@ -291,7 +299,7 @@ async def update_report(
 ) -> RideReport:
     report = await session.get(RideReport, report_id)
     if report is None:
-        raise AdminReportNotFoundError("Report not found")
+        raise AdminReportNotFoundError(Messages.NOT_FOUND)
 
     previous_status = report.status
     report.status = status
@@ -313,13 +321,13 @@ async def suspend_user(
 ) -> User:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     suspension_reason = reason.strip()
     if not suspension_reason:
-        raise AdminSuspensionInvalidError("Suspension reason is required")
+        raise AdminSuspensionInvalidError(Messages.SUSPENSION_REASON_REQUIRED)
     if duration_days is not None and duration_days <= 0:
-        raise AdminSuspensionInvalidError("Suspension duration must be positive")
+        raise AdminSuspensionInvalidError(Messages.SUSPENSION_DURATION_POSITIVE)
 
     suspended_until = (
         datetime.utcnow() + timedelta(days=duration_days)
@@ -349,7 +357,7 @@ async def suspend_user(
 async def unsuspend_user(session: AsyncSession, user_id: int) -> User:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     user.is_suspended = False
     user.suspended_until = None
@@ -368,7 +376,7 @@ async def get_user_suspension_history(
 ) -> list[dict[str, Any]]:
     user = await session.get(User, user_id)
     if user is None:
-        raise AdminUserNotFoundError("User not found")
+        raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
 
     result = await session.execute(
         select(UserSuspension)
@@ -457,15 +465,7 @@ async def send_notification_broadcast(
     )
     await _enforce_broadcast_rate_limit(session)
 
-    history = BroadcastHistory(
-        target=history_target,
-        title=title,
-        message=message,
-        notification_type=notification_type,
-        estimated_recipients=len(recipient_ids),
-    )
-    session.add(history)
-    await notify_users(
+    send_result = await notify_users_with_result(
         session,
         recipient_ids,
         title=title,
@@ -476,6 +476,19 @@ async def send_notification_broadcast(
             "scope": "admin_broadcast",
         },
     )
+    fcm_status = _resolve_broadcast_fcm_status(send_result)
+    history = BroadcastHistory(
+        target=history_target,
+        title=title,
+        message=message,
+        notification_type=notification_type,
+        estimated_recipients=len(recipient_ids),
+        fcm_sent_count=int(send_result.get("sent_count", 0)),
+        fcm_failed_count=int(send_result.get("failed_count", 0)),
+        fcm_status=fcm_status.value,
+        fcm_error_reason=send_result.get("error_reason"),
+    )
+    session.add(history)
     await session.commit()
     await session.refresh(history)
     return _broadcast_history_row(history)
@@ -501,6 +514,8 @@ async def get_notification_broadcast_history(
         "total": total,
         "limit": limit,
         "offset": offset,
+        "firebase_ready": is_firebase_ready(),
+        "firebase_error_reason": firebase_readiness_error(),
     }
 
 
@@ -649,17 +664,17 @@ async def _resolve_broadcast_recipient_ids(
 
     if target == "user_id":
         if user_id is None:
-            raise ValueError("user_id is required when target is user_id")
+            raise ValueError(Messages.USER_ID_REQUIRED_FOR_TARGET)
         user = await session.get(User, user_id)
         if user is None:
             if strict_user_target:
-                raise AdminUserNotFoundError("User not found")
+                raise AdminUserNotFoundError(Messages.USER_NOT_FOUND)
             return [], f"user_id:{user_id}"
         if not user.fcm_token:
             return [], f"user_id:{user.id}"
         return [user.id], f"user_id:{user.id}"
 
-    raise ValueError(f"Unknown notification target: {target}")
+    raise ValueError(Messages.BROADCAST_TARGET_UNKNOWN)
 
 
 def _broadcast_history_row(history: BroadcastHistory) -> dict[str, Any]:
@@ -671,4 +686,22 @@ def _broadcast_history_row(history: BroadcastHistory) -> dict[str, Any]:
         "type": history.notification_type,
         "sent_at": history.sent_at,
         "estimated_recipients": history.estimated_recipients,
+        "fcm_sent_count": history.fcm_sent_count,
+        "fcm_failed_count": history.fcm_failed_count,
+        "fcm_status": history.fcm_status,
+        "fcm_error_reason": history.fcm_error_reason,
     }
+
+
+def _resolve_broadcast_fcm_status(send_result: dict[str, Any]) -> BroadcastFCMStatus:
+    error_reason = str(send_result.get("error_reason") or "")
+    sent_count = int(send_result.get("sent_count", 0))
+    failed_count = int(send_result.get("failed_count", 0))
+
+    if error_reason == FIREBASE_NOT_CONFIGURED_REASON:
+        return BroadcastFCMStatus.FIREBASE_NOT_CONFIGURED
+    if sent_count > 0 and failed_count == 0:
+        return BroadcastFCMStatus.SENT
+    if sent_count > 0 and failed_count > 0:
+        return BroadcastFCMStatus.PARTIAL
+    return BroadcastFCMStatus.FAILED

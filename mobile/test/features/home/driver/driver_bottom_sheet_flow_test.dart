@@ -4,9 +4,9 @@ import 'package:noor_express_mobile/features/home/driver/data/models/driver_ride
 import 'package:noor_express_mobile/features/home/driver/presentation/widgets/driver_bottom_sheet.dart';
 
 void main() {
-  testWidgets('rideReceived shows clear pickup, destination and client price', (
-    tester,
-  ) async {
+  testWidgets(
+      'rideReceived shows 3 quick prices, fallback custom link and timer',
+      (tester) async {
     await _pumpSheet(
       tester,
       pendingRide: _ride(
@@ -23,17 +23,100 @@ void main() {
     expect(find.text('Ma position actuelle'), findsOneWidget);
     expect(find.text('Destination'), findsOneWidget);
     expect(find.text('Plateau'), findsOneWidget);
-    expect(find.text('Prix client'), findsOneWidget);
-    expect(find.text('2500 FCFA'), findsOneWidget);
-    expect(find.text('A 1.2 km de vous'), findsOneWidget);
-    expect(find.text('Proposer un prix'), findsOneWidget);
-    expect(find.text('Ignorer'), findsOneWidget);
-    expect(find.byType(TextField), findsNothing);
+    expect(find.text('Accepter tel quel'), findsOneWidget);
+    expect(find.text('+200'), findsOneWidget);
+    expect(find.text('+500'), findsOneWidget);
+    expect(find.text('Autre prix →'), findsOneWidget);
+    expect(find.text('2500 FCFA'), findsWidgets);
+    expect(find.text('45 s'), findsOneWidget);
   });
 
-  testWidgets('priceProposal prefills driver price from valid client price', (
-    tester,
-  ) async {
+  testWidgets('tap quick +200 sends offer without custom screen',
+      (tester) async {
+    double? submittedPrice;
+
+    await _pumpSheet(
+      tester,
+      pendingRide: _ride(estimatedPrice: 2500),
+      flowStage: DriverRideSheetStage.rideReceived,
+      onQuickOffer: (price) async {
+        submittedPrice = price;
+        return false;
+      },
+    );
+
+    await tester.ensureVisible(find.text('+200'));
+    await tester.tap(find.text('+200'));
+    await tester.pump();
+
+    expect(submittedPrice, 2700);
+    await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('quick offer success shows feedback then closes', (tester) async {
+    bool closedAfterSuccess = false;
+
+    await _pumpSheet(
+      tester,
+      pendingRide: _ride(estimatedPrice: 2500),
+      flowStage: DriverRideSheetStage.rideReceived,
+      onQuickOffer: (_) async => true,
+      onQuickOfferSuccess: (_) {
+        closedAfterSuccess = true;
+      },
+    );
+
+    await tester.ensureVisible(find.text('Accepter tel quel'));
+    await tester.tap(find.text('Accepter tel quel'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1100));
+
+    expect(find.text('Offre envoyee ✓'), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 900));
+    expect(closedAfterSuccess, isTrue);
+  });
+
+  testWidgets('timer expiration triggers auto-dismiss callback',
+      (tester) async {
+    var timeoutCalled = false;
+
+    await _pumpSheet(
+      tester,
+      pendingRide: _ride(estimatedPrice: 2400),
+      flowStage: DriverRideSheetStage.rideReceived,
+      onRideRequestTimedOut: () {
+        timeoutCalled = true;
+      },
+    );
+
+    await tester.pump(const Duration(seconds: 46));
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(timeoutCalled, isTrue);
+  });
+
+  testWidgets('custom price fallback action remains available', (tester) async {
+    var customTapped = false;
+
+    await _pumpSheet(
+      tester,
+      pendingRide: _ride(estimatedPrice: 2600),
+      flowStage: DriverRideSheetStage.rideReceived,
+      onProposePrice: () {
+        customTapped = true;
+      },
+    );
+
+    await tester.ensureVisible(find.text('Autre prix →'));
+    await tester.tap(find.text('Autre prix →'));
+    await tester.pump();
+
+    expect(customTapped, isTrue);
+  });
+
+  testWidgets('priceProposal prefills driver price from valid client price',
+      (tester) async {
     await _pumpSheet(
       tester,
       pendingRide: _ride(estimatedPrice: 2500),
@@ -49,68 +132,6 @@ void main() {
     final editable = tester.widget<EditableText>(find.byType(EditableText));
     expect(editable.controller.text, '2500');
   });
-
-  testWidgets('priceProposal disables sending when client price is invalid', (
-    tester,
-  ) async {
-    await _pumpSheet(
-      tester,
-      pendingRide: _ride(estimatedPrice: 0),
-      flowStage: DriverRideSheetStage.priceProposal,
-    );
-
-    expect(find.text('Prix indisponible'), findsWidgets);
-    expect(find.text('0 FCFA'), findsNothing);
-
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Envoyer ma proposition'),
-    );
-    expect(button.onPressed, isNull);
-  });
-
-  testWidgets('priceProposal treats absurd prices as unavailable', (
-    tester,
-  ) async {
-    await _pumpSheet(
-      tester,
-      pendingRide: _ride(estimatedPrice: 9999999),
-      flowStage: DriverRideSheetStage.priceProposal,
-    );
-
-    expect(find.text('Prix indisponible'), findsWidgets);
-    expect(find.text('9999999 FCFA'), findsNothing);
-  });
-
-  testWidgets('driver flow moves rideReceived to priceProposal to offerSent', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: SizedBox(
-            height: 820,
-            child: Stack(
-              children: [
-                _DriverFlowHarness(),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('Une course vous attend'), findsOneWidget);
-
-    await tester.tap(find.text('Proposer un prix'));
-    await tester.pumpAndSettle();
-    expect(find.text('Votre proposition'), findsOneWidget);
-
-    await tester.tap(find.text('Envoyer ma proposition'));
-    await tester.pumpAndSettle();
-    expect(find.text('Offre envoyee'), findsOneWidget);
-    expect(find.text('En attente de la reponse du client'), findsOneWidget);
-    expect(find.text('2500 FCFA'), findsOneWidget);
-  });
 }
 
 Future<void> _pumpSheet(
@@ -118,7 +139,18 @@ Future<void> _pumpSheet(
   DriverRide? pendingRide,
   DriverRideSheetStage flowStage = DriverRideSheetStage.idle,
   double? submittedOfferPrice,
+  VoidCallback? onProposePrice,
+  VoidCallback? onRideRequestTimedOut,
+  ValueChanged<double>? onQuickOfferSuccess,
+  Future<bool> Function(double price)? onQuickOffer,
 }) async {
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = const Size(1200, 2200);
+  addTearDown(() {
+    tester.view.resetPhysicalSize();
+    tester.view.resetDevicePixelRatio();
+  });
+
   await tester.pumpWidget(
     MaterialApp(
       home: Scaffold(
@@ -138,8 +170,11 @@ Future<void> _pumpSheet(
                 onStart: _noop,
                 onStop: _noop,
                 onOpenTracking: _noop,
-                onProposePrice: _noop,
+                onProposePrice: onProposePrice ?? _noop,
                 onIgnoreRide: _noop,
+                onQuickOffer: onQuickOffer ?? _quickOfferNoop,
+                onQuickOfferSuccess: onQuickOfferSuccess,
+                onRideRequestTimedOut: onRideRequestTimedOut,
                 onSubmitOffer: (_) {},
                 onBackToRideReceived: _noop,
               ),
@@ -168,46 +203,6 @@ DriverRide _ride({
   );
 }
 
+Future<bool> _quickOfferNoop(double _) async => false;
+
 void _noop() {}
-
-class _DriverFlowHarness extends StatefulWidget {
-  const _DriverFlowHarness();
-
-  @override
-  State<_DriverFlowHarness> createState() => _DriverFlowHarnessState();
-}
-
-class _DriverFlowHarnessState extends State<_DriverFlowHarness> {
-  DriverRideSheetStage _stage = DriverRideSheetStage.rideReceived;
-  double? _submittedPrice;
-
-  @override
-  Widget build(BuildContext context) {
-    return DriverBottomSheet(
-      driverStatus: 'online',
-      isBusy: false,
-      todayRides: 0,
-      todayEarnings: 0,
-      activeRide: null,
-      pendingRide: _ride(estimatedPrice: 2500),
-      flowStage: _stage,
-      submittedOfferPrice: _submittedPrice,
-      onStart: _noop,
-      onStop: _noop,
-      onOpenTracking: _noop,
-      onProposePrice: () {
-        setState(() => _stage = DriverRideSheetStage.priceProposal);
-      },
-      onIgnoreRide: _noop,
-      onSubmitOffer: (price) {
-        setState(() {
-          _submittedPrice = price;
-          _stage = DriverRideSheetStage.offerSent;
-        });
-      },
-      onBackToRideReceived: () {
-        setState(() => _stage = DriverRideSheetStage.rideReceived);
-      },
-    );
-  }
-}

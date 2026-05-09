@@ -3,6 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.core.messages import Messages
 from app.models.ride_request import RideCancelledByRole, RideRequestStatus
 from app.models.user import UserRole
 
@@ -35,7 +36,9 @@ class RideRequestCancel(BaseModel):
         if value is None:
             return None
         if not isinstance(value, str):
-            raise TypeError("value must be a string")
+            raise TypeError(
+                Messages.FIELD_MUST_BE_STRING_TEMPLATE.format(field_name="value")
+            )
         trimmed = value.strip()
         return trimmed or None
 
@@ -55,25 +58,51 @@ class RideMessageCreate(BaseModel):
     @classmethod
     def normalize_content(cls, value: object) -> str:
         if not isinstance(value, str):
-            raise TypeError("content must be a string")
+            raise TypeError(
+                Messages.FIELD_MUST_BE_STRING_TEMPLATE.format(field_name="content")
+            )
         return value.strip()
 
     @field_validator("content")
     @classmethod
     def ensure_non_empty_content(cls, value: str) -> str:
         if not value:
-            raise ValueError("content cannot be empty")
+            raise ValueError(Messages.CONTENT_EMPTY)
         return value
 
 
 class ClientRideRatingCreate(BaseModel):
     rating: float = Field(ge=1, le=5)
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=220)
+
+    @field_validator("comment", mode="before")
+    @classmethod
+    def normalize_comment(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError(
+                Messages.FIELD_MUST_BE_STRING_TEMPLATE.format(field_name="comment")
+            )
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class DriverRideRatingCreate(BaseModel):
     rating: float = Field(ge=1, le=5)
-    comment: str | None = None
+    comment: str | None = Field(default=None, max_length=220)
+
+    @field_validator("comment", mode="before")
+    @classmethod
+    def normalize_comment(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError(
+                Messages.FIELD_MUST_BE_STRING_TEMPLATE.format(field_name="comment")
+            )
+        trimmed = value.strip()
+        return trimmed or None
 
 
 class RideRequestRead(BaseModel):
@@ -103,6 +132,7 @@ class RideRequestRead(BaseModel):
     cancelled_by_role: RideCancelledByRole | None
     status: RideRequestStatus
     created_at: datetime
+    passenger_ready_at: datetime | None
     completed_at: datetime | None
 
     @field_validator(
@@ -202,7 +232,7 @@ class RideShareLinkRead(BaseModel):
     def validate_tracking_url(cls, value: str) -> str:
         tracking_url = value.strip()
         if not tracking_url:
-            raise ValueError("tracking_url cannot be empty")
+            raise ValueError(Messages.TRACKING_URL_EMPTY)
         return tracking_url
 
 

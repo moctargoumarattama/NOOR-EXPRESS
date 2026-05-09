@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/auth/data/auth_repository.dart';
 import '../models/app_role.dart';
 import '../models/auth_session.dart';
+import '../network/api_error.dart';
 import '../network/api_client.dart';
 import '../notifications/fcm_service.dart';
 import '../storage/secure_storage_service.dart';
@@ -12,6 +13,7 @@ import '../storage/secure_storage_service.dart';
 enum SessionStatus {
   initial,
   loading,
+  restoreFailed,
   unauthenticated,
   authenticated,
 }
@@ -26,6 +28,7 @@ class SessionState {
     this.name,
     this.refreshToken,
     this.errorMessage,
+    this.restoreFailureType = ApiIssueType.unknown,
   });
 
   const SessionState.initial() : this(status: SessionStatus.initial);
@@ -38,6 +41,7 @@ class SessionState {
   final String? name;
   final String? refreshToken;
   final String? errorMessage;
+  final ApiIssueType restoreFailureType;
 
   SessionState copyWith({
     SessionStatus? status,
@@ -48,6 +52,7 @@ class SessionState {
     String? name,
     String? refreshToken,
     String? errorMessage,
+    ApiIssueType? restoreFailureType,
     bool clearUserId = false,
     bool clearToken = false,
     bool clearRole = false,
@@ -67,6 +72,9 @@ class SessionState {
           clearRefreshToken ? null : refreshToken ?? this.refreshToken,
       errorMessage:
           clearErrorMessage ? null : errorMessage ?? this.errorMessage,
+      restoreFailureType:
+          restoreFailureType ??
+          (clearErrorMessage ? ApiIssueType.unknown : this.restoreFailureType),
     );
   }
 
@@ -134,11 +142,30 @@ class SessionController extends StateNotifier<SessionState> {
         refreshToken: refreshToken,
       );
       await setAuthenticatedSession(session);
-    } on AuthFailure catch (_) {
-      _apiClient.clearAuthToken();
-      await _storageService.clearSession();
-      state = const SessionState(status: SessionStatus.unauthenticated);
+    } on AuthFailure catch (error) {
+      if (error.type == AuthFailureType.unauthorized) {
+        _apiClient.clearAuthToken();
+        await _storageService.clearSession();
+        state = const SessionState(status: SessionStatus.unauthenticated);
+        return;
+      }
+      state = SessionState(
+        status: SessionStatus.restoreFailed,
+        errorMessage: error.message,
+        restoreFailureType: _toIssueType(error.type),
+      );
     }
+  }
+
+  void markRestoreFailure({
+    required String message,
+    required ApiIssueType type,
+  }) {
+    state = SessionState(
+      status: SessionStatus.restoreFailed,
+      errorMessage: message,
+      restoreFailureType: type,
+    );
   }
 
   Future<void> login({
@@ -215,5 +242,19 @@ class SessionController extends StateNotifier<SessionState> {
       phoneNumber: session.phoneNumber,
       refreshToken: session.refreshToken,
     );
+  }
+
+  ApiIssueType _toIssueType(AuthFailureType type) {
+    switch (type) {
+      case AuthFailureType.offline:
+        return ApiIssueType.offline;
+      case AuthFailureType.timeout:
+        return ApiIssueType.timeout;
+      case AuthFailureType.serverUnavailable:
+        return ApiIssueType.serverUnavailable;
+      case AuthFailureType.unauthorized:
+      case AuthFailureType.unknown:
+        return ApiIssueType.unknown;
+    }
   }
 }

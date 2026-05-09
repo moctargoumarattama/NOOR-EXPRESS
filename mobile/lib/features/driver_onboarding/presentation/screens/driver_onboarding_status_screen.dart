@@ -178,16 +178,33 @@ class _StatusCard extends StatelessWidget {
           primaryTap: (context) => () => context.go(AppRoutes.driverOnboarding),
         );
       case DriverVerificationStatus.pending:
+        final etaMessage = _pendingEtaMessage(profile.submittedAt);
         return _StatusContent(
           icon: Icons.hourglass_top_rounded,
           color: AppColors.gold,
-          title: 'Dossier en verification',
-          message:
-              'Notre equipe examine vos documents. Vous serez notifie sous 24h.',
-          primaryLabel: 'Voir l accueil',
-          primaryTap: (context) => () => context.go(AppRoutes.driverHome),
+          title: 'En attente de validation',
+          message: etaMessage,
+          primaryLabel: 'Rafraichir le statut',
+          primaryTap: (context) => () => context.go(AppRoutes.driverOnboardingStatus),
         );
     }
+  }
+
+  String _pendingEtaMessage(DateTime? submittedAt) {
+    if (submittedAt == null) {
+      return 'Notre equipe examine vos documents. Delai estime: moins de 24h.';
+    }
+
+    final eta = submittedAt.add(const Duration(hours: 24));
+    final remaining = eta.difference(DateTime.now());
+    if (remaining.isNegative) {
+      return 'Votre dossier est toujours en attente de validation. Delai estime depasse, notre equipe le traite en priorite.';
+    }
+
+    final hours = remaining.inHours;
+    final minutes = remaining.inMinutes.remainder(60);
+    final timeLeft = hours > 0 ? '${hours}h ${minutes}min' : '${minutes}min';
+    return 'Votre dossier est en attente de validation. Delai estime restant: $timeLeft.';
   }
 }
 

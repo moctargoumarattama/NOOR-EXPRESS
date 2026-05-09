@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/notifications/notification_inbox_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -15,6 +16,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _rideAlerts = true;
   bool _offerAlerts = true;
   bool _statusAlerts = true;
+  bool _isLoadingHistory = true;
+  List<NotificationInboxEntry> _history = const <NotificationInboxEntry>[];
+  final NotificationInboxService _notificationInboxService =
+      NotificationInboxService();
 
   @override
   void initState() {
@@ -64,9 +69,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               ),
             ),
             const SizedBox(height: 18),
-            const _Section(
-              title: 'Aujourd hui',
-              child: _EmptyState(),
+            _Section(
+              title: 'Dernieres alertes (30 max)',
+              child: _HistoryPanel(
+                isLoading: _isLoadingHistory,
+                entries: _history,
+                onRefresh: _loadHistory,
+                onClear: _clearHistory,
+              ),
             ),
           ],
         ),
@@ -76,6 +86,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
+    final history = await _notificationInboxService.fetchRecent(
+      limit: NotificationInboxService.maxEntries,
+    );
     if (!mounted) {
       return;
     }
@@ -83,6 +96,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       _rideAlerts = prefs.getBool('notif_rides') ?? true;
       _offerAlerts = prefs.getBool('notif_offers') ?? true;
       _statusAlerts = prefs.getBool('notif_status') ?? true;
+      _history = history;
+      _isLoadingHistory = false;
     });
   }
 
@@ -105,6 +120,33 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       context,
       message: value ? 'C est bien active.' : 'C est bien desactive.',
       tone: AppSnackbarTone.success,
+    );
+  }
+
+  Future<void> _loadHistory() async {
+    setState(() => _isLoadingHistory = true);
+    final history = await _notificationInboxService.fetchRecent(
+      limit: NotificationInboxService.maxEntries,
+    );
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _history = history;
+      _isLoadingHistory = false;
+    });
+  }
+
+  Future<void> _clearHistory() async {
+    await _notificationInboxService.clear();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _history = const <NotificationInboxEntry>[]);
+    AppSnackbar.show(
+      context,
+      message: 'Historique des notifications vide.',
+      tone: AppSnackbarTone.info,
     );
   }
 }
@@ -295,4 +337,184 @@ class _EmptyState extends StatelessWidget {
       ),
     );
   }
+}
+
+class _HistoryPanel extends StatelessWidget {
+  const _HistoryPanel({
+    required this.isLoading,
+    required this.entries,
+    required this.onRefresh,
+    required this.onClear,
+  });
+
+  final bool isLoading;
+  final List<NotificationInboxEntry> entries;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function() onClear;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 28),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (entries.isEmpty) {
+      return const _EmptyState();
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 2),
+          child: Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'Course acceptee, document valide, avertissement...',
+                  style: TextStyle(
+                    color: AppColors.stone,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: onRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Rafraichir',
+              ),
+              IconButton(
+                onPressed: onClear,
+                icon: const Icon(Icons.delete_outline_rounded),
+                tooltip: 'Vider',
+              ),
+            ],
+          ),
+        ),
+        const Divider(height: 1),
+        for (final entry in entries) _HistoryTile(entry: entry),
+      ],
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  const _HistoryTile({required this.entry});
+
+  final NotificationInboxEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final tone = _toneForType(entry.type);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: tone.softColor,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Icon(tone.icon, color: tone.iconColor),
+      ),
+      title: Text(
+        entry.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(fontWeight: FontWeight.w800),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 2),
+          Text(
+            entry.message,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _formatTimestamp(entry.receivedAt),
+            style: const TextStyle(
+              color: AppColors.stone,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _NotificationTone _toneForType(String? type) {
+    final value = type?.toLowerCase() ?? '';
+    if (value.contains('warning') || value.contains('alert')) {
+      return const _NotificationTone(
+        icon: Icons.warning_amber_rounded,
+        iconColor: AppColors.warning,
+        softColor: AppColors.warningSoft,
+      );
+    }
+    if (value.contains('document') ||
+        value.contains('verification') ||
+        value.contains('profile')) {
+      return const _NotificationTone(
+        icon: Icons.verified_user_rounded,
+        iconColor: AppColors.info,
+        softColor: AppColors.infoSoft,
+      );
+    }
+    if (value.contains('offer')) {
+      return const _NotificationTone(
+        icon: Icons.price_change_rounded,
+        iconColor: AppColors.gold,
+        softColor: Color(0x12F5A623),
+      );
+    }
+    if (value.contains('ride') || value.contains('driver')) {
+      return const _NotificationTone(
+        icon: Icons.local_taxi_rounded,
+        iconColor: AppColors.emerald,
+        softColor: AppColors.mint,
+      );
+    }
+    return const _NotificationTone(
+      icon: Icons.notifications_rounded,
+      iconColor: AppColors.stone,
+      softColor: AppColors.border,
+    );
+  }
+
+  String _formatTimestamp(DateTime dateTime) {
+    final now = DateTime.now();
+    final diff = now.difference(dateTime);
+    if (diff.inMinutes < 1) {
+      return 'A l instant';
+    }
+    if (diff.inHours < 1) {
+      return 'Il y a ${diff.inMinutes} min';
+    }
+    if (diff.inHours < 24) {
+      return 'Il y a ${diff.inHours} h';
+    }
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '$day/$month a $hour:$minute';
+  }
+}
+
+class _NotificationTone {
+  const _NotificationTone({
+    required this.icon,
+    required this.iconColor,
+    required this.softColor,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color softColor;
 }

@@ -21,6 +21,7 @@ import '../features/home/driver/presentation/screens/driver_stats_screen.dart';
 import '../features/home/driver/presentation/screens/driver_vehicle_screen.dart';
 import '../features/driver_onboarding/presentation/screens/driver_onboarding_screen.dart';
 import '../features/driver_onboarding/presentation/screens/driver_onboarding_status_screen.dart';
+import '../features/driver_onboarding/presentation/controllers/driver_onboarding_flow.dart';
 import '../features/history/screens/ride_detail_screen.dart';
 import '../features/negotiation/presentation/screens/client_negotiation_screen.dart';
 import '../features/negotiation/presentation/screens/driver_offer_screen.dart';
@@ -42,6 +43,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   final onboardingCompletedState = ref.watch(
     passengerOnboardingCompletedProvider,
   );
+  final driverOnboardingFlowState = ref.watch(driverOnboardingFlowProvider);
 
   return GoRouter(
     navigatorKey: rootNavigatorKey,
@@ -268,6 +270,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return resolveAppRedirect(
         sessionState: sessionState,
         onboardingCompletedState: onboardingCompletedState,
+        driverOnboardingFlowState: driverOnboardingFlowState,
         location: state.matchedLocation,
       );
     },
@@ -277,6 +280,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 String? resolveAppRedirect({
   required SessionState sessionState,
   required AsyncValue<bool> onboardingCompletedState,
+  required AsyncValue<DriverOnboardingFlowState> driverOnboardingFlowState,
   required String location,
 }) {
   final isSplash = location == AppRoutes.splash;
@@ -286,10 +290,14 @@ String? resolveAppRedirect({
       location == AppRoutes.otp ||
       location == AppRoutes.roleSelect;
   final isPassengerOnboarding = location == AppRoutes.clientOnboarding;
+  final isDriverOnboarding = location == AppRoutes.driverOnboarding;
+  final isDriverOnboardingStatus = location == AppRoutes.driverOnboardingStatus;
 
   switch (sessionState.status) {
     case SessionStatus.initial:
     case SessionStatus.loading:
+      return isSplash ? null : AppRoutes.splash;
+    case SessionStatus.restoreFailed:
       return isSplash ? null : AppRoutes.splash;
     case SessionStatus.unauthenticated:
       if (isPassengerOnboarding) {
@@ -310,8 +318,47 @@ String? resolveAppRedirect({
         if (!mustShowOnboarding && isPassengerOnboarding) {
           return AppRoutes.clientHome;
         }
+        if (_isDriverScopedLocation(location)) {
+          return mustShowOnboarding
+              ? AppRoutes.clientOnboarding
+              : AppRoutes.clientHome;
+        }
       } else if (isPassengerOnboarding) {
         return AppRoutes.driverHome;
+      } else {
+        if (driverOnboardingFlowState.isLoading) {
+          if (isSplash || isDriverOnboarding || isDriverOnboardingStatus) {
+            return null;
+          }
+          return AppRoutes.splash;
+        }
+        final driverFlow = driverOnboardingFlowState.valueOrNull ??
+            DriverOnboardingFlowState.unknown;
+        switch (driverFlow) {
+          case DriverOnboardingFlowState.needsSubmission:
+            return isDriverOnboarding ? null : AppRoutes.driverOnboarding;
+          case DriverOnboardingFlowState.pendingValidation:
+            return isDriverOnboardingStatus
+                ? null
+                : AppRoutes.driverOnboardingStatus;
+          case DriverOnboardingFlowState.rejected:
+            if (isDriverOnboarding || isDriverOnboardingStatus) {
+              return null;
+            }
+            return isDriverOnboardingStatus
+                ? null
+                : AppRoutes.driverOnboardingStatus;
+          case DriverOnboardingFlowState.verified:
+            if (isDriverOnboarding || isDriverOnboardingStatus) {
+              return AppRoutes.driverHome;
+            }
+            break;
+          case DriverOnboardingFlowState.unknown:
+            break;
+        }
+        if (_isClientScopedLocation(location)) {
+          return AppRoutes.driverHome;
+        }
       }
 
       final homeRoute = sessionState.role == AppRole.driver
@@ -322,6 +369,14 @@ String? resolveAppRedirect({
       }
       return null;
   }
+}
+
+bool _isDriverScopedLocation(String location) {
+  return location.startsWith('/driver/');
+}
+
+bool _isClientScopedLocation(String location) {
+  return location.startsWith('/client/');
 }
 
 CustomTransitionPage<void> _fastFadePage({

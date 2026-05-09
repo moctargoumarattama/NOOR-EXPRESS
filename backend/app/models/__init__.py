@@ -25,6 +25,7 @@ from app.models.ride_request import (
 )
 from app.models.ride_request_rejection import RideRequestRejection
 from app.models.ride_report import RideReport, RideReportReason, RideReportStatus
+from app.models.withdrawal_request import WithdrawalRequest, WithdrawalRequestStatus
 
 __all__ = [
     "User",
@@ -54,4 +55,6 @@ __all__ = [
     "RideReport",
     "RideReportReason",
     "RideReportStatus",
+    "WithdrawalRequest",
+    "WithdrawalRequestStatus",
 ]

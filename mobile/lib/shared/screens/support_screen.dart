@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/models/app_role.dart';
 import '../../core/services/support_contact_service.dart';
+import '../../core/state/session_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../widgets/app_snackbar.dart';
 
@@ -12,6 +13,8 @@ class SupportScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final supportService = ref.watch(supportContactServiceProvider);
+    final role = ref.watch(sessionControllerProvider).role ?? AppRole.client;
+    final roleLabel = role == AppRole.driver ? 'chauffeur' : 'client';
     return Scaffold(
       backgroundColor: AppColors.cloud,
       body: SafeArea(
@@ -25,9 +28,35 @@ class SupportScreen extends ConsumerWidget {
             const SizedBox(height: 20),
             const _InfoPanel(
               icon: Icons.support_agent_rounded,
-              title: 'Assistance Noor Express',
-              body: 'Contactez directement notre equipe sur WhatsApp pour '
-                  'obtenir une aide rapide.',
+              title: 'Assistance Noor Express - Niamey',
+              body: 'Notre equipe locale vous repond tous les jours pour '
+                  'les courses, objets oublies, paiement et securite.',
+            ),
+            const SizedBox(height: 14),
+            const _InfoPanel(
+              icon: Icons.info_outline_rounded,
+              title: 'Quand nous contacter ?',
+              body:
+                  'Ecrivez-nous si vous avez un blocage pendant ou apres une course.',
+              highlights: [
+                'Retard important ou annulation abusive.',
+                'Objet oublie dans le vehicule.',
+                'Litige de prix ou comportement inapproprie.',
+                'Compte bloque ou probleme technique.',
+              ],
+            ),
+            const SizedBox(height: 14),
+            _InfoPanel(
+              icon: Icons.badge_outlined,
+              title: 'Informations a preparer',
+              body:
+                  'Pour un traitement rapide, envoyez les details ci-dessous.',
+              highlights: [
+                'Votre role: $roleLabel.',
+                'Heure approximative et zone de la course a Niamey.',
+                'Numero du chauffeur/client si disponible.',
+                'Description courte du probleme.',
+              ],
             ),
             const SizedBox(height: 14),
             _InfoPanel(
@@ -38,14 +67,14 @@ class SupportScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             FilledButton.icon(
-              onPressed: () => _openSupportChat(context, ref),
+              onPressed: () => _openSupportChat(context, ref, role),
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.emerald,
                 foregroundColor: AppColors.pearl,
                 minimumSize: const Size.fromHeight(52),
               ),
               icon: const Icon(Icons.support_agent_rounded),
-              label: const Text('Contacter le support'),
+              label: const Text('Contacter le support sur WhatsApp'),
             ),
           ],
         ),
@@ -54,10 +83,13 @@ class SupportScreen extends ConsumerWidget {
   }
 }
 
-Future<void> _openSupportChat(BuildContext context, WidgetRef ref) async {
-  final result = await ref
-      .read(supportContactServiceProvider)
-      .openSupportChat(AppRole.client);
+Future<void> _openSupportChat(
+  BuildContext context,
+  WidgetRef ref,
+  AppRole role,
+) async {
+  final result =
+      await ref.read(supportContactServiceProvider).openSupportChat(role);
   if (!context.mounted || result.type != SupportContactResultType.failed) {
     return;
   }
@@ -97,11 +129,13 @@ class _InfoPanel extends StatelessWidget {
     required this.icon,
     required this.title,
     required this.body,
+    this.highlights = const <String>[],
   });
 
   final IconData icon;
   final String title;
   final String body;
+  final List<String> highlights;
 
   @override
   Widget build(BuildContext context) {
@@ -145,6 +179,33 @@ class _InfoPanel extends StatelessWidget {
                     body,
                     style: const TextStyle(color: AppColors.stone, height: 1.4),
                   ),
+                  if (highlights.isNotEmpty) const SizedBox(height: 10),
+                  for (final highlight in highlights)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Padding(
+                            padding: EdgeInsets.only(top: 3, right: 6),
+                            child: Icon(
+                              Icons.circle,
+                              size: 6,
+                              color: AppColors.stone,
+                            ),
+                          ),
+                          Expanded(
+                            child: Text(
+                              highlight,
+                              style: const TextStyle(
+                                color: AppColors.stone,
+                                height: 1.35,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
             ),

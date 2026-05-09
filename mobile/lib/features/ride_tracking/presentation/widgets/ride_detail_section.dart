@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../data/models/ride_tracking_model.dart';
 import '../../../../shared/widgets/app_surface_card.dart';
 import '../../../../shared/widgets/status_badge.dart';
@@ -37,17 +38,18 @@ class RideDetailSection extends StatelessWidget {
           _RideReceiptCard(ride: ride),
           const SizedBox(height: 18),
         ],
-        RideDetailRow(label: 'Depart', value: ride.pickupLocation),
-        const SizedBox(height: 10),
-        RideDetailRow(label: 'Destination', value: ride.dropoffLocation),
-        const SizedBox(height: 14),
+        _RideRouteCompactCard(
+          pickupLocation: ride.pickupLocation,
+          dropoffLocation: ride.dropoffLocation,
+        ),
+        const SizedBox(height: 12),
         Wrap(
           spacing: 10,
           runSpacing: 10,
           children: [
             _RideFactChip(
               icon: Icons.payments_outlined,
-              label: 'Prix accepte',
+              label: 'Prix',
               value: '${ride.displayedPrice.toStringAsFixed(0)} FCFA',
             ),
             if (statusLabel != null)
@@ -59,7 +61,7 @@ class RideDetailSection extends StatelessWidget {
             if (distanceRemainingKm != null)
               _RideFactChip(
                 icon: Icons.social_distance_rounded,
-                label: 'Restant',
+                label: 'Distance',
                 value: '${distanceRemainingKm!.toStringAsFixed(1)} km',
               ),
             if (ride.isCompleted &&
@@ -118,8 +120,8 @@ class _RideReceiptCard extends StatelessWidget {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFF4FBF7),
-              Color(0xFFFFFFFF),
+              AppColors.nigerGreenSoft,
+              AppColors.pearl,
             ],
           ),
           borderRadius: BorderRadius.all(Radius.circular(12)),
@@ -133,12 +135,12 @@ class _RideReceiptCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: const Color(0x141B8A5A),
+                    color: AppColors.nigerGreenSoft,
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: const Icon(
                     Icons.receipt_long_rounded,
-                    color: Color(0xFF1B8A5A),
+                    color: AppColors.nigerGreen,
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -157,7 +159,7 @@ class _RideReceiptCard extends StatelessWidget {
                       Text(
                         'Paiement et trajet confirmes',
                         style: TextStyle(
-                          color: Color(0xFF6B7280),
+                          color: AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -171,7 +173,7 @@ class _RideReceiptCard extends StatelessWidget {
             Text(
               '${ride.displayedPrice.toStringAsFixed(0)} FCFA',
               style: const TextStyle(
-                color: Color(0xFF0F172A),
+                color: AppColors.textPrimary,
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
               ),
@@ -180,7 +182,7 @@ class _RideReceiptCard extends StatelessWidget {
             Text(
               _receiptMeta,
               style: const TextStyle(
-                color: Color(0xFF6B7280),
+                color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -243,60 +245,24 @@ class _ReceiptPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.pearl,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF1B8A5A)),
+          Icon(icon, size: 16, color: AppColors.nigerGreen),
           const SizedBox(width: 8),
           Text(
             label,
             style: const TextStyle(
-              color: Color(0xFF111827),
+              color: AppColors.textPrimary,
               fontWeight: FontWeight.w800,
             ),
           ),
         ],
       ),
-    );
-  }
-}
-
-class RideDetailRow extends StatelessWidget {
-  const RideDetailRow({
-    super.key,
-    required this.label,
-    required this.value,
-  });
-
-  final String label;
-  final String value;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Color(0xFF7A8598),
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w700,
-            height: 1.35,
-          ),
-        ),
-      ],
     );
   }
 }
@@ -315,32 +281,36 @@ class _RideFactChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      constraints: const BoxConstraints(minHeight: 52),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
       decoration: BoxDecoration(
-        color: const Color(0xFFF5F7FB),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.backgroundSubtle,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(icon, size: 16, color: const Color(0xFF1B8A5A)),
+          Icon(icon, size: 16, color: AppColors.nigerGreen),
           const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
                 label,
                 style: const TextStyle(
-                  color: Color(0xFF7A8598),
-                  fontSize: 11,
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 1),
               Text(
                 value,
                 style: const TextStyle(
-                  color: Color(0xFF111827),
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.w800,
                 ),
               ),
@@ -348,6 +318,106 @@ class _RideFactChip extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _RideRouteCompactCard extends StatelessWidget {
+  const _RideRouteCompactCard({
+    required this.pickupLocation,
+    required this.dropoffLocation,
+  });
+
+  final String pickupLocation;
+  final String dropoffLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSubtle,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          _RouteLine(
+            icon: Icons.trip_origin_rounded,
+            iconColor: AppColors.nigerGreen,
+            label: 'Depart',
+            value: pickupLocation,
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            height: 1,
+            color: AppColors.border,
+          ),
+          const SizedBox(height: 8),
+          _RouteLine(
+            icon: Icons.location_on_rounded,
+            iconColor: AppColors.nigerOrange,
+            label: 'Arrivee',
+            value: dropoffLocation,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RouteLine extends StatelessWidget {
+  const _RouteLine({
+    required this.icon,
+    required this.iconColor,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: 1),
+          child: Icon(icon, size: 14, color: iconColor),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

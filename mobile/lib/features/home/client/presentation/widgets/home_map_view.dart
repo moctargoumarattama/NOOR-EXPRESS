@@ -3,6 +3,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../../../core/location/location_quality.dart';
 import '../../../../../core/map/tile_cache_service.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
 import '../../../../map/data/models/map_point.dart';
@@ -10,19 +11,22 @@ import '../../../../map/data/models/realtime_driver_marker.dart';
 import '../../../../map/controllers/map_controller_provider.dart';
 import '../../../../map/widgets/drivers_layer.dart';
 import '../../../../map/widgets/eta_overlay.dart';
-import '../../../../map/widgets/pulse_marker.dart';
 import '../../../../map/widgets/route_layer.dart';
 
 class HomeMapView extends ConsumerStatefulWidget {
   const HomeMapView({
     super.key,
     required this.drivers,
+    required this.locationQuality,
     this.clientPosition,
+    this.locationAccuracyMeters,
     this.pickup,
     this.dropoff,
   });
 
   final MapPoint? clientPosition;
+  final LocationQuality locationQuality;
+  final double? locationAccuracyMeters;
   final AddressResult? pickup;
   final AddressResult? dropoff;
   final List<RealtimeDriverMarker> drivers;
@@ -45,7 +49,9 @@ class HomeMapViewState extends ConsumerState<HomeMapView> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.pickup != widget.pickup ||
         oldWidget.dropoff != widget.dropoff ||
-        oldWidget.clientPosition != widget.clientPosition) {
+        oldWidget.clientPosition != widget.clientPosition ||
+        oldWidget.locationQuality != widget.locationQuality ||
+        oldWidget.locationAccuracyMeters != widget.locationAccuracyMeters) {
       _refreshRoute();
       WidgetsBinding.instance.addPostFrameCallback((_) => _fitFocus());
     }
@@ -85,6 +91,19 @@ class HomeMapViewState extends ConsumerState<HomeMapView> {
                 evictErrorTileStrategy: EvictErrorTileStrategy.dispose,
               ),
               RouteLayer(route: noorMapState.route),
+              if (_showApproximateAccuracyCircle)
+                CircleLayer(
+                  circles: [
+                    CircleMarker(
+                      point: _primaryPoint!,
+                      radius: _normalizedAccuracyMeters,
+                      useRadiusInMeter: true,
+                      color: const Color(0x334A90E2),
+                      borderColor: const Color(0x664A90E2),
+                      borderStrokeWidth: 1.4,
+                    ),
+                  ],
+                ),
               MarkerLayer(markers: _markers),
               DriversLayer(drivers: widget.drivers),
             ],
@@ -118,30 +137,46 @@ class HomeMapViewState extends ConsumerState<HomeMapView> {
   }
 
   List<LatLng> get _focusPoints {
+    final primaryPoint = _primaryPoint;
     return [
-      _clientPoint,
+      if (primaryPoint != null) primaryPoint,
       _addressPoint(widget.pickup),
       _addressPoint(widget.dropoff),
     ].whereType<LatLng>().toList();
   }
 
-  List<Marker> get _markers {
+  LatLng? get _primaryPoint {
     final pickup = _addressPoint(widget.pickup);
+    if (pickup != null) {
+      return pickup;
+    }
+    final current = widget.clientPosition;
+    if (current == null || widget.locationQuality == LocationQuality.unknown) {
+      return null;
+    }
+    return LatLng(current.latitude, current.longitude);
+  }
+
+  bool get _showApproximateAccuracyCircle {
+    return widget.locationQuality == LocationQuality.approximate &&
+        _primaryPoint != null &&
+        _normalizedAccuracyMeters > 0;
+  }
+
+  double get _normalizedAccuracyMeters {
+    final accuracy = widget.locationAccuracyMeters;
+    if (accuracy == null || !accuracy.isFinite || accuracy <= 0) {
+      return 0;
+    }
+    return accuracy;
+  }
+
+  List<Marker> get _markers {
     final dropoff = _addressPoint(widget.dropoff);
+    final primaryPoint = _primaryPoint;
 
     return [
-      Marker(
-        point: _clientPoint,
-        width: 74,
-        height: 74,
-        child: const PulseMarker(),
-      ),
-      if (pickup != null)
-        _pinMarker(
-          point: pickup,
-          color: const Color(0xFF1B8A5A),
-          icon: Icons.trip_origin_rounded,
-        ),
+      if (primaryPoint != null) _primaryMarker(primaryPoint),
       if (dropoff != null)
         _pinMarker(
           point: dropoff,
@@ -181,6 +216,63 @@ class HomeMapViewState extends ConsumerState<HomeMapView> {
         child: Icon(icon, color: Colors.white, size: 20),
       ),
     );
+  }
+
+  Marker _primaryMarker(LatLng point) {
+    switch (widget.locationQuality) {
+      case LocationQuality.confirmed:
+        return Marker(
+          point: point,
+          width: 24,
+          height: 24,
+          child: Center(
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E6CF6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+            ),
+          ),
+        );
+      case LocationQuality.approximate:
+        return Marker(
+          point: point,
+          width: 24,
+          height: 24,
+          child: Center(
+            child: Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2E6CF6),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+            ),
+          ),
+        );
+      case LocationQuality.manual:
+        return Marker(
+          point: point,
+          width: 42,
+          height: 42,
+          child: const Icon(
+            Icons.location_pin,
+            color: Color(0xFFE67E22),
+            size: 38,
+          ),
+        );
+      case LocationQuality.unknown:
+        return Marker(
+          point: point,
+          width: 0,
+          height: 0,
+          child: const SizedBox.shrink(),
+        );
+    }
   }
 
   LatLng? _addressPoint(AddressResult? result) {

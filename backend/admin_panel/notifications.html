@@ -1,7 +1,7 @@
 ﻿<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Notifications - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
@@ -17,6 +17,11 @@
       </div>
     </div>
     <p id="message" class="message"></p>
+    <section class="panel" id="firebase-warning-panel" style="display:none;">
+      <p class="message" id="firebase-warning-message">
+        Firebase non configure - les notifications ne seront pas envoyees.
+      </p>
+    </section>
     <section class="panel">
       <div class="form-grid">
         <label>Cible
@@ -66,6 +71,8 @@
             <th>Cible</th>
             <th>Titre</th>
             <th>Type</th>
+            <th>Statut FCM</th>
+            <th>Resultat</th>
             <th>Destinataires</th>
           </tr>
         </thead>
@@ -84,3 +91,4 @@
   </script>
 </body>
 </html>
+

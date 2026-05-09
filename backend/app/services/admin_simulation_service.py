@@ -1,6 +1,7 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
+import base64
 import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
@@ -11,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.messages import Messages
 from app.db.database import AsyncSessionLocal
 from app.models.ride_offer import RideOffer, RideOfferStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
@@ -44,6 +46,15 @@ SIMULATION_GPS_INTERVAL_SECONDS = 2.0
 SIMULATION_PICKUP_STEPS = 6
 SIMULATION_DROPOFF_STEPS = 8
 SIMULATION_WATCH_SECONDS = 180
+SIMULATION_DOCUMENT_VALIDITY_DAYS = 365
+SIMULATION_DRIVER_ADDRESS = "Rabat Agdal"
+SIMULATION_ID_CARD_SEED = "simulation-id-card"
+SIMULATION_SELFIE_SEED = "simulation-selfie"
+SIMULATION_VEHICLE_PHOTO_SEED = "simulation-vehicle-photo"
+SIMULATION_LICENSE_SEED = "simulation-license"
+SIMULATION_REGISTRATION_SEED = "simulation-registration"
+SIMULATION_INSURANCE_SEED = "simulation-insurance"
+SIMULATION_TECHNICAL_INSPECTION_SEED = "simulation-technical-inspection"
 
 
 class SimulationDisabledError(Exception):
@@ -158,7 +169,7 @@ def ensure_dev_simulations_enabled() -> None:
     if dev_simulations_allowed():
         return
     raise SimulationDisabledError(
-        "Dev simulations are disabled. Set ENABLE_DEV_SIMULATIONS=true outside production."
+        Messages.DEV_SIMULATIONS_DISABLED
     )
 
 
@@ -407,26 +418,12 @@ async def _create_fake_driver(
     await create_or_update_profile(
         session,
         driver.id,
-        DriverProfileCreate(
-            first_name=name.split(" ", 1)[0],
-            last_name=name.split(" ", 1)[1] if " " in name else "Test",
-            address="Rabat Agdal",
-            id_card_photo="simulation-id-card",
-            selfie_photo="simulation-selfie",
-            driver_license_file="simulation-license",
-            driver_license_expires_at=_simulation_document_expiry(),
-            vehicle_registration_file="simulation-registration",
-            vehicle_registration_expires_at=_simulation_document_expiry(),
-            vehicle_insurance_file="simulation-insurance",
-            vehicle_insurance_expires_at=_simulation_document_expiry(),
-            technical_inspection_file="simulation-technical-inspection",
-            technical_inspection_expires_at=_simulation_document_expiry(),
-        ),
+        _build_simulation_driver_profile(name),
     )
     await verify_driver(session, driver.id)
     driver = await session.get(User, driver.id)
     if driver is None:
-        raise SimulationUnsafeTargetError("Unable to reload fake driver")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_DRIVER_RELOAD_FAILED)
     driver.is_available = True
     driver.fcm_token = None
     driver.driver_status = DriverStatus.ONLINE
@@ -460,7 +457,7 @@ async def _create_unique_user(
             return user
         except UserPhoneAlreadyExistsError:
             continue
-    raise SimulationUnsafeTargetError("Unable to create a unique simulation user")
+    raise SimulationUnsafeTargetError(Messages.SIMULATION_USER_CREATE_FAILED)
 
 
 async def _get_allowed_ride(
@@ -471,16 +468,16 @@ async def _get_allowed_ride(
 ) -> RideRequest:
     ride = await session.get(RideRequest, ride_id)
     if ride is None:
-        raise SimulationUnsafeTargetError("Ride not found")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_RIDE_NOT_FOUND)
     if ride.status not in {RideRequestStatus.PENDING, RideRequestStatus.OFFERED}:
-        raise SimulationUnsafeTargetError("Ride must be pending or offered")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_RIDE_STATUS_INVALID)
 
     client = await session.get(User, ride.client_id)
     if client is None:
-        raise SimulationUnsafeTargetError("Ride client not found")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_RIDE_CLIENT_NOT_FOUND)
     if not allow_real_users and not _is_simulation_user(client):
         raise SimulationUnsafeTargetError(
-            "Refusing to use a real client without allow_real_users=true"
+            Messages.FORBIDDEN
         )
     return ride
 
@@ -528,7 +525,7 @@ async def _assert_no_unapproved_real_nearby_drivers(
     ]
     if real_drivers:
         raise SimulationUnsafeTargetError(
-            "Real nearby drivers detected. Pass allow_real_users=true explicitly in dev."
+            Messages.SIMULATION_REAL_DRIVER_NEARBY
         )
 
 
@@ -566,10 +563,10 @@ async def _watch_driver_offer_and_run_tracking(
                 if offer is not None:
                     ride = await session.get(RideRequest, ride_id)
                     if ride is None:
-                        raise SimulationUnsafeTargetError("Ride not found during offer watch")
+                        raise SimulationUnsafeTargetError(Messages.SIMULATION_RIDE_NOT_FOUND)
                     client = await session.get(User, ride.client_id)
                     if client is None:
-                        raise SimulationUnsafeTargetError("Client not found during offer watch")
+                        raise SimulationUnsafeTargetError(Messages.SIMULATION_RIDE_CLIENT_NOT_FOUND)
 
                     await accept_offer(session, offer.id, client)
                     state.driver_ids = [offer.driver_id]
@@ -620,7 +617,7 @@ async def _run_driver_tracking_flow(
         async with AsyncSessionLocal() as session:
             driver = await session.get(User, driver_id)
             if driver is None:
-                raise SimulationUnsafeTargetError("Driver not found during tracking")
+                raise SimulationUnsafeTargetError(Messages.DRIVER_NOT_FOUND)
             await mark_arrived(session, ride_id, driver)
             state.add_log("Arrive au point de prise en charge")
 
@@ -638,7 +635,7 @@ async def _run_driver_tracking_flow(
         async with AsyncSessionLocal() as session:
             driver = await session.get(User, driver_id)
             if driver is None:
-                raise SimulationUnsafeTargetError("Driver not found during completion")
+                raise SimulationUnsafeTargetError(Messages.DRIVER_NOT_FOUND)
             await complete_ride(session, ride_id, driver)
             state.add_log("Course terminee")
             state.active = False
@@ -760,8 +757,41 @@ def _fake_phone(*, index: int) -> str:
     return f"{SIMULATION_USER_PHONE_PREFIX}{seed:06d}{index:02d}"
 
 
+def _build_simulation_driver_profile(name: str) -> DriverProfileCreate:
+    first_name, last_name = _split_simulation_driver_name(name)
+    return DriverProfileCreate(
+        first_name=first_name,
+        last_name=last_name,
+        address=SIMULATION_DRIVER_ADDRESS,
+        id_card_photo=_simulation_document_base64(SIMULATION_ID_CARD_SEED),
+        selfie_photo=_simulation_document_base64(SIMULATION_SELFIE_SEED),
+        vehicle_photo=_simulation_document_base64(SIMULATION_VEHICLE_PHOTO_SEED),
+        driver_license_file=_simulation_document_base64(SIMULATION_LICENSE_SEED),
+        driver_license_expires_at=_simulation_document_expiry(),
+        vehicle_registration_file=_simulation_document_base64(
+            SIMULATION_REGISTRATION_SEED
+        ),
+        vehicle_registration_expires_at=_simulation_document_expiry(),
+        vehicle_insurance_file=_simulation_document_base64(SIMULATION_INSURANCE_SEED),
+        vehicle_insurance_expires_at=_simulation_document_expiry(),
+        technical_inspection_file=_simulation_document_base64(
+            SIMULATION_TECHNICAL_INSPECTION_SEED
+        ),
+        technical_inspection_expires_at=_simulation_document_expiry(),
+    )
+
+
+def _split_simulation_driver_name(name: str) -> tuple[str, str]:
+    first_name, _, remainder = name.partition(" ")
+    return first_name, remainder or "Test"
+
+
+def _simulation_document_base64(seed: str) -> str:
+    return base64.b64encode(seed.encode("utf-8")).decode("ascii")
+
+
 def _simulation_document_expiry() -> date:
-    return datetime.utcnow().date() + timedelta(days=365)
+    return datetime.utcnow().date() + timedelta(days=SIMULATION_DOCUMENT_VALIDITY_DAYS)
 
 
 def _is_simulation_user(user: User) -> bool:
@@ -770,9 +800,9 @@ def _is_simulation_user(user: User) -> bool:
 
 def _assert_valid_price(price: Decimal) -> None:
     if price <= 0 or price > MAX_SIMULATION_PRICE_FCFA:
-        raise SimulationUnsafeTargetError("Simulation price is invalid")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_PRICE_INVALID)
     if price < MIN_SIMULATION_PRICE_FCFA:
-        raise SimulationUnsafeTargetError("Simulation price is too low")
+        raise SimulationUnsafeTargetError(Messages.SIMULATION_PRICE_TOO_LOW)
 
 
 def _calculate_distance_km(
@@ -795,3 +825,4 @@ def _calculate_distance_km(
         + cos(latitude_1_rad) * cos(latitude_2_rad) * sin(longitude_delta / 2) ** 2
     )
     return earth_radius_km * 2 * asin(sqrt(haversine))
+

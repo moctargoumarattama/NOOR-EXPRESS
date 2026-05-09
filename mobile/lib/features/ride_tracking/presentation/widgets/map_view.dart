@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/map/tile_cache_service.dart';
 import '../../data/models/ride_tracking_model.dart';
 
@@ -38,7 +39,7 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   static const _fallbackNiamey = LatLng(13.5116, 2.1254);
-  static const _cameraPadding = EdgeInsets.fromLTRB(56, 132, 56, 300);
+  static const _cameraPadding = EdgeInsets.fromLTRB(44, 124, 44, 252);
   final MapController _mapController = MapController();
 
   @override
@@ -83,12 +84,48 @@ class _MapViewState extends State<MapView> {
     }
   }
 
-  List<LatLng> get _focusPoints => [
-        _toLatLng(widget.driverPosition),
-        _toLatLng(widget.currentPosition),
-        _toLatLng(widget.pickupPosition),
-        _toLatLng(widget.destinationPosition),
-      ].whereType<LatLng>().toList();
+  List<LatLng> get _focusPoints {
+    final points = <LatLng>[];
+    final current = _toLatLng(widget.currentPosition);
+    final pickup = _toLatLng(widget.pickupPosition);
+    final destination = _toLatLng(widget.destinationPosition);
+    final driver = _toLatLng(widget.driverPosition);
+
+    switch (widget.status) {
+      case RideTrackingStatus.pending:
+      case RideTrackingStatus.offered:
+        _addFocusPoint(points, pickup);
+        if (!_samePoint(widget.currentPosition, widget.pickupPosition)) {
+          _addFocusPoint(points, current);
+        }
+        break;
+      case RideTrackingStatus.accepted:
+      case RideTrackingStatus.arrived:
+        _addFocusPoint(points, driver);
+        _addFocusPoint(points, pickup);
+        if (!_samePoint(widget.currentPosition, widget.pickupPosition)) {
+          _addFocusPoint(points, current);
+        }
+        break;
+      case RideTrackingStatus.started:
+        _addFocusPoint(points, driver);
+        _addFocusPoint(points, destination);
+        break;
+      case RideTrackingStatus.completed:
+      case RideTrackingStatus.cancelled:
+      case RideTrackingStatus.expired:
+      case RideTrackingStatus.unknown:
+        _addFocusPoint(points, driver);
+        _addFocusPoint(points, pickup);
+        _addFocusPoint(points, destination);
+        if (!_samePoint(widget.currentPosition, widget.pickupPosition)) {
+          _addFocusPoint(points, current);
+        }
+        break;
+    }
+
+    return points;
+  }
 
   List<Polyline> get _polylines {
     final pickup = _toLatLng(widget.pickupPosition);
@@ -108,7 +145,7 @@ class _MapViewState extends State<MapView> {
         Polyline(
           points: routePoints,
           strokeWidth: 5,
-          color: const Color(0xFFF5A623),
+          color: AppColors.nigerOrange,
         ),
       ];
     }
@@ -125,7 +162,7 @@ class _MapViewState extends State<MapView> {
         Polyline(
           points: routePoints,
           strokeWidth: 5,
-          color: const Color(0xFF1B8A5A),
+          color: AppColors.nigerGreen,
         ),
       ];
     }
@@ -138,7 +175,7 @@ class _MapViewState extends State<MapView> {
     final center = _focusPoints.isEmpty ? _fallbackNiamey : _focusPoints.first;
 
     return DecoratedBox(
-      decoration: const BoxDecoration(color: Color(0xFF0F1826)),
+      decoration: const BoxDecoration(color: AppColors.backgroundSubtle),
       child: Stack(
         children: [
           RepaintBoundary(
@@ -175,7 +212,7 @@ class _MapViewState extends State<MapView> {
           ),
           Positioned(
             right: 12,
-            bottom: 220,
+            bottom: 268,
             child: Column(
               children: [
                 _ZoomButton(icon: Icons.add, onTap: () => _zoomBy(1)),
@@ -212,27 +249,27 @@ class _MapViewState extends State<MapView> {
       if (shouldShowCurrent)
         _marker(
           point: widget.currentPosition!,
-          color: const Color(0xFF315DB7),
+          color: AppColors.info,
           icon: Icons.my_location_rounded,
           showPulse: pulseAnchor == TrackingPulseAnchor.current,
         ),
       if (widget.pickupPosition != null)
         _marker(
           point: widget.pickupPosition!,
-          color: const Color(0xFF1B8A5A),
+          color: AppColors.nigerGreen,
           icon: Icons.trip_origin_rounded,
           showPulse: pulseAnchor == TrackingPulseAnchor.pickup,
         ),
       if (widget.destinationPosition != null)
         _marker(
           point: widget.destinationPosition!,
-          color: const Color(0xFFF5A623),
+          color: AppColors.nigerOrange,
           icon: Icons.flag_rounded,
         ),
       if (widget.driverPosition != null)
         _marker(
           point: widget.driverPosition!,
-          color: const Color(0xFF1B8A5A),
+          color: AppColors.nigerGreen,
           icon: Icons.navigation_rounded,
           rotationDegrees: widget.driverHeadingDegrees,
           showPulse: pulseAnchor == TrackingPulseAnchor.driver,
@@ -273,6 +310,20 @@ class _MapViewState extends State<MapView> {
 
   bool _samePoint(TrackingCoordinates? left, TrackingCoordinates? right) {
     return trackingCoordinatesEqual(left, right);
+  }
+
+  void _addFocusPoint(List<LatLng> points, LatLng? point) {
+    if (point == null) {
+      return;
+    }
+    final exists = points.any(
+      (existing) =>
+          (existing.latitude - point.latitude).abs() < 0.00001 &&
+          (existing.longitude - point.longitude).abs() < 0.00001,
+    );
+    if (!exists) {
+      points.add(point);
+    }
   }
 }
 
@@ -496,7 +547,10 @@ bool shouldRefitTrackingViewport({
     return true;
   }
 
-  return !trackingCoordinatesEqual(previousPickupPosition, nextPickupPosition) ||
+  return !trackingCoordinatesEqual(
+          previousPickupPosition, nextPickupPosition) ||
+      _movedSignificantly(previousDriverPosition, nextDriverPosition) ||
+      _movedSignificantly(previousCurrentPosition, nextCurrentPosition) ||
       !trackingCoordinatesEqual(
         previousDestinationPosition,
         nextDestinationPosition,
@@ -514,6 +568,9 @@ bool trackingCoordinatesEqual(
   TrackingCoordinates? left,
   TrackingCoordinates? right,
 ) {
+  if (left == null && right == null) {
+    return true;
+  }
   if (left == null || right == null) {
     return false;
   }
@@ -521,6 +578,18 @@ bool trackingCoordinatesEqual(
   final latitudeDelta = (left.latitude - right.latitude).abs();
   final longitudeDelta = (left.longitude - right.longitude).abs();
   return latitudeDelta < 0.0001 && longitudeDelta < 0.0001;
+}
+
+bool _movedSignificantly(
+  TrackingCoordinates? previous,
+  TrackingCoordinates? next,
+) {
+  if (previous == null || next == null) {
+    return false;
+  }
+  final latitudeDelta = (previous.latitude - next.latitude).abs();
+  final longitudeDelta = (previous.longitude - next.longitude).abs();
+  return latitudeDelta > 0.00035 || longitudeDelta > 0.00035;
 }
 
 class _ZoomButton extends StatelessWidget {
@@ -536,20 +605,20 @@ class _ZoomButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Colors.white,
-      borderRadius: BorderRadius.circular(8),
+      borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         child: Container(
-          width: 36,
-          height: 36,
+          width: 42,
+          height: 42,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(12),
             boxShadow: const [
               BoxShadow(color: Colors.black12, blurRadius: 8),
             ],
           ),
-          child: Icon(icon, size: 20, color: Colors.black87),
+          child: Icon(icon, size: 20, color: AppColors.textPrimary),
         ),
       ),
     );

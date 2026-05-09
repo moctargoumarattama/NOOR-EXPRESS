@@ -1,13 +1,27 @@
 import 'package:dio/dio.dart';
 
+import '../../../core/constants/app_messages.dart';
 import '../../../core/models/app_role.dart';
 import '../../../core/models/auth_session.dart';
+import '../../../core/network/api_error.dart';
 import '../../../core/network/api_client.dart';
 
+enum AuthFailureType {
+  unauthorized,
+  offline,
+  timeout,
+  serverUnavailable,
+  unknown,
+}
+
 class AuthFailure implements Exception {
-  const AuthFailure(this.message);
+  const AuthFailure(
+    this.message, {
+    this.type = AuthFailureType.unknown,
+  });
 
   final String message;
+  final AuthFailureType type;
 }
 
 class AuthRepository {
@@ -27,18 +41,20 @@ class AuthRepository {
       );
 
       final accessToken = loginResponse.data?['access_token'] as String?;
+      final refreshToken = loginResponse.data?['refresh_token'] as String?;
       if (accessToken == null || accessToken.isEmpty) {
-        throw const AuthFailure('Token JWT introuvable.');
+        throw const AuthFailure(AppMessages.authTokenMissing);
       }
 
-      return getCurrentSession(accessToken);
+      return getCurrentSession(accessToken, refreshToken: refreshToken);
     } on DioException catch (error) {
-      final message = _extractErrorMessage(error);
-      if (message != null) {
-        throw AuthFailure(message);
-      }
-
-      throw const AuthFailure('Connexion impossible pour le moment.');
+      throw AuthFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage: AppMessages.authLoginUnavailable,
+        ),
+        type: _mapIssueType(ApiErrorPayload.classifyDio(error)),
+      );
     }
   }
 
@@ -58,7 +74,7 @@ class AuthRepository {
 
       final payload = response.data;
       if (payload == null) {
-        throw const AuthFailure('Utilisateur courant introuvable.');
+        throw const AuthFailure(AppMessages.authCurrentUserNotFound);
       }
 
       final userId = payload['id'] as int?;
@@ -69,7 +85,7 @@ class AuthRepository {
           role == null ||
           phoneNumber == null ||
           phoneNumber.isEmpty) {
-        throw const AuthFailure('Profil utilisateur invalide.');
+        throw const AuthFailure(AppMessages.authUserProfileInvalid);
       }
 
       final authHeader = _apiClient.dio.options.headers['Authorization'];
@@ -90,15 +106,34 @@ class AuthRepository {
     } on DioException catch (error) {
       final message = _extractErrorMessage(error);
       if (message != null) {
-        throw AuthFailure(message);
+        final statusCode = error.response?.statusCode;
+        if (statusCode == 401 || statusCode == 403) {
+          throw const AuthFailure(
+            AppMessages.authSessionExpiredReconnect,
+            type: AuthFailureType.unauthorized,
+          );
+        }
+        throw AuthFailure(
+          message,
+          type: _mapIssueType(ApiErrorPayload.classifyDio(error)),
+        );
       }
 
       final statusCode = error.response?.statusCode;
       if (statusCode == 401 || statusCode == 403) {
-        throw const AuthFailure('Session expiree, reconnecte-toi.');
+        throw const AuthFailure(
+          AppMessages.authSessionExpiredReconnect,
+          type: AuthFailureType.unauthorized,
+        );
       }
 
-      throw const AuthFailure('Impossible de charger le profil utilisateur.');
+      throw AuthFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage: AppMessages.authProfileLoadFailed,
+        ),
+        type: _mapIssueType(ApiErrorPayload.classifyDio(error)),
+      );
     }
   }
 
@@ -114,12 +149,12 @@ class AuthRepository {
     try {
       await _apiClient.dio.delete<void>('/users/me');
     } on DioException catch (error) {
-      final message = _extractErrorMessage(error);
-      if (message != null) {
-        throw AuthFailure(message);
-      }
-      throw const AuthFailure(
-        'Suppression du compte impossible pour le moment.',
+      throw AuthFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage: AppMessages.authDeleteAccountFailed,
+        ),
+        type: _mapIssueType(ApiErrorPayload.classifyDio(error)),
       );
     }
   }
@@ -140,5 +175,18 @@ class AuthRepository {
       return errorDetail;
     }
     return null;
+  }
+
+  AuthFailureType _mapIssueType(ApiIssueType issueType) {
+    switch (issueType) {
+      case ApiIssueType.offline:
+        return AuthFailureType.offline;
+      case ApiIssueType.timeout:
+        return AuthFailureType.timeout;
+      case ApiIssueType.serverUnavailable:
+        return AuthFailureType.serverUnavailable;
+      case ApiIssueType.unknown:
+        return AuthFailureType.unknown;
+    }
   }
 }

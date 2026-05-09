@@ -26,6 +26,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   late Future<DriverStats> _statsFuture;
   late Future<DriverOnboardingProfileModel?> _verificationFuture;
   bool _isPhotoSaving = false;
+  bool _isDisposed = false;
+
+  bool get _isUiMounted => mounted && !_isDisposed;
 
   @override
   void initState() {
@@ -34,13 +37,20 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     _verificationFuture =
         ref.read(driverProfileDatasourceProvider).fetchProfile();
     Future.microtask(() async {
+      if (!_isUiMounted) {
+        return;
+      }
       await ref.read(driverProvider.notifier).loadProfile();
+      if (!_isUiMounted) {
+        return;
+      }
       _nameController.text = ref.read(driverProvider).profile?.name ?? '';
     });
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _nameController.dispose();
     super.dispose();
   }
@@ -153,6 +163,9 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
       _showResult(error.message, '');
       return;
     }
+    if (!_isUiMounted) {
+      return;
+    }
     setState(() => _isPhotoSaving = true);
     String? error;
     try {
@@ -169,7 +182,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
     } catch (_) {
       error = 'Upload photo impossible';
     } finally {
-      if (mounted) {
+      if (_isUiMounted) {
         setState(() => _isPhotoSaving = false);
       }
     }
@@ -177,7 +190,7 @@ class _DriverProfileScreenState extends ConsumerState<DriverProfileScreen> {
   }
 
   void _showResult(String? error, String success) {
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(

@@ -94,3 +94,10 @@ class RideMessageNotification(BaseModel):
     type: str = "ride_message"
     ride_request_id: int
     message: dict[str, Any]
+
+
+class PassengerReadyNotification(BaseModel):
+    type: str = "passenger_ready"
+    ride_id: str
+    passenger_name: str
+    timestamp: datetime

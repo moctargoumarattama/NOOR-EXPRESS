@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:noor_express_mobile/core/location/location_quality.dart';
 import 'package:noor_express_mobile/features/home/client/data/models/client_ride.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/widgets/route_summary_card.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/widgets/search_bottom_sheet.dart';
@@ -24,6 +25,8 @@ void main() {
               priceController: controller,
               isCreating: false,
               isEstimatingPrice: false,
+              pickupLocationQuality: LocationQuality.confirmed,
+              canSubmitRideRequest: true,
               activeRide: _ride(status: 'pending'),
               activeRideRoute: _route,
               nearbyDriversCount: 2,
@@ -81,6 +84,8 @@ void main() {
             priceController: controller,
             isCreating: false,
             isEstimatingPrice: false,
+            pickupLocationQuality: LocationQuality.confirmed,
+            canSubmitRideRequest: true,
             activeRide: _ride(status: 'offered'),
             activeRideRoute: _route,
             onPickupTap: _noop,

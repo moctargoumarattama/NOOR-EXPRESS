@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
+
 class BottomRideSheet extends StatelessWidget {
   const BottomRideSheet({
     super.key,
@@ -25,16 +27,16 @@ class BottomRideSheet extends StatelessWidget {
           children: [
             Container(
               constraints: const BoxConstraints(maxWidth: 720),
-              padding: const EdgeInsets.fromLTRB(20, 14, 20, 20),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.pearl,
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(32)),
+                    const BorderRadius.vertical(top: Radius.circular(28)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.18),
-                    blurRadius: 32,
-                    offset: const Offset(0, -10),
+                    color: Colors.black.withValues(alpha: 0.14),
+                    blurRadius: 26,
+                    offset: const Offset(0, -8),
                   ),
                 ],
               ),
@@ -42,20 +44,20 @@ class BottomRideSheet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    width: 46,
-                    height: 5,
+                    width: 40,
+                    height: 4,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFDCE1EA),
+                      color: AppColors.border,
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 14),
                   child,
                   if (secondaryAction != null || primaryAction != null) ...[
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 14),
                     if (secondaryAction != null) secondaryAction!,
                     if (secondaryAction != null && primaryAction != null)
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 10),
                     if (primaryAction != null) primaryAction!,
                   ],
                 ],
@@ -63,8 +65,8 @@ class BottomRideSheet extends StatelessWidget {
             ),
             if (floatingAction != null)
               Positioned(
-                right: 18,
-                top: -30,
+                right: 14,
+                top: -24,
                 child: floatingAction!,
               ),
           ],

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../../core/location/location_quality.dart';
 import '../../../../core/location/location_service.dart';
 import '../../data/datasources/address_datasource.dart';
 import '../../data/models/address_model.dart';
@@ -16,8 +17,10 @@ class AddressSearchState {
     required this.results,
     required this.favorites,
     required this.recents,
+    required this.locationQuality,
     required this.isLoading,
     required this.isResolvingCurrentLocation,
+    this.locationAccuracyMeters,
     this.errorMessage,
   });
 
@@ -27,6 +30,7 @@ class AddressSearchState {
           results: AddressModel.knownNiameyZones,
           favorites: const [],
           recents: const [],
+          locationQuality: LocationQuality.unknown,
           isLoading: false,
           isResolvingCurrentLocation: false,
         );
@@ -35,6 +39,8 @@ class AddressSearchState {
   final List<AddressResult> results;
   final List<AddressResult> favorites;
   final List<AddressResult> recents;
+  final LocationQuality locationQuality;
+  final double? locationAccuracyMeters;
   final bool isLoading;
   final bool isResolvingCurrentLocation;
   final String? errorMessage;
@@ -44,9 +50,12 @@ class AddressSearchState {
     List<AddressResult>? results,
     List<AddressResult>? favorites,
     List<AddressResult>? recents,
+    LocationQuality? locationQuality,
+    double? locationAccuracyMeters,
     bool? isLoading,
     bool? isResolvingCurrentLocation,
     String? errorMessage,
+    bool clearLocationAccuracyMeters = false,
     bool clearError = false,
   }) {
     return AddressSearchState(
@@ -54,6 +63,10 @@ class AddressSearchState {
       results: results ?? this.results,
       favorites: favorites ?? this.favorites,
       recents: recents ?? this.recents,
+      locationQuality: locationQuality ?? this.locationQuality,
+      locationAccuracyMeters: clearLocationAccuracyMeters
+          ? null
+          : locationAccuracyMeters ?? this.locationAccuracyMeters,
       isLoading: isLoading ?? this.isLoading,
       isResolvingCurrentLocation:
           isResolvingCurrentLocation ?? this.isResolvingCurrentLocation,
@@ -136,48 +149,53 @@ class AddressSearchController extends StateNotifier<AddressSearchState> {
     );
 
     if (location case LocationSuccess<Position>(value: final position)) {
+      final quality = locationQualityFromAccuracy(position.accuracy);
       try {
         final address = await _datasource.reverse(
           latitude: position.latitude,
           longitude: position.longitude,
+        ).then(
+          (value) => value.copyWith(
+            locationQuality: quality,
+            accuracyMeters: position.accuracy,
+          ),
         );
         state = state.copyWith(
+          locationQuality: quality,
+          locationAccuracyMeters: position.accuracy,
           isResolvingCurrentLocation: false,
           clearError: true,
         );
         await saveRecent(address);
         return address;
       } on AddressSearchFailure catch (error) {
-        final fallback = _currentGpsAddress(
-          latitude: position.latitude,
-          longitude: position.longitude,
-          displayName: 'Adresse exacte indisponible - GPS utilise',
-        );
         state = state.copyWith(
+          locationQuality: LocationQuality.unknown,
+          clearLocationAccuracyMeters: true,
           isResolvingCurrentLocation: false,
           errorMessage: error.message,
         );
-        await saveRecent(fallback);
-        return fallback;
+        return null;
       }
     }
 
     if (location case LocationError<Position>(failure: final failure)) {
-      final fallback = _niameyFallbackCurrentLocation(failure.message);
       state = state.copyWith(
+        locationQuality: LocationQuality.unknown,
+        clearLocationAccuracyMeters: true,
         isResolvingCurrentLocation: false,
         errorMessage: failure.message,
       );
-      await saveRecent(fallback);
-      return fallback;
+      return null;
     }
 
-    final fallback = _niameyFallbackCurrentLocation(
-      'Position GPS indisponible.',
+    state = state.copyWith(
+      locationQuality: LocationQuality.unknown,
+      clearLocationAccuracyMeters: true,
+      isResolvingCurrentLocation: false,
+      errorMessage: 'Position GPS indisponible.',
     );
-    state = state.copyWith(isResolvingCurrentLocation: false);
-    await saveRecent(fallback);
-    return fallback;
+    return null;
   }
 
   Future<void> saveRecent(AddressResult result) async {
@@ -227,30 +245,6 @@ class AddressSearchController extends StateNotifier<AddressSearchState> {
         .where((zone) => zone.name.toLowerCase().contains(needle))
         .toList();
     return zones.isEmpty ? AddressModel.knownNiameyZones : zones;
-  }
-
-  AddressModel _currentGpsAddress({
-    required double latitude,
-    required double longitude,
-    required String displayName,
-  }) {
-    return AddressModel(
-      name: 'Ma position actuelle',
-      displayName: displayName,
-      latitude: latitude,
-      longitude: longitude,
-      type: 'current_location',
-    );
-  }
-
-  AddressModel _niameyFallbackCurrentLocation(String reason) {
-    return AddressModel(
-      name: 'Niamey centre',
-      displayName: '$reason Position approximative utilisee.',
-      latitude: 13.5137,
-      longitude: 2.1098,
-      type: 'current_location',
-    );
   }
 
   @override

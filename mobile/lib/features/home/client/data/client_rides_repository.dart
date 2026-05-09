@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/app_messages.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_error.dart';
 import 'models/client_ride.dart';
@@ -39,7 +40,7 @@ class ClientRidesRepository {
     } on DioException catch (error) {
       throw _clientRideFailureFromDio(
         error,
-        fallbackMessage: 'Impossible de charger tes courses.',
+        fallbackMessage: AppMessages.clientRidesLoadFailed,
       );
     }
   }
@@ -57,7 +58,7 @@ class ClientRidesRepository {
     } on DioException catch (error) {
       throw _clientRideFailureFromDio(
         error,
-        fallbackMessage: 'Impossible de verifier la course active.',
+        fallbackMessage: AppMessages.clientActiveRideCheckFailed,
       );
     }
   }
@@ -71,14 +72,14 @@ class ClientRidesRepository {
 
       final payload = response.data;
       if (payload == null) {
-        throw const ClientRideFailure('Creation de course impossible.');
+        throw const ClientRideFailure(AppMessages.clientRideCreationFailed);
       }
 
       return ClientRide.fromJson(payload);
     } on DioException catch (error) {
       throw _clientRideFailureFromDio(
         error,
-        fallbackMessage: 'Creation de course impossible pour le moment.',
+        fallbackMessage: AppMessages.clientRideCreationUnavailable,
       );
     }
   }
@@ -101,13 +102,13 @@ class ClientRidesRepository {
       );
       final payload = response.data;
       if (payload == null) {
-        throw const ClientRideFailure('Estimation du prix impossible.');
+        throw const ClientRideFailure(AppMessages.clientPriceEstimateFailed);
       }
       return PriceEstimate.fromJson(payload);
     } on DioException catch (error) {
       throw _clientRideFailureFromDio(
         error,
-        fallbackMessage: 'Estimation du prix impossible pour le moment.',
+        fallbackMessage: AppMessages.clientPriceEstimateUnavailable,
       );
     }
   }

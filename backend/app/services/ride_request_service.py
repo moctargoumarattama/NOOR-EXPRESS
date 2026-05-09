@@ -1,16 +1,19 @@
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import Select, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.api_errors import ApiError
+from app.core.api_errors import ApiError, conflict, forbidden, not_found
+from app.core.messages import Messages
+from app.core.firebase import notify_user
 from app.models.ride_request import RideRequest, RideRequestStatus
 from app.models.ride_offer import RideOffer
 from app.models.ride_request_rejection import RideRequestRejection
 from app.models.user import User, UserRole
-from app.realtime.gateway import driver_locator
+from app.realtime.gateway import driver_locator, ride_notifier
+from app.realtime.schemas import PassengerReadyNotification
 from app.schemas.ride_request import (
     ClientRideRequestStatsRead,
     ClientRideRatingCreate,
@@ -61,7 +64,13 @@ class RideRequestRatingNotAllowedError(Exception):
 class RideRequestAlreadyRatedError(Exception):
     pass
 
+
+class RideRequestRatingExpiredError(Exception):
+    pass
+
+
 RIDE_REQUEST_EXPIRATION_SECONDS = 300
+RIDE_RATING_WINDOW_HOURS = 24
 SHAREABLE_TRACKING_STATUSES = (
     RideRequestStatus.ACCEPTED,
     RideRequestStatus.ARRIVED,
@@ -71,6 +80,11 @@ TRACK_RATE_LIMIT_SECONDS = 5
 DEFAULT_DRIVER_MAX_RADIUS_KM = 5
 MIN_DRIVER_MAX_RADIUS_KM = 1
 MAX_DRIVER_MAX_RADIUS_KM = 10
+DRIVER_POSITION_DB_FRESHNESS_MINUTES = 30
+DRIVER_POSITION_GPS_NOTIFICATION_TITLE = "GPS inactif"
+DRIVER_POSITION_GPS_NOTIFICATION_BODY = (
+    "Activez votre GPS pour recevoir des demandes de courses"
+)
 CLIENT_ACTIVE_STATUSES = (
     *CLIENT_ACTIVE_RIDE_STATUSES,
 )
@@ -237,19 +251,19 @@ async def create_ride_share_link(
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Ride request not found.",
+            message=Messages.RIDE_NOT_FOUND,
         )
     if ride_request.client_id != current_user.id:
         raise ApiError(
             status_code=403,
             code="ride_tracking_forbidden",
-            message="Only the ride passenger can share this tracking link.",
+            message=Messages.PASSENGER_ACCESS_REQUIRED,
         )
     if ride_request.status not in SHAREABLE_TRACKING_STATUSES:
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_active",
-            message="No active tracking link is available for this ride.",
+            message=Messages.RIDE_NOT_ACTIVE,
         )
 
     if ride_request.share_token is None:
@@ -277,14 +291,14 @@ async def get_public_ride_tracking(
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Tracking link not found.",
+            message=Messages.NOT_FOUND,
         )
 
     if ride_request.driver_id is None:
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Tracking link not found.",
+            message=Messages.NOT_FOUND,
         )
 
     driver = await session.get(User, ride_request.driver_id)
@@ -292,7 +306,7 @@ async def get_public_ride_tracking(
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Tracking link not found.",
+            message=Messages.NOT_FOUND,
         )
 
     driver_position = await _read_public_driver_position(driver.id)
@@ -315,15 +329,19 @@ async def get_available_ride_requests(
     offset: int = 0,
 ) -> list[RideRequest]:
     if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
+        raise RideRequestInvalidDriverError(Messages.DRIVER_ACCESS_REQUIRED)
     if not await is_driver_verified(session, current_user.id):
         raise ApiError(
             status_code=403,
             code="driver_not_verified",
-            message="Driver verification is required.",
+            message=Messages.DRIVER_NOT_VERIFIED,
         )
-    driver_position = await _get_connected_driver_position(current_user.id)
+    driver_position = await _resolve_driver_position_for_availability(
+        session,
+        current_user.id,
+    )
     if driver_position is None:
+        await _notify_driver_enable_gps(session, current_user.id)
         return []
     max_radius_km = _normalized_driver_radius_km(current_user)
 
@@ -675,7 +693,7 @@ def _validated_share_token(token: str) -> str:
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Tracking link not found.",
+            message=Messages.NOT_FOUND,
         )
     try:
         return str(UUID(token_value))
@@ -683,7 +701,7 @@ def _validated_share_token(token: str) -> str:
         raise ApiError(
             status_code=404,
             code="ride_tracking_not_found",
-            message="Tracking link not found.",
+            message=Messages.NOT_FOUND,
         ) from exc
 
 
@@ -700,10 +718,7 @@ def _enforce_track_rate_limit(token: str) -> None:
             raise ApiError(
                 status_code=429,
                 code="track_rate_limited",
-                message=(
-                    "Too many requests for this tracking link. "
-                    f"Retry in {wait_seconds} seconds."
-                ),
+                message=Messages.BROADCAST_LIMIT_REACHED,
             )
     _track_token_last_request_at[token] = now
 
@@ -736,6 +751,82 @@ async def _get_connected_driver_position(
         if connected_driver.driver_id == driver_id:
             return connected_driver.latitude, connected_driver.longitude
     return None
+
+
+async def _resolve_driver_position_for_availability(
+    session: AsyncSession,
+    driver_id: int,
+) -> tuple[float, float] | None:
+    connected_position = await _get_connected_driver_position(driver_id)
+    if connected_position is not None:
+        return connected_position
+    return await get_fresh_driver_position_from_database(session, driver_id)
+
+
+async def get_fresh_driver_position_from_database(
+    session: AsyncSession,
+    driver_id: int,
+    *,
+    now: datetime | None = None,
+) -> tuple[float, float] | None:
+    driver = await session.get(User, driver_id)
+    if driver is None:
+        return None
+
+    latitude = getattr(driver, "last_known_lat", None)
+    longitude = getattr(driver, "last_known_lon", None)
+    positioned_at = getattr(driver, "last_position_at", None)
+    if latitude is None or longitude is None or positioned_at is None:
+        return None
+    if not _is_position_fresh(positioned_at, now=now):
+        return None
+    return float(latitude), float(longitude)
+
+
+async def persist_driver_last_known_position(
+    session: AsyncSession,
+    *,
+    driver_id: int,
+    latitude: float,
+    longitude: float,
+    positioned_at: datetime | None = None,
+) -> None:
+    driver = await session.get(User, driver_id)
+    if driver is None or driver.role != UserRole.DRIVER:
+        return
+
+    driver.last_known_lat = float(latitude)
+    driver.last_known_lon = float(longitude)
+    driver.last_position_at = positioned_at or datetime.utcnow()
+    await session.commit()
+
+
+async def _notify_driver_enable_gps(session: AsyncSession, driver_id: int) -> None:
+    await notify_user(
+        session,
+        user_id=driver_id,
+        title=DRIVER_POSITION_GPS_NOTIFICATION_TITLE,
+        body=DRIVER_POSITION_GPS_NOTIFICATION_BODY,
+        data={"type": "driver_gps_inactive"},
+    )
+
+
+def _is_position_fresh(
+    positioned_at: datetime,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    position_time = _as_utc_naive(positioned_at)
+    current_time = _as_utc_naive(now or datetime.utcnow())
+    return current_time - position_time <= timedelta(
+        minutes=DRIVER_POSITION_DB_FRESHNESS_MINUTES
+    )
+
+
+def _as_utc_naive(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value
+    return value.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 def _is_ride_within_driver_radius(
@@ -777,16 +868,16 @@ async def reject_ride_request(
 ) -> RideRequest:
     ride_request = await session.get(RideRequest, ride_request_id)
     if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+        raise RideRequestNotFoundError(Messages.RIDE_NOT_FOUND)
 
     if await _expire_ride_request_if_needed(session, ride_request):
-        raise RideRequestExpiredError("Ride request is expired")
+        raise RideRequestExpiredError(Messages.RIDE_NOT_ACTIVE)
 
     if ride_request.status not in NEGOTIABLE_RIDE_STATUSES:
-        raise RideRequestNotPendingError("Ride request is not pending")
+        raise RideRequestNotPendingError(Messages.RIDE_NOT_NEGOTIABLE)
 
     if current_user.role != UserRole.DRIVER:
-        raise RideRequestInvalidDriverError("User must have driver role")
+        raise RideRequestInvalidDriverError(Messages.DRIVER_ACCESS_REQUIRED)
 
     existing_rejection = await session.execute(
         select(RideRequestRejection).where(
@@ -835,7 +926,7 @@ async def cancel_ride_request(
     raise ApiError(
         status_code=403,
         code="ride_cancellation_not_allowed",
-        message="User cannot cancel this ride request",
+        message=Messages.FORBIDDEN,
     )
 
 
@@ -875,6 +966,47 @@ async def complete_ride_request(
     )
 
 
+async def mark_passenger_ready(
+    session: AsyncSession,
+    ride_request_id: int,
+    current_user: User,
+) -> RideRequest:
+    if current_user.role != UserRole.CLIENT:
+        raise forbidden(Messages.PASSENGER_ACCESS_REQUIRED)
+
+    ride_request = await session.get(RideRequest, ride_request_id)
+    if ride_request is None:
+        raise not_found(Messages.RIDE_NOT_FOUND)
+    if ride_request.client_id != current_user.id:
+        raise forbidden(Messages.FORBIDDEN)
+    if ride_request.status != RideRequestStatus.ARRIVED:
+        raise conflict(
+            "ride_not_arrived",
+            Messages.PASSENGER_READY_REQUIRES_ARRIVAL,
+        )
+
+    should_notify_driver = ride_request.passenger_ready_at is None
+    if should_notify_driver:
+        ride_request.passenger_ready_at = datetime.utcnow()
+        await session.commit()
+        await session.refresh(ride_request)
+
+    if should_notify_driver and ride_request.driver_id is not None:
+        await ride_notifier.send_passenger_ready_notification_to_driver(
+            driver_id=ride_request.driver_id,
+            notification=PassengerReadyNotification(
+                ride_id=str(ride_request.id),
+                passenger_name=_driver_first_name(
+                    current_user.name,
+                    current_user.phone_number,
+                ),
+                timestamp=ride_request.passenger_ready_at or datetime.utcnow(),
+            ),
+        )
+
+    return ride_request
+
+
 async def rate_driver_for_ride(
     session: AsyncSession,
     ride_request_id: int,
@@ -883,16 +1015,18 @@ async def rate_driver_for_ride(
 ) -> RideRequest:
     ride_request = await session.get(RideRequest, ride_request_id)
     if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+        raise RideRequestNotFoundError(Messages.RIDE_NOT_FOUND)
 
     if ride_request.status != RideRequestStatus.COMPLETED:
-        raise RideRequestNotCompletedError("Ride request is not completed")
+        raise RideRequestNotCompletedError(Messages.RIDE_NOT_COMPLETED)
+    if _is_rating_window_expired(ride_request):
+        raise RideRequestRatingExpiredError(Messages.RATING_WINDOW_EXPIRED)
 
     if current_user.role != UserRole.CLIENT or ride_request.client_id != current_user.id:
-        raise RideRequestRatingNotAllowedError("Client cannot rate this ride")
+        raise RideRequestRatingNotAllowedError(Messages.RIDE_RATING_NOT_ALLOWED)
 
     if ride_request.client_rating_for_driver is not None:
-        raise RideRequestAlreadyRatedError("Driver has already been rated for this ride")
+        raise RideRequestAlreadyRatedError(Messages.RIDE_ALREADY_RATED)
 
     ride_request.client_rating_for_driver = rating_in.rating
     ride_request.client_rating_comment = rating_in.comment
@@ -909,19 +1043,32 @@ async def rate_client_for_ride(
 ) -> RideRequest:
     ride_request = await session.get(RideRequest, ride_request_id)
     if ride_request is None:
-        raise RideRequestNotFoundError("Ride request not found")
+        raise RideRequestNotFoundError(Messages.RIDE_NOT_FOUND)
 
     if ride_request.status != RideRequestStatus.COMPLETED:
-        raise RideRequestNotCompletedError("Ride request is not completed")
+        raise RideRequestNotCompletedError(Messages.RIDE_NOT_COMPLETED)
+    if _is_rating_window_expired(ride_request):
+        raise RideRequestRatingExpiredError(Messages.RATING_WINDOW_EXPIRED)
 
     if current_user.role != UserRole.DRIVER or ride_request.driver_id != current_user.id:
-        raise RideRequestRatingNotAllowedError("Driver cannot rate this ride")
+        raise RideRequestRatingNotAllowedError(Messages.RIDE_RATING_NOT_ALLOWED)
 
     if ride_request.driver_rating_for_client is not None:
-        raise RideRequestAlreadyRatedError("Client has already been rated for this ride")
+        raise RideRequestAlreadyRatedError(Messages.RIDE_ALREADY_RATED)
 
     ride_request.driver_rating_for_client = rating_in.rating
     ride_request.driver_rating_comment = rating_in.comment
     await session.commit()
     await session.refresh(ride_request)
     return ride_request
+
+
+def _is_rating_window_expired(
+    ride_request: RideRequest,
+    now: datetime | None = None,
+) -> bool:
+    reference = ride_request.completed_at or ride_request.created_at
+    if reference is None:
+        return True
+    current = now or datetime.utcnow()
+    return current > reference + timedelta(hours=RIDE_RATING_WINDOW_HOURS)

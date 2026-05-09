@@ -40,11 +40,17 @@ class ClientTrackingScreen extends ConsumerStatefulWidget {
 
 class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
   ProviderSubscription<TrackingState>? _subscription;
+  Timer? _ratingPromptTimer;
+  int? _ratingPromptRideId;
+  int? _autoPromptedRideId;
+  bool _isDisposed = false;
 
   TrackingControllerScope get _scope => TrackingControllerScope(
         mode: TrackingMode.client,
         rideId: widget.rideId,
       );
+
+  bool get _isUiMounted => mounted && !_isDisposed;
 
   @override
   void initState() {
@@ -52,8 +58,11 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     _subscription = ref.listenManual<TrackingState>(
       trackingControllerProvider(_scope),
       (previous, next) {
+        _syncAutoRatingPrompt(previous?.ride, next.ride);
         final message = next.toastMessage;
-        if (message == null || message == previous?.toastMessage || !mounted) {
+        if (message == null ||
+            message == previous?.toastMessage ||
+            !_isUiMounted) {
           return;
         }
 
@@ -71,6 +80,8 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _cancelAutoRatingPrompt();
     _subscription?.close();
     super.dispose();
   }
@@ -208,10 +219,11 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     }
 
     if (ride.isArrived) {
+      final isAlreadyReady = ride.passengerReadyAt != null;
       return AppButton(
-        label: 'Je suis pret',
+        label: isAlreadyReady ? 'Chauffeur prevenu ✓' : 'Je suis pret',
         isLoading: state.isActionLoading,
-        onPressed: state.isActionLoading
+        onPressed: state.isActionLoading || isAlreadyReady
             ? null
             : () {
                 ref
@@ -272,13 +284,17 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
   }
 
   Future<void> _openRatingSheet() async {
+    final ride = ref.read(trackingControllerProvider(_scope)).ride;
+    if (ride == null || !ride.canRateDriver) {
+      return;
+    }
     final draft = await showDriverRatingBottomSheet(context);
     if (draft == null) {
       return;
     }
 
     await ref.read(trackingControllerProvider(_scope).notifier).rateDriver(
-          rating: draft.rating,
+          rating: draft.rating.toDouble(),
           comment: draft.comment,
         );
   }
@@ -293,6 +309,67 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
             );
       },
     );
+  }
+
+  void _syncAutoRatingPrompt(
+    RideTrackingModel? previousRide,
+    RideTrackingModel? nextRide,
+  ) {
+    if (!_isUiMounted) {
+      return;
+    }
+    if (nextRide == null || !nextRide.canRateDriver) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+
+    if (previousRide?.id != nextRide.id) {
+      _cancelAutoRatingPrompt();
+    }
+    if (_autoPromptedRideId == nextRide.id) {
+      return;
+    }
+
+    final opensAt = nextRide.ratingWindowOpensAt;
+    final closesAt = nextRide.ratingWindowClosesAt;
+    if (opensAt == null || closesAt == null) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (now.isAfter(closesAt)) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+    if (_ratingPromptRideId == nextRide.id && _ratingPromptTimer != null) {
+      return;
+    }
+
+    final delay =
+        opensAt.isAfter(now) ? opensAt.difference(now) : Duration.zero;
+    _ratingPromptRideId = nextRide.id;
+    _ratingPromptTimer = Timer(delay, () {
+      if (!_isUiMounted) {
+        return;
+      }
+      final latestRide = ref.read(trackingControllerProvider(_scope)).ride;
+      if (latestRide == null ||
+          latestRide.id != nextRide.id ||
+          !latestRide.canRateDriver) {
+        _cancelAutoRatingPrompt();
+        return;
+      }
+      _autoPromptedRideId = nextRide.id;
+      _cancelAutoRatingPrompt();
+      unawaited(_openRatingSheet());
+    });
+  }
+
+  void _cancelAutoRatingPrompt() {
+    _ratingPromptTimer?.cancel();
+    _ratingPromptTimer = null;
+    _ratingPromptRideId = null;
   }
 
   Future<void> _openChat() async {
@@ -310,7 +387,9 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
     final result = await ref
         .read(supportContactServiceProvider)
         .openSupportChat(AppRole.client);
-    if (!mounted || result.type != SupportContactResultType.failed) {
+    if (!mounted ||
+        !_isUiMounted ||
+        result.type != SupportContactResultType.failed) {
       return;
     }
     AppSnackbar.show(
@@ -328,7 +407,7 @@ class _ClientTrackingScreenState extends ConsumerState<ClientTrackingScreen> {
       options: passengerCancellationReasonOptions,
       reasonRequired: false,
     );
-    if (!mounted || draft == null) {
+    if (!_isUiMounted || draft == null) {
       return;
     }
     await ref.read(trackingControllerProvider(_scope).notifier).cancelRide(

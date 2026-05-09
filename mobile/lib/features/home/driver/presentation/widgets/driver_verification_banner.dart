@@ -21,7 +21,7 @@ class DriverVerificationBanner extends StatelessWidget {
         ? 'Completez votre dossier driver'
         : rejected
             ? 'Dossier rejete - cliquez pour corriger'
-            : 'Dossier en cours de verification';
+            : 'En attente de validation admin';
     return Material(
       color: Colors.transparent,
       child: InkWell(

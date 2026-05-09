@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.messages import Messages
 from app.core.security import create_access_token
 from app.models.otp import OtpCode
 from app.models.user import DriverStatus, User, UserRole
@@ -18,6 +19,15 @@ from app.services.user_service import (
 
 OTP_TTL_MINUTES = 10
 logger = logging.getLogger(__name__)
+ROLE_LABELS = {
+    UserRole.CLIENT: "passager",
+    UserRole.DRIVER: "chauffeur",
+}
+REGISTER_POLICY_CASE_NEW_NUMBER = "new_number"
+REGISTER_POLICY_CASE_EXISTING_SAME_ROLE = "existing_same_role"
+REGISTER_POLICY_CASE_EXISTING_DIFFERENT_ROLE = "existing_different_role"
+REGISTER_POLICY_CASE_SUSPENDED_ACCOUNT = "suspended_account"
+REGISTER_SUSPENDED_ACCOUNT_MESSAGE = Messages.ACCOUNT_SUSPENDED
 
 
 def _create_refresh_token() -> str:
@@ -42,38 +52,68 @@ async def register(
     role: UserRole,
 ) -> User:
     user = await get_user_by_phone_number(session, phone_number)
-    if user is not None:
-        if user.is_blocked:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Account is blocked.",
-            )
-        await ensure_user_not_suspended(session, user)
-        user.name = name
-        user.role = role
-        if role == UserRole.DRIVER:
-            user.is_available = (
-                user.is_available if user.is_available is not None else True
-            )
-            user.driver_status = user.driver_status or DriverStatus.OFFLINE
-        else:
-            user.is_available = None
-            user.driver_status = None
+    register_case = _resolve_register_policy_case(user, requested_role=role)
+    if register_case == REGISTER_POLICY_CASE_NEW_NUMBER:
+        user = User(
+            phone_number=phone_number,
+            name=name,
+            role=role,
+            is_available=True if role == UserRole.DRIVER else None,
+            driver_status=DriverStatus.OFFLINE if role == UserRole.DRIVER else None,
+        )
+        session.add(user)
         await session.commit()
         await session.refresh(user)
         return user
 
-    user = User(
-        phone_number=phone_number,
-        name=name,
-        role=role,
-        is_available=True if role == UserRole.DRIVER else None,
-        driver_status=DriverStatus.OFFLINE if role == UserRole.DRIVER else None,
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=Messages.SERVER_ERROR,
+        )
+
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=Messages.ACCOUNT_BLOCKED,
+        )
+
+    if register_case == REGISTER_POLICY_CASE_SUSPENDED_ACCOUNT:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=REGISTER_SUSPENDED_ACCOUNT_MESSAGE,
+        )
+
+    if register_case == REGISTER_POLICY_CASE_EXISTING_DIFFERENT_ROLE:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=Messages.REGISTER_ROLE_CONFLICT.format(
+                role_label=ROLE_LABELS.get(user.role, "passager"),
+            ),
+        )
+
+    if register_case == REGISTER_POLICY_CASE_EXISTING_SAME_ROLE:
+        await ensure_user_not_suspended(session, user)
+        return user
+
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=Messages.SERVER_ERROR,
     )
-    session.add(user)
-    await session.commit()
-    await session.refresh(user)
-    return user
+
+
+def _resolve_register_policy_case(
+    user: User | None,
+    *,
+    requested_role: UserRole,
+) -> str:
+    if user is None:
+        return REGISTER_POLICY_CASE_NEW_NUMBER
+    if user.is_suspended:
+        return REGISTER_POLICY_CASE_SUSPENDED_ACCOUNT
+    if user.role != requested_role:
+        return REGISTER_POLICY_CASE_EXISTING_DIFFERENT_ROLE
+    return REGISTER_POLICY_CASE_EXISTING_SAME_ROLE
 
 
 async def send_otp(session: AsyncSession, phone_number: str) -> None:
@@ -81,12 +121,12 @@ async def send_otp(session: AsyncSession, phone_number: str) -> None:
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found. Register first.",
+            detail=Messages.REGISTER_FIRST,
         )
     if user.is_blocked:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is blocked.",
+            detail=Messages.ACCOUNT_BLOCKED,
         )
     await ensure_user_not_suspended(session, user)
 
@@ -111,12 +151,12 @@ async def verify_otp(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found.",
+            detail=Messages.USER_NOT_FOUND,
         )
     if user.is_blocked:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is blocked.",
+            detail=Messages.ACCOUNT_BLOCKED,
         )
     await ensure_user_not_suspended(session, user)
 
@@ -135,14 +175,20 @@ async def verify_otp(
     if otp is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired OTP.",
+            detail=Messages.INVALID_OR_EXPIRED_OTP,
         )
 
     otp.is_used = True
+    return await start_user_session(session, user)
+
+
+async def start_user_session(
+    session: AsyncSession,
+    user: User,
+) -> TokenResponse:
     user.refresh_token = _create_refresh_token()
     await session.commit()
     await session.refresh(user)
-
     return TokenResponse(
         access_token=create_access_token(
             user,
@@ -170,7 +216,7 @@ async def refresh_token(
             await session.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token.",
+            detail=Messages.INVALID_REFRESH_TOKEN,
         )
     await ensure_user_not_suspended(session, user)
 

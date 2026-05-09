@@ -10,6 +10,7 @@ import 'core/network/api_client.dart';
 import 'core/notifications/fcm_service.dart';
 import 'core/notifications/local_notification_service.dart';
 import 'core/notifications/notification_handler.dart';
+import 'core/notifications/notification_inbox_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,5 +35,6 @@ Future<void> _initialiseFirebaseNotifications() async {
     apiClient: ApiClient(),
     localNotificationService: LocalNotificationService(),
     notificationHandler: NotificationHandler(),
+    notificationInboxService: NotificationInboxService(),
   ).initialize();
 }

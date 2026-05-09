@@ -30,6 +30,10 @@ class PriceSelector extends StatefulWidget {
 }
 
 class _PriceSelectorState extends State<PriceSelector> {
+  static const List<int> _quickAdjustments = [-200, -100, 100, 200];
+  static const double _fieldHeight = 54;
+  static const double _chipSpacing = 8;
+
   @override
   void initState() {
     super.initState();
@@ -66,9 +70,9 @@ class _PriceSelectorState extends State<PriceSelector> {
       return Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: AppColors.pearl,
           borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: const Color(0xFFE8EEE9)),
+          border: Border.all(color: AppColors.border),
         ),
         child: Row(
           children: [
@@ -79,7 +83,7 @@ class _PriceSelectorState extends State<PriceSelector> {
                   Text(
                     'Prix propose',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: AppColors.ink,
+                          color: AppColors.textPrimary,
                           fontWeight: FontWeight.w900,
                         ),
                   ),
@@ -88,8 +92,8 @@ class _PriceSelectorState extends State<PriceSelector> {
                     _helperText(hasInvalidInput),
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: hasInvalidInput
-                              ? AppColors.coral
-                              : AppColors.stone,
+                              ? AppColors.error
+                              : AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
                         ),
                   ),
@@ -99,7 +103,7 @@ class _PriceSelectorState extends State<PriceSelector> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: AppColors.mint,
+                color: AppColors.nigerOrangeSoft,
                 borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
@@ -109,7 +113,7 @@ class _PriceSelectorState extends State<PriceSelector> {
                   Text(
                     value?.toString() ?? '--',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppColors.emerald,
+                          color: AppColors.nigerOrangeDark,
                           fontWeight: FontWeight.w900,
                         ),
                   ),
@@ -119,7 +123,7 @@ class _PriceSelectorState extends State<PriceSelector> {
                     child: Text(
                       'FCFA',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: AppColors.emerald,
+                            color: AppColors.nigerOrangeDark,
                             fontWeight: FontWeight.w900,
                           ),
                     ),
@@ -133,85 +137,98 @@ class _PriceSelectorState extends State<PriceSelector> {
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.pearl,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE8EEE9)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'Prix propose',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.ink,
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.w900,
                 ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            children: [
-              _StepButton(
-                key: const ValueKey('price-selector-decrease'),
-                icon: Icons.remove_rounded,
-                onPressed: canDecrease ? () => _adjust(-widget.step) : null,
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: SizedBox(
-                  height: 52,
-                  child: TextField(
-                    controller: widget.controller,
-                    enabled: widget.enabled,
-                    textAlign: TextAlign.center,
-                    keyboardType: TextInputType.number,
-                    inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                    ],
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          color: AppColors.emerald,
-                          fontWeight: FontWeight.w900,
-                        ),
-                    decoration: InputDecoration(
-                      hintText: widget.recommendedPrice?.round().toString(),
-                      suffixText: 'FCFA',
-                      suffixStyle:
-                          Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: AppColors.emerald,
-                                fontWeight: FontWeight.w900,
-                              ),
-                      filled: true,
-                      fillColor: AppColors.mint,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: _fieldHeight,
+            child: TextField(
+              controller: widget.controller,
+              enabled: widget.enabled,
+              textAlign: TextAlign.center,
+              keyboardType: TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+              ],
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    color: AppColors.nigerOrangeDark,
+                    fontWeight: FontWeight.w900,
                   ),
+              decoration: InputDecoration(
+                hintText: widget.recommendedPrice?.round().toString(),
+                suffixText: 'FCFA',
+                suffixStyle: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                filled: true,
+                fillColor: AppColors.nigerOrangeSoft,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  borderSide: BorderSide.none,
                 ),
               ),
-              const SizedBox(width: 8),
-              _StepButton(
-                key: const ValueKey('price-selector-increase'),
-                icon: Icons.add_rounded,
-                onPressed: canIncrease ? () => _adjust(widget.step) : null,
-              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: _chipSpacing,
+            runSpacing: _chipSpacing,
+            children: [
+              for (final delta in _quickAdjustments)
+                _QuickAdjustmentChip(
+                  label: _adjustmentLabel(delta),
+                  onTap: _canApplyDelta(delta) ? () => _adjust(delta) : null,
+                ),
             ],
           ),
-          if (hasInvalidInput) ...[
-            const SizedBox(height: 6),
-            Text(
-              _helperText(hasInvalidInput),
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.coral,
-                    fontWeight: FontWeight.w700,
-                  ),
+          const SizedBox(height: 8),
+          Text(
+            _helperText(hasInvalidInput),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: hasInvalidInput
+                      ? AppColors.error
+                      : AppColors.textSecondary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+          if (canDecrease || canIncrease) ...[
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _StepButton(
+                  key: const ValueKey('price-selector-decrease'),
+                  icon: Icons.remove_rounded,
+                  accentColor: AppColors.nigerOrange,
+                  onPressed: canDecrease ? () => _adjust(-widget.step) : null,
+                ),
+                const SizedBox(width: 10),
+                _StepButton(
+                  key: const ValueKey('price-selector-increase'),
+                  icon: Icons.add_rounded,
+                  accentColor: AppColors.nigerOrange,
+                  onPressed: canIncrease ? () => _adjust(widget.step) : null,
+                ),
+              ],
             ),
           ],
         ],
@@ -245,6 +262,22 @@ class _PriceSelectorState extends State<PriceSelector> {
     return 'Ajustez votre proposition avant de chercher.';
   }
 
+  String _adjustmentLabel(int delta) {
+    final prefix = delta.isNegative ? '' : '+';
+    return '$prefix$delta';
+  }
+
+  bool _canApplyDelta(int delta) {
+    if (!widget.enabled) {
+      return false;
+    }
+    final base = _currentValue ?? widget.recommendedPrice?.round();
+    if (base == null) {
+      return false;
+    }
+    return base + delta >= widget.minPrice && base + delta <= widget.maxPrice;
+  }
+
   void _adjust(int delta) {
     final base = _currentValue ?? widget.recommendedPrice?.round() ?? 0;
     final next = (base + delta).clamp(widget.minPrice, widget.maxPrice);
@@ -261,31 +294,84 @@ class _PriceSelectorState extends State<PriceSelector> {
   }
 }
 
+class _QuickAdjustmentChip extends StatelessWidget {
+  const _QuickAdjustmentChip({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: onTap == null ? AppColors.backgroundSubtle : AppColors.pearl,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: onTap == null
+                  ? AppColors.border
+                  : AppColors.nigerOrangeBorder,
+            ),
+          ),
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: onTap == null
+                      ? AppColors.textTertiary
+                      : AppColors.nigerOrangeDark,
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _StepButton extends StatelessWidget {
   const _StepButton({
     super.key,
     required this.icon,
+    required this.accentColor,
     required this.onPressed,
   });
 
   final IconData icon;
+  final Color accentColor;
   final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: onPressed == null ? const Color(0xFFF1F3F2) : AppColors.mint,
+      color: onPressed == null ? AppColors.backgroundSubtle : AppColors.pearl,
       borderRadius: BorderRadius.circular(15),
-      child: InkWell(
-        onTap: onPressed,
-        borderRadius: BorderRadius.circular(15),
-        child: SizedBox(
-          width: 44,
-          height: 44,
-          child: Icon(
-            icon,
-            color:
-                onPressed == null ? const Color(0xFFADB5AF) : AppColors.emerald,
+      child: Ink(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: onPressed == null
+                ? AppColors.border
+                : AppColors.nigerOrangeBorder,
+          ),
+        ),
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(15),
+          child: SizedBox(
+            width: 52,
+            height: 52,
+            child: Icon(
+              icon,
+              color: onPressed == null ? AppColors.textTertiary : accentColor,
+            ),
           ),
         ),
       ),

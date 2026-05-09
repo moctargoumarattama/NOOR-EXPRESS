@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.api_errors import gone
+from app.core.messages import Messages
 from app.core.security import get_current_client, get_current_driver, get_current_user
 from app.db.database import get_db_session
 from app.models.ride_request import RideRequestStatus
@@ -52,6 +53,7 @@ from app.services.ride_request_service import (
     RideRequestNotPendingError,
     RideRequestNotFoundError,
     RideRequestRatingNotAllowedError,
+    RideRequestRatingExpiredError,
     arrive_ride_request,
     cancel_ride_request,
     complete_ride_request,
@@ -69,6 +71,7 @@ from app.services.ride_request_service import (
     get_revenue_stats,
     get_top_drivers,
     list_ride_requests,
+    mark_passenger_ready,
     rate_client_for_ride,
     rate_driver_for_ride,
     reject_ride_request,
@@ -390,13 +393,13 @@ async def get_ride_request_endpoint(
     if ride_request is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ride request not found",
+            detail=Messages.RIDE_NOT_FOUND,
         )
 
     if current_user.id not in {ride_request.client_id, ride_request.driver_id}:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied",
+            detail=Messages.FORBIDDEN,
         )
 
     return RideRequestRead.model_validate(ride_request)
@@ -411,7 +414,7 @@ async def accept_ride_request_endpoint(
     del ride_request_id, current_user, session
     raise gone(
         "ride_direct_accept_disabled",
-        "Direct ride acceptance is disabled. Drivers must create an offer and clients accept the winning offer.",
+        Messages.RIDE_ACCEPT_DISABLED,
     )
 
 
@@ -436,6 +439,20 @@ async def arrive_ride_request_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ) -> RideRequestRead:
     ride_request = await arrive_ride_request(
+        session,
+        ride_request_id,
+        current_user,
+    )
+    return RideRequestRead.model_validate(ride_request)
+
+
+@router.post("/{ride_request_id}/passenger-ready", response_model=RideRequestRead)
+async def mark_passenger_ready_endpoint(
+    ride_request_id: int,
+    current_user: User = Depends(get_current_client),
+    session: AsyncSession = Depends(get_db_session),
+) -> RideRequestRead:
+    ride_request = await mark_passenger_ready(
         session,
         ride_request_id,
         current_user,
@@ -493,6 +510,11 @@ async def rate_driver_for_ride_endpoint(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from exc
+    except RideRequestRatingExpiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail=str(exc),
+        ) from exc
 
     return RideRequestRead.model_validate(ride_request)
 
@@ -529,6 +551,11 @@ async def rate_client_for_ride_endpoint(
     except RideRequestAlreadyRatedError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+    except RideRequestRatingExpiredError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
             detail=str(exc),
         ) from exc
 

@@ -6,6 +6,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.api_errors import ApiError, conflict, forbidden, not_found
+from app.core.messages import Messages
 from app.models.ride_message import RideMessage
 from app.models.ride_request import RideRequest
 from app.models.user import User
@@ -120,18 +121,18 @@ async def _get_accessible_chat_ride(
 ) -> RideRequest:
     ride = await session.get(RideRequest, ride_request_id)
     if ride is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
 
     participant_ids = {ride.client_id}
     if ride.driver_id is not None:
         participant_ids.add(ride.driver_id)
     if current_user.id not in participant_ids:
-        raise forbidden("Access denied")
+        raise forbidden(Messages.FORBIDDEN)
 
     if ride.status not in CHAT_ENABLED_RIDE_STATUSES:
         raise conflict(
             "ride_chat_inactive",
-            "Ride chat is only available while the ride is active.",
+            Messages.RIDE_CHAT_INACTIVE,
         )
     return ride
 

@@ -1,9 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../domain/entities/address_result.dart';
 import '../controllers/address_search_controller.dart';
 import '../widgets/address_result_tile.dart';
@@ -26,6 +28,8 @@ class AddressSearchScreen extends ConsumerStatefulWidget {
 }
 
 class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
+  static const _maxDefaultVisibleResults = 6;
+
   final _controller = TextEditingController();
   final _focusNode = FocusNode();
   bool _isSelecting = false;
@@ -54,8 +58,7 @@ class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
     }
     setState(() => _isSelecting = true);
 
-    // La selection doit revenir immediatement a l'accueil; les recents ne
-    // doivent jamais bloquer le flux si le stockage web/local a un souci.
+    // The home flow must not wait on local/web storage to keep navigation fast.
     unawaited(_saveRecentSilently(result));
 
     if (!mounted) {
@@ -100,122 +103,281 @@ class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(addressSearchControllerProvider);
     final theme = Theme.of(context);
+    final hasQuery = state.query.trim().isNotEmpty;
+    final visibleResults = hasQuery
+        ? state.results
+        : state.results.take(_maxDefaultVisibleResults).toList(growable: false);
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppColors.backgroundPage,
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _SearchHeader(
+                    mode: widget.mode,
+                    onClose: () => context.pop(),
+                  ),
+                  const SizedBox(height: 16),
+                  AddressSearchBar(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    enabled: !_isSelecting,
+                    hintText: widget.mode == AddressSearchMode.pickup
+                        ? 'Rechercher votre point de depart'
+                        : 'Rechercher votre destination',
+                    onChanged: ref
+                        .read(addressSearchControllerProvider.notifier)
+                        .search,
+                  ),
+                  const SizedBox(height: 12),
+                  _CurrentLocationButton(
+                    isBusy: state.isResolvingCurrentLocation || _isSelecting,
+                    onTap: _useCurrentLocation,
+                  ),
+                  if (state.errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      state.errorMessage!,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.error,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.pearl,
+                  borderRadius: BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                ),
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
+                  children: [
+                    if (!hasQuery)
+                      FavoriteAddressesList(
+                        favorites: state.favorites,
+                        maxItems: 2,
+                        onSelected: _select,
+                      ),
+                    if (!hasQuery)
+                      RecentAddressesList(
+                        recents: state.recents,
+                        maxItems: 3,
+                        onSelected: _select,
+                      ),
+                    AddressSectionTitle(
+                      label: hasQuery ? 'Resultats' : 'Zones Niamey',
+                    ),
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: state.isLoading
+                          ? const _AddressLoadingList()
+                          : visibleResults.isEmpty
+                              ? _EmptyResultState(hasQuery: hasQuery)
+                              : Column(
+                                  key: ValueKey(
+                                    'results-${state.query}-${visibleResults.length}',
+                                  ),
+                                  children: [
+                                    for (var index = 0;
+                                        index < visibleResults.length;
+                                        index++)
+                                      _SlideInResult(
+                                        index: index,
+                                        child: AddressResultTile(
+                                          key: ValueKey(
+                                            '${visibleResults[index].name}-$index',
+                                          ),
+                                          result: visibleResults[index],
+                                          trailing: _isSelecting
+                                              ? const SizedBox(
+                                                  width: 18,
+                                                  height: 18,
+                                                  child:
+                                                      CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                  ),
+                                                )
+                                              : null,
+                                          onTap: () => _select(
+                                            visibleResults[index],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SearchHeader extends StatelessWidget {
+  const _SearchHeader({
+    required this.mode,
+    required this.onClose,
+  });
+
+  final AddressSearchMode mode;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = mode == AddressSearchMode.pickup
+        ? 'Point de prise en charge'
+        : 'Ou allez-vous ?';
+    final subtitle = mode == AddressSearchMode.pickup
+        ? 'Choisissez un depart clair pour votre chauffeur.'
+        : 'Choisissez votre destination sans stress.';
+
+    return Row(
+      children: [
+        Material(
+          color: AppColors.pearl,
+          borderRadius: BorderRadius.circular(16),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onClose,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    onPressed: () => context.pop(),
-                    icon: const Icon(Icons.close_rounded),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    widget.mode == AddressSearchMode.pickup
-                        ? 'Votre position'
-                        : 'Ou allez-vous ?',
-                    style: theme.textTheme.titleLarge?.copyWith(
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w900,
                     ),
-                  ),
-                ],
               ),
-              const SizedBox(height: 14),
-              AddressSearchBar(
-                controller: _controller,
-                focusNode: _focusNode,
-                onChanged:
-                    ref.read(addressSearchControllerProvider.notifier).search,
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
               ),
-              const SizedBox(height: 14),
-              AddressResultTile(
-                result: const _CurrentLocationResult(),
-                icon: Icons.my_location_rounded,
-                trailing: state.isResolvingCurrentLocation
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CurrentLocationButton extends StatelessWidget {
+  const _CurrentLocationButton({
+    required this.isBusy,
+    required this.onTap,
+  });
+
+  final bool isBusy;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.pearl,
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: isBusy
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap();
+              },
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.nigerGreenSoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.my_location_rounded,
+                  size: 19,
+                  color: AppColors.nigerGreen,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Ma position actuelle',
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                    Text(
+                      'Utiliser le GPS de ce telephone',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 180),
+                child: isBusy
                     ? const SizedBox(
+                        key: ValueKey('loading'),
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : null,
-                onTap: state.isResolvingCurrentLocation || _isSelecting
-                    ? () {}
-                    : _useCurrentLocation,
-              ),
-              if (state.errorMessage != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  state.errorMessage!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: const Color(0xFFB42318),
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-              Expanded(
-                child: ListView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  children: [
-                    if (state.query.trim().isEmpty)
-                      FavoriteAddressesList(
-                        favorites: state.favorites,
-                        onSelected: _select,
+                    : const Icon(
+                        key: ValueKey('chevron'),
+                        Icons.chevron_right_rounded,
+                        color: AppColors.textTertiary,
                       ),
-                    if (state.query.trim().isEmpty)
-                      RecentAddressesList(
-                        recents: state.recents,
-                        onSelected: _select,
-                      ),
-                    AddressSectionTitle(
-                      label: state.query.trim().isEmpty
-                          ? 'Zones Niamey'
-                          : 'Resultats',
-                    ),
-                    AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 220),
-                      child: state.isLoading
-                          ? const _AddressLoadingList()
-                          : Column(
-                              key: ValueKey(
-                                'results-${state.query}-${state.results.length}',
-                              ),
-                              children: [
-                                for (var index = 0;
-                                    index < state.results.length;
-                                    index++)
-                                  _SlideInResult(
-                                    index: index,
-                                    child: AddressResultTile(
-                                      key: ValueKey(
-                                        '${state.results[index].name}-$index',
-                                      ),
-                                      result: state.results[index],
-                                      trailing: _isSelecting
-                                          ? const SizedBox(
-                                              width: 18,
-                                              height: 18,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                              ),
-                                            )
-                                          : null,
-                                      onTap: () =>
-                                          _select(state.results[index]),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-                ),
               ),
             ],
           ),
@@ -223,17 +385,6 @@ class _AddressSearchScreenState extends ConsumerState<AddressSearchScreen> {
       ),
     );
   }
-}
-
-class _CurrentLocationResult extends AddressResult {
-  const _CurrentLocationResult()
-      : super(
-          name: 'Ma position actuelle',
-          displayName: 'Utiliser le GPS de ce telephone',
-          latitude: 0,
-          longitude: 0,
-          type: 'current_location',
-        );
 }
 
 class _SlideInResult extends StatelessWidget {
@@ -249,13 +400,13 @@ class _SlideInResult extends StatelessWidget {
   Widget build(BuildContext context) {
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: Duration(milliseconds: 180 + (index * 35).clamp(0, 180)),
+      duration: Duration(milliseconds: 170 + (index * 25).clamp(0, 150)),
       curve: Curves.easeOutCubic,
       builder: (context, value, child) {
         return Opacity(
           opacity: value,
           child: Transform.translate(
-            offset: Offset(0, 18 * (1 - value)),
+            offset: Offset(0, 12 * (1 - value)),
             child: child,
           ),
         );
@@ -308,16 +459,61 @@ class _ShimmerRowState extends State<_ShimmerRow>
     return AnimatedBuilder(
       animation: _controller,
       builder: (context, child) {
-        final alpha = 0.08 + (_controller.value * 0.10);
+        final alpha = 0.06 + (_controller.value * 0.08);
         return Container(
-          height: 68,
-          margin: const EdgeInsets.symmetric(vertical: 8),
+          height: 72,
+          margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: const Color(0xFF1B8A5A).withValues(alpha: alpha),
+            color: AppColors.nigerOrange.withValues(alpha: alpha),
             borderRadius: BorderRadius.circular(18),
           ),
         );
       },
+    );
+  }
+}
+
+class _EmptyResultState extends StatelessWidget {
+  const _EmptyResultState({required this.hasQuery});
+
+  final bool hasQuery;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      key: const ValueKey('address-empty'),
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 24),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSubtle,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.location_searching_rounded,
+            size: 30,
+            color: AppColors.nigerOrange,
+          ),
+          const SizedBox(height: 10),
+          Text(
+            hasQuery ? 'Aucune adresse trouvee.' : 'Aucune zone disponible.',
+            style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Essayez un autre mot-cle ou utilisez votre position actuelle.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textSecondary,
+                ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
   }
 }

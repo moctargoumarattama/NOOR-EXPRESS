@@ -1,4 +1,4 @@
-const AdminApi = (() => {
+﻿const AdminApi = (() => {
   const API_BASE = window.location.origin;
   let zonesCache = [];
   let faresCache = [];
@@ -9,6 +9,7 @@ const AdminApi = (() => {
   let pendingDriversCache = [];
   let paymentsDriversCache = [];
   let commissionLedgerCache = null;
+  let withdrawalRequestsCache = null;
   let simulationsDisabled = false;
   let simulationStatusTimer = null;
   let ridesPage = 1;
@@ -105,9 +106,46 @@ const AdminApi = (() => {
     if (['pending', 'offered', 'started', 'accepted', 'nouveau', 'en_cours'].includes(status)) return 'warning';
     return 'neutral';
   };
+  const statusLabel = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    const labels = {
+      pending: 'En attente',
+      offered: 'Offres reçues',
+      accepted: 'Acceptée',
+      arrived: 'Arrivée',
+      started: 'En cours',
+      completed: 'Terminée',
+      cancelled: 'Annulée',
+      verified: 'Validé',
+      rejected: 'Rejeté',
+      blocked: 'Bloqué',
+      nouveau: 'Nouveau',
+      en_cours: 'En cours',
+      resolu: 'Résolu',
+      classe_sans_suite: 'Classé sans suite',
+      client: 'Passager',
+      driver: 'Chauffeur',
+      all: 'Tous',
+      drivers: 'Chauffeurs',
+      passengers: 'Passagers',
+      user_id: 'Utilisateur',
+      info: 'Info',
+      promo: 'Promo',
+      alerte: 'Alerte',
+      sent: 'Envoyé',
+      partial: 'Partiel',
+      failed: 'Échoué',
+      firebase_not_configured: 'Firebase non configuré',
+      active: 'Actif',
+      inactive: 'Inactif',
+      off: 'Inactif',
+    };
+    return labels[normalized] || status || '-';
+  };
   const archiveYear = () => document.querySelector('[data-archive-year]')?.value || '';
   const archiveMonth = () => document.querySelector('[data-archive-month]')?.value || '';
   const selectedPaymentDriverId = () => $('payments-driver-filter')?.value || '';
+  const selectedWithdrawalStatus = () => $('withdrawals-status-filter')?.value || '';
   function commissionPeriodParams() {
     const year = archiveYear();
     const month = archiveMonth();
@@ -185,7 +223,7 @@ const AdminApi = (() => {
       ['Completees', data.completed],
       ['Annulees', data.cancelled],
       ['Revenus', `${Math.round(data.revenue)} FCFA`],
-      ['Users', data.total_users],
+      ['Utilisateurs', data.total_users],
     ];
     if ($('stats')) $('stats').innerHTML = stats.map(([label, value]) => ui().statCard(label, value)).join('');
     if ($('top-drivers')) $('top-drivers').innerHTML = (data.top_drivers || []).length
@@ -232,8 +270,8 @@ const AdminApi = (() => {
     if (!$('simulation-status')) return;
     simulationsDisabled = false;
     $('simulation-status').textContent = data.active
-      ? `active ${data.mode || ''}`.trim()
-      : 'inactive';
+      ? `Actif ${data.mode || ''}`.trim()
+      : 'Inactif';
     const logs = data.logs || [];
     $('simulation-logs').innerHTML = logs.length
       ? logs.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
@@ -246,7 +284,7 @@ const AdminApi = (() => {
     if (!$('simulation-status')) return;
     simulationsDisabled = true;
     $('simulation-status').textContent = 'desactive';
-    $('simulation-logs').innerHTML = `<div>${escapeHtml(message || 'Dev simulations are disabled. Set ENABLE_DEV_SIMULATIONS=true outside production.')}</div>`;
+    $('simulation-logs').innerHTML = `<div>${escapeHtml(message || 'Simulations de developpement desactivees (ENABLE_DEV_SIMULATIONS=true hors production).')}</div>`;
     setSimulationButtonsDisabled(true);
     setSimulationPolling(false);
   }
@@ -314,9 +352,9 @@ const AdminApi = (() => {
     $('zones-table').innerHTML = zonesCache.map((zone) => `<tr>
       <td>${zone.name}<br><small>${zone.description || ''}</small></td>
       <td>${zone.radius_km} km</td>
-      <td><span class="badge">${zone.is_active ? 'active' : 'off'}</span></td>
+      <td><span class="badge">${zone.is_active ? 'Actif' : 'Inactif'}</span></td>
       <td><button onclick="AdminApi.openZoneModal(${zone.id})">Modifier</button>
-      <button class="ghost" onclick="AdminApi.disableZone(${zone.id})">Desactiver</button></td>
+      <button class="ghost" onclick="AdminApi.disableZone(${zone.id})">Désactiver</button></td>
     </tr>`).join('');
   }
 
@@ -371,9 +409,9 @@ const AdminApi = (() => {
       <td>${fare.origin_zone_name || fare.origin_zone_id}</td>
       <td>${fare.destination_zone_name || fare.destination_zone_id}</td>
       <td><strong>${fare.fixed_price} FCFA</strong></td>
-      <td><span class="badge">${fare.is_active ? 'active' : 'off'}</span></td>
+      <td><span class="badge">${fare.is_active ? 'Actif' : 'Inactif'}</span></td>
       <td><button onclick="AdminApi.openFareModal(${fare.id})">Modifier</button>
-      <button class="ghost" onclick="AdminApi.disableFare(${fare.id})">Desactiver</button></td>
+      <button class="ghost" onclick="AdminApi.disableFare(${fare.id})">Désactiver</button></td>
     </tr>`).join('');
   }
 
@@ -408,9 +446,9 @@ const AdminApi = (() => {
     $('time-rules-table').innerHTML = timeRulesCache.map((rule) => `<tr>
       <td>${rule.name}</td><td>${rule.start_time} -> ${rule.end_time}</td>
       <td>${rule.surcharge_value} ${rule.surcharge_type === 'percent' ? '%' : 'FCFA'}</td>
-      <td><span class="badge">${rule.is_active ? 'active' : 'off'}</span></td>
+      <td><span class="badge">${rule.is_active ? 'Actif' : 'Inactif'}</span></td>
       <td><button onclick="AdminApi.openTimeRuleModal(${rule.id})">Modifier</button>
-      <button class="ghost" onclick="AdminApi.disableTimeRule(${rule.id})">Desactiver</button></td>
+      <button class="ghost" onclick="AdminApi.disableTimeRule(${rule.id})">Désactiver</button></td>
     </tr>`).join('');
   }
 
@@ -485,20 +523,20 @@ const AdminApi = (() => {
         <td>${ride.id}</td>
         <td>${escapeHtml(ride.client)}</td>
         <td>${escapeHtml(ride.driver || '-')}</td>
-        <td>${ui().badge(ride.status, statusTone(ride.status))}</td>
+        <td>${ui().badge(statusLabel(ride.status), statusTone(ride.status))}</td>
         <td>${ui().money(priceOf(ride))}</td>
         <td>${escapeHtml(ride.distance_km || '-')}</td>
         <td>${escapeHtml(ride.duration_minutes || '-')}</td>
         <td>${renderReportBadge(ride)}</td>
-        <td><button class="ghost" onclick="AdminApi.openRideDetail(${ride.id})">Détail</button></td>
+        <td><button class="ghost" onclick="AdminApi.openRideDetail(${ride.id})">Detail</button></td>
       </tr>`).join('')
-      : ui().emptyState('Aucune course à afficher.', 9);
+      : ui().emptyState('Aucune course a afficher.', 9);
     renderRidePagination(filtered.length, pageCount);
   }
   function renderRidePagination(total, pageCount) {
     if (!$('rides-pagination')) return;
     $('rides-pagination').innerHTML = `<span>${total} course(s) - page ${ridesPage}/${pageCount}</span><div class="actions">
-      <button class="ghost" ${ridesPage <= 1 ? 'disabled' : ''} onclick="AdminApi.changeRidesPage(-1)">Précédent</button>
+      <button class="ghost" ${ridesPage <= 1 ? 'disabled' : ''} onclick="AdminApi.changeRidesPage(-1)">Precedent</button>
       <button class="ghost" ${ridesPage >= pageCount ? 'disabled' : ''} onclick="AdminApi.changeRidesPage(1)">Suivant</button>
     </div>`;
   }
@@ -522,10 +560,10 @@ const AdminApi = (() => {
         <p><strong>Prix final</strong><br>${ui().money(priceOf(ride))}</p>
       </div>
       <h3>Positions</h3>
-      <p><strong>Départ</strong><br>${escapeHtml(ride.pickup_location || '-')}</p>
+      <p><strong>Depart</strong><br>${escapeHtml(ride.pickup_location || '-')}</p>
       <p><strong>Destination</strong><br>${escapeHtml(ride.dropoff_location || '-')}</p>
       <h3>Timeline statut</h3>
-      <div class="timeline">${timeline.map((item) => `<div>${ui().badge(item, item === ride.status ? statusTone(item) : 'neutral')}</div>`).join('')}</div>
+      <div class="timeline">${timeline.map((item) => `<div>${ui().badge(statusLabel(item), item === ride.status ? statusTone(item) : 'neutral')}</div>`).join('')}</div>
       <p class="hint">Actions admin en lecture seule sauf traitement support.</p>
     `;
     $('ride-detail-modal').showModal();
@@ -555,7 +593,7 @@ const AdminApi = (() => {
         <td>${user.id}</td>
         <td>${escapeHtml(user.name || '-')}</td>
         <td>${escapeHtml(user.phone_number)}</td>
-        <td><span class="badge">${escapeHtml(user.role)}</span></td>
+        <td><span class="badge">${escapeHtml(statusLabel(user.role))}</span></td>
         <td>${renderUserStatusBadge(user)}</td>
         <td>${new Date(user.created_at).toLocaleString()}</td>
         <td><div class="actions">
@@ -582,7 +620,7 @@ const AdminApi = (() => {
     const history = await request(`/admin/users/${userId}/suspensions`).catch(() => []);
     $('user-profile-content').innerHTML = `
       <div class="form-grid">
-        <p><strong>Profil</strong><br>${escapeHtml(user.role)}</p>
+        <p><strong>Profil</strong><br>${escapeHtml(statusLabel(user.role))}</p>
         <p><strong>Nom</strong><br>${escapeHtml(user.name || '-')}</p>
         <p><strong>Telephone</strong><br>${escapeHtml(user.phone_number)}</p>
         <p><strong>Statut</strong><br>${renderUserStatusBadge(user)}</p>
@@ -702,7 +740,7 @@ const AdminApi = (() => {
     if ($('drivers-count')) $('drivers-count').textContent = pendingDriversCache.length;
     $('drivers-table').innerHTML = pendingDriversCache.map((driver) => `<tr>
       <td>${driver.first_name} ${driver.last_name}</td><td>${driver.phone_number}</td>
-      <td>${new Date(driver.submitted_at).toLocaleString()}</td><td><span class="badge">${driver.verification_status}</span></td>
+      <td>${new Date(driver.submitted_at).toLocaleString()}</td><td><span class="badge">${statusLabel(driver.verification_status)}</span></td>
       <td><button onclick="AdminApi.openDriverModal(${driver.user_id})">Voir dossier</button></td></tr>`).join('');
   }
   function renderDrivers() {
@@ -725,7 +763,7 @@ const AdminApi = (() => {
         <td>${docs}/2</td>
         <td>${vehicle || '-'}</td>
         <td>${driver.submitted_at ? new Date(driver.submitted_at).toLocaleString() : '-'}</td>
-        <td><span class="badge">${driver.is_blocked ? 'blocked' : escapeHtml(driver.verification_status)}</span></td>
+        <td><span class="badge">${statusLabel(driver.is_blocked ? 'blocked' : driver.verification_status)}</span></td>
         <td><button onclick="AdminApi.openDriverModal(${driver.user_id})">Consulter</button></td>
       </tr>`;
     }).join('');
@@ -747,7 +785,7 @@ const AdminApi = (() => {
         <label>Couleur<input id="driver-vehicle-color" value="${escapeHtml(driver.vehicle_color || '')}"></label>
         <label>Plaque<input id="driver-plate-number" value="${escapeHtml(driver.plate_number || '')}"></label>
       </div>
-      <p><span class="badge">${driver.is_blocked ? 'blocked' : escapeHtml(driver.verification_status)}</span></p>
+      <p><span class="badge">${statusLabel(driver.is_blocked ? 'blocked' : driver.verification_status)}</span></p>
       <div class="driver-docs">${photo(driver.id_card_photo, 'Carte identite')}${photo(driver.selfie_photo, 'Selfie')}</div>
       <label>Raison du rejet</label>
       <textarea id="reject-reason" rows="3">${escapeHtml(driver.rejection_reason || '')}</textarea>
@@ -824,11 +862,112 @@ const AdminApi = (() => {
     ].join('');
     if ($('payments-table')) $('payments-table').innerHTML = items.length
       ? items.map((item) => {
-        return `<tr><td>${item.ride_id}</td><td>${escapeHtml(item.client_phone_number)}</td><td>${escapeHtml(item.driver_phone_number || '-')}</td><td>${ui().badge('completed', 'neutral')}</td><td>${ui().money(item.gross_amount)}</td><td>${ui().money(item.commission_amount)}</td></tr>`;
+        return `<tr><td>${item.ride_id}</td><td>${escapeHtml(item.client_phone_number)}</td><td>${escapeHtml(item.driver_phone_number || '-')}</td><td>${ui().badge(statusLabel('completed'), 'neutral')}</td><td>${ui().money(item.gross_amount)}</td><td>${ui().money(item.commission_amount)}</td></tr>`;
       }).join('')
-      : ui().emptyState('Aucun paiement à afficher.', 6);
+      : ui().emptyState('Aucun paiement a afficher.', 6);
+    await loadWithdrawalRequests();
   }
 
+  async function loadWithdrawalRequests() {
+    const params = new URLSearchParams({ limit: '200', offset: '0' });
+    if (selectedPaymentDriverId()) params.set('driver_id', selectedPaymentDriverId());
+    if (selectedWithdrawalStatus()) params.set('status', selectedWithdrawalStatus());
+    withdrawalRequestsCache = await request(`/admin/withdrawal-requests?${params.toString()}`).catch(() => ({
+      total_count: 0,
+      pending_count: 0,
+      items: [],
+    }));
+    setText('withdrawals-pending-count', Number(withdrawalRequestsCache.pending_count || 0));
+    if (!$('withdrawals-table')) return;
+    const items = withdrawalRequestsCache.items || [];
+    $('withdrawals-table').innerHTML = items.length
+      ? items.map((item) => `<tr>
+        <td>${escapeHtml(item.driver_first_name || 'Chauffeur')}<br><small>${escapeHtml(item.driver_phone_number || '-')}</small></td>
+        <td>${escapeHtml(item.driver_plate_number || '-')}</td>
+        <td>${ui().money(item.amount_due)}</td>
+        <td>${Number(item.commission_rate_snapshot || 0).toFixed(1)}%</td>
+        <td>${item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</td>
+        <td>${escapeHtml(item.driver_note || '-')}</td>
+        <td>${ui().badge(withdrawalStatusLabel(item.status), withdrawalStatusTone(item.status))}</td>
+        <td>${withdrawalActionsCell(item)}</td>
+      </tr>`).join('')
+      : ui().emptyState('Aucune demande de paiement.', 8);
+  }
+
+  function withdrawalStatusTone(status) {
+    if (status === 'pending') return 'warning';
+    if (status === 'confirmed') return 'success';
+    if (status === 'rejected') return 'danger';
+    return 'neutral';
+  }
+
+  function withdrawalStatusLabel(status) {
+    if (status === 'pending') return 'En attente';
+    if (status === 'confirmed') return 'Confirmée';
+    if (status === 'rejected') return 'Refusée';
+    return status || '-';
+  }
+
+  function withdrawalActionsCell(item) {
+    if (item.status === 'pending') {
+      return `<div class="actions">
+        <button type="button" onclick="AdminApi.openWithdrawalConfirmModal('${item.id}')">Confirmer</button>
+        <button type="button" class="danger-soft" onclick="AdminApi.openWithdrawalRejectModal('${item.id}')">Refuser</button>
+      </div>`;
+    }
+    const note = item.admin_note ? `<div><small>Note: ${escapeHtml(item.admin_note)}</small></div>` : '';
+    const date = item.confirmed_at ? `<div><small>${new Date(item.confirmed_at).toLocaleString()}</small></div>` : '';
+    return `${date}${note}` || '-';
+  }
+
+  function openWithdrawalConfirmModal(withdrawalId) {
+    const item = (withdrawalRequestsCache?.items || []).find((entry) => entry.id === withdrawalId);
+    if (!item || !$('withdrawal-confirm-modal')) return;
+    $('withdrawal-confirm-id').value = withdrawalId;
+    $('withdrawal-confirm-note').value = '';
+    const driver = item.driver_first_name || 'ce chauffeur';
+    $('withdrawal-confirm-label').textContent =
+      `Confirmer reception de ${ui().money(item.amount_due)} en cash de ${driver} ?`;
+    $('withdrawal-confirm-modal').showModal();
+  }
+
+  function closeWithdrawalConfirmModal() {
+    $('withdrawal-confirm-modal')?.close();
+  }
+
+  async function confirmWithdrawalRequest() {
+    const withdrawalId = $('withdrawal-confirm-id')?.value || '';
+    const note = ($('withdrawal-confirm-note')?.value || '').trim();
+    await request(`/admin/withdrawal-requests/${withdrawalId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'confirm', admin_note: note || null }),
+    });
+    closeWithdrawalConfirmModal();
+    await loadPayments();
+  }
+
+  function openWithdrawalRejectModal(withdrawalId) {
+    if (!$('withdrawal-reject-modal')) return;
+    $('withdrawal-reject-id').value = withdrawalId;
+    $('withdrawal-reject-note').value = '';
+    $('withdrawal-reject-modal').showModal();
+  }
+
+  function closeWithdrawalRejectModal() {
+    $('withdrawal-reject-modal')?.close();
+  }
+
+  async function rejectWithdrawalRequest() {
+    const withdrawalId = $('withdrawal-reject-id')?.value || '';
+    const note = ($('withdrawal-reject-note')?.value || '').trim();
+    if (!note) return window.alert('La note admin est obligatoire pour un refus.');
+    await request(`/admin/withdrawal-requests/${withdrawalId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'reject', admin_note: note }),
+    });
+    closeWithdrawalRejectModal();
+    await loadPayments();
+  }
   function exportPaymentsCsv() {
     const items = commissionLedgerCache?.items || [];
     const rows = [['ride_id', 'client', 'driver', 'status', 'cash_total', 'commission_amount', 'net_amount', 'completed_at']]
@@ -861,10 +1000,10 @@ const AdminApi = (() => {
       ? rows.map((report) => `<tr>
         <td>${report.id}</td>
         <td>${report.ride_request_id}</td>
-        <td>${escapeHtml(report.reported_by_role)}</td>
+        <td>${escapeHtml(statusLabel(report.reported_by_role))}</td>
         <td>${escapeHtml(report.reported_by)}</td>
         <td>${escapeHtml(report.reason)}</td>
-        <td>${ui().badge(report.status, statusTone(report.status))}</td>
+        <td>${ui().badge(statusLabel(report.status), statusTone(report.status))}</td>
         <td>${escapeHtml(report.note_admin || '-')}</td>
         <td>${new Date(report.created_at).toLocaleString()}</td>
         <td><div class="actions">
@@ -887,7 +1026,7 @@ const AdminApi = (() => {
       'resolu',
       'classe_sans_suite',
     ].map((status) =>
-      `<option value="${status}" ${status === currentStatus ? 'selected' : ''}>${status}</option>`
+      `<option value="${status}" ${status === currentStatus ? 'selected' : ''}>${statusLabel(status)}</option>`
     ).join('');
   }
 
@@ -931,14 +1070,52 @@ const AdminApi = (() => {
     return payload;
   }
 
+  function notificationStatusTone(status) {
+    if (status === 'sent') return 'neutral';
+    if (status === 'partial') return 'warning';
+    if (status === 'firebase_not_configured') return 'danger';
+    if (status === 'failed') return 'danger';
+    return 'neutral';
+  }
+
+  function notificationStatusLabel(item) {
+    const status = item.fcm_status || 'failed';
+    if (status === 'sent') return 'Envoye';
+    if (status === 'partial') {
+      const sent = Number(item.fcm_sent_count || 0);
+      const total = sent + Number(item.fcm_failed_count || 0);
+      return `Partiel (${sent}/${total || sent})`;
+    }
+    if (status === 'firebase_not_configured') return 'Firebase non configure';
+    return 'Echoue';
+  }
+
+  function notificationResultLabel(item) {
+    const sentCount = Number(item.fcm_sent_count || 0);
+    const failedCount = Number(item.fcm_failed_count || 0);
+    const chunks = [`${sentCount} envoyees`, `${failedCount} echecs`];
+    if (item.fcm_error_reason) chunks.push(String(item.fcm_error_reason));
+    return chunks.join(' - ');
+  }
+
+  function setFirebaseWarning(visible, reason = '') {
+    const panel = $('firebase-warning-panel');
+    const label = $('firebase-warning-message');
+    if (!panel || !label) return;
+    panel.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+    const suffix = reason ? ` (${reason})` : '';
+    label.textContent = `Firebase non configure - les notifications ne seront pas envoyees${suffix}.`;
+  }
+
   function updateNotificationPreview() {
     const payload = buildNotificationPayload();
     setText('notification-preview-title', payload.title || 'Noor Express');
     setText('notification-preview-message', payload.message || 'Votre message apparaitra ici.');
     setText('notification-preview-type', payload.type);
     const previewTarget = payload.target === 'user_id' && payload.user_id
-      ? `user_id:${payload.user_id}`
-      : payload.target;
+      ? `Utilisateur #${payload.user_id}`
+      : statusLabel(payload.target);
     setText('notification-preview-target', previewTarget);
   }
 
@@ -974,18 +1151,22 @@ const AdminApi = (() => {
 
   async function loadNotificationHistory() {
     if (!$('notifications-history-body')) return;
-    const payload = await request('/admin/notifications/history?limit=50&offset=0').catch(() => ({ items: [], total: 0 }));
+    const payload = await request('/admin/notifications/history?limit=50&offset=0')
+      .catch(() => ({ items: [], total: 0, firebase_ready: true }));
     const rows = payload.items || [];
     $('notifications-history-body').innerHTML = rows.length
       ? rows.map((item) => `<tr>
         <td>${item.sent_at ? new Date(item.sent_at).toLocaleString() : '-'}</td>
-        <td>${escapeHtml(item.target)}</td>
+        <td>${escapeHtml(statusLabel(item.target))}</td>
         <td>${escapeHtml(item.title)}</td>
-        <td>${ui().badge(item.type, statusTone(item.type))}</td>
+        <td>${ui().badge(statusLabel(item.type), statusTone(item.type))}</td>
+        <td>${ui().badge(notificationStatusLabel(item), notificationStatusTone(item.fcm_status))}</td>
+        <td>${escapeHtml(notificationResultLabel(item))}</td>
         <td>${Number(item.estimated_recipients || 0)}</td>
       </tr>`).join('')
-      : ui().emptyState('Aucun envoi pour le moment.', 5);
+      : ui().emptyState('Aucun envoi pour le moment.', 7);
     setText('notifications-history-total', Number(payload.total || 0));
+    setFirebaseWarning(payload.firebase_ready === false, payload.firebase_error_reason || '');
   }
 
   async function sendAdminNotification() {
@@ -1013,7 +1194,16 @@ const AdminApi = (() => {
         method: 'POST',
         body: JSON.stringify(payload),
       });
-      setMessage(`Notification envoyee (${response.estimated_recipients} destinataires estimes).`);
+      const sentCount = Number(response.fcm_sent_count || 0);
+      const failedCount = Number(response.fcm_failed_count || 0);
+      if (response.fcm_status === 'sent') {
+        setMessage(`Notification envoyee (${sentCount} envois FCM).`);
+      } else {
+        const detail = response.fcm_error_reason ? ` (${response.fcm_error_reason})` : '';
+        setMessage(
+          `${sentCount} notifications envoyees, ${failedCount} ont echoue - verifiez la configuration Firebase${detail}.`
+        );
+      }
       await refreshNotificationEstimate();
       await loadNotificationHistory();
     } catch (error) {
@@ -1024,9 +1214,9 @@ const AdminApi = (() => {
   async function loadSettingsPage() {
     try {
       const status = await request('/admin/simulations/status');
-      setText('visible-env', status.enabled ? 'development' : 'production ou simulations désactivées');
+      setText('visible-env', status.enabled ? 'developpement' : 'production ou simulations desactivees');
     } catch (_error) {
-      setText('visible-env', 'production ou simulations désactivées');
+      setText('visible-env', 'production ou simulations desactivees');
     }
   }
 
@@ -1042,6 +1232,10 @@ const AdminApi = (() => {
     loadDrivers, renderDrivers, loadPendingDrivers, renderPendingDrivers,
     openDriverModal, closeDriverModal, saveDriverDossier, verifyDriver, rejectDriver, blockDriver, unblockDriver,
     loadPayments, exportPaymentsCsv, loadReportsPage, renderReportsPage, applyReportUpdate, suspendFromReport, applyArchiveFilters,
+    openWithdrawalConfirmModal, closeWithdrawalConfirmModal, confirmWithdrawalRequest,
+    openWithdrawalRejectModal, closeWithdrawalRejectModal, rejectWithdrawalRequest,
     loadNotificationsPage, sendAdminNotification, loadSettingsPage,
   };
 })();
+
+

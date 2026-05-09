@@ -196,6 +196,7 @@ class MapController extends StateNotifier<MapState> {
       };
       state = state.copyWith(
         accessState: accessState,
+        clearCurrentPosition: true,
         isTrackingPosition: false,
         errorMessage: message,
       );
@@ -208,6 +209,7 @@ class MapController extends StateNotifier<MapState> {
         currentPosition: MapPoint(
           latitude: currentPosition.latitude,
           longitude: currentPosition.longitude,
+          accuracyMeters: currentPosition.accuracyMeters,
         ),
       );
     }
@@ -218,6 +220,7 @@ class MapController extends StateNotifier<MapState> {
         currentPosition: MapPoint(
           latitude: position.latitude,
           longitude: position.longitude,
+          accuracyMeters: position.accuracyMeters,
         ),
         isTrackingPosition: true,
         accessState: DeviceLocationAccessState.granted,

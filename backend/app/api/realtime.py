@@ -5,6 +5,7 @@ from typing import TypeVar
 from pydantic import ValidationError
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from app.core.messages import Messages
 from app.core.security import verify_token
 from app.db.database import AsyncSessionLocal
 from app.models.user import DriverStatus, User, UserRole
@@ -14,6 +15,10 @@ from app.realtime.schemas import (
     DriverPositionNotification,
     DriverLocationUpdate,
     NearbyDriverLocation,
+)
+from app.services.ride_request_service import (
+    get_fresh_driver_position_from_database,
+    persist_driver_last_known_position,
 )
 from app.services.user_service import get_drivers_by_status, update_driver_status
 
@@ -85,6 +90,44 @@ async def _filter_available_driver_locations(
     ]
 
 
+async def _driver_has_store_position(driver_id: int) -> bool:
+    connected_drivers = await realtime_gateway.get_connected_drivers()
+    return any(driver.driver_id == driver_id for driver in connected_drivers)
+
+
+async def _restore_driver_position_from_database_if_fresh(driver_id: int) -> None:
+    if await _driver_has_store_position(driver_id):
+        return
+    async with AsyncSessionLocal() as session:
+        position = await get_fresh_driver_position_from_database(
+            session,
+            driver_id,
+        )
+    if position is None:
+        return
+    await realtime_gateway.update_position(
+        driver_id,
+        DriverLocationUpdate(latitude=position[0], longitude=position[1]),
+    )
+
+
+async def _persist_driver_position_background(
+    driver_id: int,
+    location: DriverLocationUpdate,
+) -> None:
+    try:
+        async with AsyncSessionLocal() as session:
+            await persist_driver_last_known_position(
+                session,
+                driver_id=driver_id,
+                latitude=location.latitude,
+                longitude=location.longitude,
+            )
+    except Exception:
+        # Do not break realtime flow if persistence fails in the background.
+        return
+
+
 @router.websocket("/ws/drivers/{driver_id}")
 async def driver_websocket(websocket: WebSocket, driver_id: int) -> None:
     driver = await authenticate_websocket_user(
@@ -109,6 +152,7 @@ async def driver_websocket(websocket: WebSocket, driver_id: int) -> None:
             )
 
     await realtime_gateway.connect_driver(driver_id, websocket)
+    await _restore_driver_position_from_database_if_fresh(driver_id)
     keepalive_task = asyncio.create_task(send_keepalive(websocket))
 
     try:
@@ -119,10 +163,13 @@ async def driver_websocket(websocket: WebSocket, driver_id: int) -> None:
             try:
                 location = DriverLocationUpdate.model_validate(payload)
             except ValidationError:
-                await websocket.send_json({"detail": "Invalid location payload"})
+                await websocket.send_json({"detail": Messages.FORBIDDEN})
                 continue
 
             await realtime_gateway.update_position(driver_id, location)
+            asyncio.create_task(
+                _persist_driver_position_background(driver_id, location)
+            )
             await realtime_gateway.send_driver_position_notification_to_clients(
                 DriverPositionNotification(
                     driver_id=driver_id,

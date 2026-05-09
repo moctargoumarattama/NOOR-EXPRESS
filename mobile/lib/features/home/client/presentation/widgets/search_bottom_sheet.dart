@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../../core/location/location_quality.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../shared/widgets/app_button.dart';
 import '../../../../../shared/widgets/app_inline_feedback.dart';
@@ -15,16 +16,31 @@ import 'price_selector.dart';
 part 'search_bottom_sheet_sections.dart';
 
 typedef AddDropoffToFavorites = Future<void> Function(AddressResult dropoff);
+typedef SelectRecentAddress = void Function(AddressResult address);
 
 class SearchBottomSheet extends StatelessWidget {
+  static const double _loadingOffersInitialSize = 0.56;
+  static const double _loadingOffersMaxSize = 0.76;
+  static const double _offerReceivedInitialSize = 0.78;
+  static const double _offerReceivedMaxSize = 0.92;
+  static const double _searchingInitialSize = 0.66;
+  static const double _searchingMaxSize = 0.84;
+  static const double _idleInitialSize = 0.30;
+  static const double _idleMaxSize = 0.62;
+  static const double _routePreviewInitialSize = 0.88;
+  static const double _routePreviewMaxSize = 0.95;
+
   const SearchBottomSheet({
     super.key,
     required this.pickup,
     required this.dropoff,
     required this.recentDepartureLabels,
+    this.recentAddresses = const [],
     required this.priceController,
     required this.isCreating,
     required this.isEstimatingPrice,
+    required this.pickupLocationQuality,
+    required this.canSubmitRideRequest,
     required this.activeRide,
     required this.onPickupTap,
     required this.onDropoffTap,
@@ -32,8 +48,10 @@ class SearchBottomSheet extends StatelessWidget {
     required this.onClearDropoff,
     required this.onSubmit,
     required this.onOpenActiveRide,
+    this.onRecentTap,
     this.estimate,
     this.estimateError,
+    this.submitDisabledReason,
     this.route,
     this.routeError,
     this.activeRideRoute,
@@ -52,9 +70,13 @@ class SearchBottomSheet extends StatelessWidget {
   final AddressResult? pickup;
   final AddressResult? dropoff;
   final List<String> recentDepartureLabels;
+  final List<AddressResult> recentAddresses;
   final TextEditingController priceController;
   final bool isCreating;
   final bool isEstimatingPrice;
+  final LocationQuality pickupLocationQuality;
+  final bool canSubmitRideRequest;
+  final String? submitDisabledReason;
   final ClientRide? activeRide;
   final RouteResult? route;
   final RouteResult? activeRideRoute;
@@ -69,6 +91,7 @@ class SearchBottomSheet extends StatelessWidget {
   final VoidCallback onClearDropoff;
   final VoidCallback onSubmit;
   final VoidCallback onOpenActiveRide;
+  final SelectRecentAddress? onRecentTap;
   final VoidCallback? onCancelActiveRide;
   final ValueChanged<RideOfferModel>? onAcceptOffer;
   final ValueChanged<RideOfferModel>? onRejectOffer;
@@ -81,23 +104,23 @@ class SearchBottomSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final initialSize = _isLoadingOfferList
-        ? 0.56
+        ? _loadingOffersInitialSize
         : _hasOfferReceived
-            ? 0.70
+            ? _offerReceivedInitialSize
             : _isSearching
-                ? 0.66
+                ? _searchingInitialSize
                 : dropoff == null
-                    ? 0.30
-                    : 0.50;
+                    ? _idleInitialSize
+                    : _routePreviewInitialSize;
     final maxSize = _isLoadingOfferList
-        ? 0.76
+        ? _loadingOffersMaxSize
         : _hasOfferReceived
-            ? 0.84
+            ? _offerReceivedMaxSize
             : _isSearching
-                ? 0.84
+                ? _searchingMaxSize
                 : dropoff == null
-                    ? 0.62
-                    : 0.60;
+                    ? _idleMaxSize
+                    : _routePreviewMaxSize;
 
     return RideBottomSheetShell(
       initialChildSize: initialSize,
@@ -131,7 +154,6 @@ class SearchBottomSheet extends StatelessWidget {
                         ride: activeRide!,
                         route: activeRideRoute,
                         nearbyDriversCount: nearbyDriversCount,
-                        onOpen: onOpenActiveRide,
                         onCancel: onCancelActiveRide,
                       )
                     : _BookingPanel(
@@ -142,12 +164,17 @@ class SearchBottomSheet extends StatelessWidget {
                         route: route,
                         routeError: routeError,
                         recentDepartureLabels: recentDepartureLabels,
+                        recentAddresses: recentAddresses,
                         priceController: priceController,
                         isCreating: isCreating,
                         isEstimatingPrice: isEstimatingPrice,
+                        pickupLocationQuality: pickupLocationQuality,
+                        canSubmitRideRequest: canSubmitRideRequest,
+                        submitDisabledReason: submitDisabledReason,
                         estimate: estimate,
                         onPickupTap: onPickupTap,
                         onDropoffTap: onDropoffTap,
+                        onRecentTap: onRecentTap,
                         onClearPickup: onClearPickup,
                         onClearDropoff: onClearDropoff,
                         onSubmit: onSubmit,

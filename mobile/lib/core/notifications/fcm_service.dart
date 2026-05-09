@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -8,10 +10,12 @@ import '../network/api_client.dart';
 import 'local_notification_service.dart';
 import 'notification_event.dart';
 import 'notification_handler.dart';
+import 'notification_inbox_service.dart';
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint('[FCM] Message background recu: ${message.messageId}');
+  await persistBackgroundRemoteMessage(message);
 }
 
 class FcmService {
@@ -19,13 +23,16 @@ class FcmService {
     required ApiClient apiClient,
     required LocalNotificationService localNotificationService,
     required NotificationHandler notificationHandler,
+    required NotificationInboxService notificationInboxService,
   })  : _apiClient = apiClient,
         _localNotificationService = localNotificationService,
-        _notificationHandler = notificationHandler;
+        _notificationHandler = notificationHandler,
+        _notificationInboxService = notificationInboxService;
 
   final ApiClient _apiClient;
   final LocalNotificationService _localNotificationService;
   final NotificationHandler _notificationHandler;
+  final NotificationInboxService _notificationInboxService;
   bool _isInitialized = false;
 
   Future<void> initialize() async {
@@ -40,11 +47,21 @@ class FcmService {
 
       FirebaseMessaging.instance.onTokenRefresh.listen(_sendToken);
       FirebaseMessaging.onMessage.listen(_handleForegroundMessage);
-      FirebaseMessaging.onMessageOpenedApp.listen(_handleOpenedMessage);
+      FirebaseMessaging.onMessageOpenedApp.listen((message) async {
+        await _notificationInboxService.addRemoteMessage(
+          message,
+          source: 'fcm_opened',
+        );
+        _handleOpenedMessage(message);
+      });
 
       final initialMessage =
           await FirebaseMessaging.instance.getInitialMessage();
       if (initialMessage != null) {
+        await _notificationInboxService.addRemoteMessage(
+          initialMessage,
+          source: 'fcm_initial',
+        );
         _handleOpenedMessage(initialMessage);
       }
 
@@ -94,6 +111,10 @@ class FcmService {
   }
 
   Future<void> _handleForegroundMessage(RemoteMessage message) async {
+    await _notificationInboxService.addRemoteMessage(
+      message,
+      source: 'fcm_foreground',
+    );
     final type = message.data['type']?.toString();
     if (shouldPresentForegroundInAppNotification(type)) {
       _notificationHandler.showInApp(
@@ -122,6 +143,7 @@ final fcmServiceProvider = Provider<FcmService>((ref) {
     apiClient: ref.watch(apiClientProvider),
     localNotificationService: ref.watch(localNotificationServiceProvider),
     notificationHandler: ref.watch(notificationHandlerProvider),
+    notificationInboxService: ref.watch(notificationInboxServiceProvider),
   );
 });
 

@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Chauffeurs à valider - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
@@ -23,10 +23,10 @@
         <label>Statut
           <select id="driver-status-filter" onchange="AdminApi.renderDrivers()">
             <option value="">Tous statuts</option>
-            <option value="pending">pending</option>
-            <option value="verified">verified</option>
-            <option value="rejected">rejected</option>
-            <option value="blocked">blocked</option>
+            <option value="pending">En attente</option>
+            <option value="verified">Validé</option>
+            <option value="rejected">Rejeté</option>
+            <option value="blocked">Bloqué</option>
           </select>
         </label>
         <label>Année archive
@@ -61,3 +61,4 @@
   <script>AdminApi.requireAuth(); AdminApi.loadDrivers();</script>
 </body>
 </html>
+

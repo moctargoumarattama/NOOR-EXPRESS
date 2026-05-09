@@ -3,15 +3,19 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.messages import Messages
+from app.core.firebase import notify_user
+from app.models.driver_profile import DriverProfile
 from app.models.driver_wallet import DriverWallet
 from app.models.pricing_zone import PricingZone
 from app.models.ride_request import RideRequest, RideRequestStatus
 from app.models.ride_request_rejection import RideRequestRejection
 from app.models.user import User
+from app.models.withdrawal_request import WithdrawalRequest, WithdrawalRequestStatus
 from app.schemas.driver_wallet import (
     CommissionLedgerItemRead,
     CommissionLedgerRead,
@@ -27,11 +31,33 @@ from app.schemas.driver_wallet import (
 from app.services.pricing_service import (
     detect_pricing_zone,
     get_all_zones,
+    get_platform_commission_percent,
     money,
 )
 
 DRIVER_STATS_CACHE_TTL_SECONDS = 600
 _driver_dashboard_stats_cache: dict[str, tuple[datetime, DriverDashboardStatsRead]] = {}
+MIN_WITHDRAWAL_AMOUNT = Decimal("500.00")
+
+
+class WithdrawalRequestPendingConflictError(Exception):
+    pass
+
+
+class WithdrawalRequestNotFoundError(Exception):
+    pass
+
+
+class WithdrawalRequestStateConflictError(Exception):
+    pass
+
+
+class WithdrawalRequestAmountTooLowError(Exception):
+    pass
+
+
+class WithdrawalRequestValidationError(Exception):
+    pass
 
 
 async def get_or_create_driver_wallet(
@@ -84,15 +110,28 @@ async def sync_completed_ride_to_wallet(
 async def get_driver_wallet_summary(
     session: AsyncSession,
     driver_id: int,
-) -> DriverWalletSummaryRead:
+) -> dict[str, object]:
     wallet_result = await session.execute(
         select(DriverWallet).where(DriverWallet.driver_id == driver_id)
     )
     wallet = wallet_result.scalar_one_or_none()
+    summary = await _build_driver_wallet_summary_payload(session, driver_id, wallet)
+    commission_percent = round(float(await get_platform_commission_percent(session)), 2)
+    return {
+        **summary.model_dump(),
+        "platform_commission_percent": commission_percent,
+        "commission_due_amount": _wallet_commission_due_amount(wallet),
+    }
+
+
+async def _build_driver_wallet_summary_payload(
+    session: AsyncSession,
+    driver_id: int,
+    wallet: DriverWallet | None,
+) -> DriverWalletSummaryRead:
     now = datetime.utcnow()
     today_start = datetime(now.year, now.month, now.day)
     week_start = today_start - timedelta(days=today_start.weekday())
-
     today = await _earnings_window(
         session,
         driver_id,
@@ -105,21 +144,11 @@ async def get_driver_wallet_summary(
         date_from=week_start,
         date_to=None,
     )
-    total = EarningsWindowRead(
-        rides_count=int(wallet.total_completed_rides if wallet is not None else 0),
-        gross_amount=(
-            round(float(wallet.total_gross_earnings or 0), 2)
-            if wallet is not None
-            else 0.0
-        ),
-        commission_amount=(
-            round(float(wallet.total_commission or 0), 2) if wallet is not None else 0.0
-        ),
-        net_amount=(
-            round(float(wallet.total_net_earnings or 0), 2)
-            if wallet is not None
-            else 0.0
-        ),
+    total = await _earnings_window(
+        session,
+        driver_id,
+        date_from=None,
+        date_to=None,
     )
     return DriverWalletSummaryRead(
         driver_id=driver_id,
@@ -407,6 +436,331 @@ def _write_driver_dashboard_stats_cache(
     )
 
 
+def _wallet_commission_due_amount(wallet: DriverWallet | None) -> float:
+    if wallet is None:
+        return 0.0
+    due_amount = money(wallet.total_commission or 0)
+    if due_amount < Decimal("0.00"):
+        return 0.0
+    return round(float(due_amount), 2)
+
+
+def _normalize_withdrawal_note(
+    note: str | None,
+    *,
+    required: bool,
+) -> str | None:
+    if note is None:
+        if required:
+            raise WithdrawalRequestValidationError(Messages.ADMIN_NOTE_REQUIRED)
+        return None
+    cleaned = note.strip()
+    if required and not cleaned:
+        raise WithdrawalRequestValidationError(Messages.ADMIN_NOTE_REQUIRED)
+    if not cleaned:
+        return None
+    if len(cleaned) > 200:
+        raise WithdrawalRequestValidationError(Messages.NOTE_TOO_LONG)
+    return cleaned
+
+
+def _withdrawal_payload(
+    withdrawal: WithdrawalRequest,
+    *,
+    driver_phone_number: str | None = None,
+    driver_first_name: str | None = None,
+    driver_plate_number: str | None = None,
+) -> dict[str, object]:
+    return {
+        "id": withdrawal.id,
+        "driver_id": withdrawal.driver_id,
+        "amount_due": round(float(withdrawal.amount_due or 0), 2),
+        "commission_rate_snapshot": round(
+            float(withdrawal.commission_rate_snapshot or 0),
+            2,
+        ),
+        "status": str(withdrawal.status),
+        "driver_note": withdrawal.driver_note,
+        "admin_note": withdrawal.admin_note,
+        "created_at": withdrawal.created_at,
+        "confirmed_at": withdrawal.confirmed_at,
+        "confirmed_by": withdrawal.confirmed_by,
+        "driver_phone_number": driver_phone_number,
+        "driver_first_name": driver_first_name,
+        "driver_plate_number": driver_plate_number,
+    }
+
+
+def _status_priority():
+    return case(
+        (WithdrawalRequest.status == WithdrawalRequestStatus.PENDING.value, 0),
+        else_=1,
+    )
+
+
+async def _get_withdrawal_request_or_404(
+    session: AsyncSession,
+    withdrawal_request_id: str,
+    *,
+    driver_id: int | None = None,
+) -> WithdrawalRequest:
+    filters = [WithdrawalRequest.id == withdrawal_request_id]
+    if driver_id is not None:
+        filters.append(WithdrawalRequest.driver_id == driver_id)
+    result = await session.execute(select(WithdrawalRequest).where(*filters))
+    withdrawal = result.scalar_one_or_none()
+    if withdrawal is None:
+        raise WithdrawalRequestNotFoundError(Messages.WITHDRAWAL_NOT_FOUND)
+    return withdrawal
+
+
+async def create_driver_withdrawal_request(
+    session: AsyncSession,
+    *,
+    driver_id: int,
+    driver_note: str | None,
+) -> dict[str, object]:
+    pending_result = await session.execute(
+        select(WithdrawalRequest.id).where(
+            WithdrawalRequest.driver_id == driver_id,
+            WithdrawalRequest.status == WithdrawalRequestStatus.PENDING.value,
+        )
+    )
+    if pending_result.scalar_one_or_none() is not None:
+        raise WithdrawalRequestPendingConflictError(
+            Messages.WITHDRAWAL_ALREADY_PENDING,
+        )
+
+    wallet = await get_or_create_driver_wallet(session, driver_id)
+    amount_due = money(wallet.total_commission or 0)
+    if amount_due < MIN_WITHDRAWAL_AMOUNT:
+        raise WithdrawalRequestAmountTooLowError(
+            Messages.INSUFFICIENT_BALANCE,
+        )
+
+    withdrawal = WithdrawalRequest(
+        driver_id=driver_id,
+        amount_due=amount_due,
+        commission_rate_snapshot=money(await get_platform_commission_percent(session)),
+        status=WithdrawalRequestStatus.PENDING.value,
+        driver_note=_normalize_withdrawal_note(driver_note, required=False),
+    )
+    session.add(withdrawal)
+    await session.commit()
+    await session.refresh(withdrawal)
+    return _withdrawal_payload(withdrawal)
+
+
+async def list_driver_withdrawal_requests(
+    session: AsyncSession,
+    *,
+    driver_id: int,
+    limit: int,
+    offset: int,
+) -> dict[str, object]:
+    filters = [WithdrawalRequest.driver_id == driver_id]
+    total_count_result = await session.execute(
+        select(func.count(WithdrawalRequest.id)).where(*filters)
+    )
+    items_result = await session.execute(
+        select(WithdrawalRequest)
+        .where(*filters)
+        .order_by(WithdrawalRequest.created_at.desc(), WithdrawalRequest.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    pending_result = await session.execute(
+        select(WithdrawalRequest)
+        .where(
+            WithdrawalRequest.driver_id == driver_id,
+            WithdrawalRequest.status == WithdrawalRequestStatus.PENDING.value,
+        )
+        .order_by(WithdrawalRequest.created_at.desc(), WithdrawalRequest.id.desc())
+        .limit(1)
+    )
+    pending = pending_result.scalar_one_or_none()
+    return {
+        "total_count": int(total_count_result.scalar_one() or 0),
+        "pending_request": None if pending is None else _withdrawal_payload(pending),
+        "items": [_withdrawal_payload(item) for item in items_result.scalars().all()],
+    }
+
+
+async def cancel_driver_withdrawal_request(
+    session: AsyncSession,
+    *,
+    driver_id: int,
+    withdrawal_request_id: str,
+) -> None:
+    withdrawal = await _get_withdrawal_request_or_404(
+        session,
+        withdrawal_request_id,
+        driver_id=driver_id,
+    )
+    if withdrawal.status != WithdrawalRequestStatus.PENDING.value:
+        raise WithdrawalRequestStateConflictError(
+            Messages.WITHDRAWAL_PENDING_ONLY,
+        )
+    await session.delete(withdrawal)
+    await session.commit()
+
+
+async def list_admin_withdrawal_requests(
+    session: AsyncSession,
+    *,
+    status: str | None,
+    driver_id: int | None,
+    limit: int,
+    offset: int,
+) -> dict[str, object]:
+    filters = _withdrawal_filters(status=status, driver_id=driver_id)
+    count_result = await session.execute(
+        select(func.count(WithdrawalRequest.id)).where(*filters)
+    )
+    rows = await _list_admin_withdrawal_rows(
+        session,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "total_count": int(count_result.scalar_one() or 0),
+        "pending_count": await _count_pending_withdrawals(session, driver_id=driver_id),
+        "items": [
+            _withdrawal_payload(
+                withdrawal,
+                driver_phone_number=phone_number,
+                driver_first_name=first_name,
+                driver_plate_number=plate_number,
+            )
+            for withdrawal, phone_number, plate_number, first_name in rows
+        ],
+    }
+
+
+async def resolve_admin_withdrawal_request(
+    session: AsyncSession,
+    *,
+    withdrawal_request_id: str,
+    action: str,
+    admin_id: int,
+    admin_note: str | None,
+) -> dict[str, object]:
+    withdrawal = await _get_withdrawal_request_or_404(session, withdrawal_request_id)
+    if withdrawal.status != WithdrawalRequestStatus.PENDING.value:
+        raise WithdrawalRequestStateConflictError(
+            Messages.WITHDRAWAL_PENDING_ONLY,
+        )
+
+    if action == "confirm":
+        return await _confirm_withdrawal_request(
+            session,
+            withdrawal=withdrawal,
+            admin_id=admin_id,
+            admin_note=admin_note,
+        )
+
+    if action != "reject":
+        raise WithdrawalRequestValidationError(Messages.INVALID_WITHDRAWAL_ACTION)
+    return await _reject_withdrawal_request(
+        session,
+        withdrawal=withdrawal,
+        admin_note=admin_note,
+    )
+
+
+def _withdrawal_filters(*, status: str | None, driver_id: int | None):
+    filters = []
+    if status is not None:
+        filters.append(WithdrawalRequest.status == status)
+    if driver_id is not None:
+        filters.append(WithdrawalRequest.driver_id == driver_id)
+    return filters
+
+
+async def _list_admin_withdrawal_rows(
+    session: AsyncSession,
+    *,
+    filters,
+    limit: int,
+    offset: int,
+):
+    rows_result = await session.execute(
+        select(WithdrawalRequest, User.phone_number, User.plate_number, DriverProfile.first_name)
+        .join(User, WithdrawalRequest.driver_id == User.id)
+        .outerjoin(DriverProfile, DriverProfile.user_id == User.id)
+        .where(*filters)
+        .order_by(_status_priority(), WithdrawalRequest.created_at.desc(), WithdrawalRequest.id.desc())
+        .offset(offset)
+        .limit(limit)
+    )
+    return rows_result.all()
+
+
+async def _count_pending_withdrawals(
+    session: AsyncSession,
+    *,
+    driver_id: int | None,
+) -> int:
+    filters = [WithdrawalRequest.status == WithdrawalRequestStatus.PENDING.value]
+    if driver_id is not None:
+        filters.append(WithdrawalRequest.driver_id == driver_id)
+    result = await session.execute(select(func.count(WithdrawalRequest.id)).where(*filters))
+    return int(result.scalar_one() or 0)
+
+
+async def _confirm_withdrawal_request(
+    session: AsyncSession,
+    *,
+    withdrawal: WithdrawalRequest,
+    admin_id: int,
+    admin_note: str | None,
+) -> dict[str, object]:
+    wallet = await get_or_create_driver_wallet(session, withdrawal.driver_id)
+    due_amount = money(wallet.total_commission or 0)
+    if due_amount < money(withdrawal.amount_due):
+        raise WithdrawalRequestStateConflictError(
+            Messages.WALLET_DUE_AMOUNT_CONFLICT,
+        )
+    wallet.total_commission = money(due_amount - money(withdrawal.amount_due))
+    withdrawal.status = WithdrawalRequestStatus.CONFIRMED.value
+    withdrawal.confirmed_at = datetime.utcnow()
+    withdrawal.confirmed_by = admin_id
+    withdrawal.admin_note = _normalize_withdrawal_note(admin_note, required=False)
+    await session.commit()
+    await session.refresh(withdrawal)
+    amount = int(round(float(withdrawal.amount_due or 0)))
+    await notify_user(
+        session,
+        withdrawal.driver_id,
+        title="Paiement confirme",
+        body=f"Paiement de {amount} FCFA confirme.",
+        data={"type": "withdrawal_confirmed", "amount": amount},
+    )
+    return _withdrawal_payload(withdrawal)
+
+
+async def _reject_withdrawal_request(
+    session: AsyncSession,
+    *,
+    withdrawal: WithdrawalRequest,
+    admin_note: str | None,
+) -> dict[str, object]:
+    note = _normalize_withdrawal_note(admin_note, required=True)
+    withdrawal.status = WithdrawalRequestStatus.REJECTED.value
+    withdrawal.admin_note = note
+    await session.commit()
+    await session.refresh(withdrawal)
+    await notify_user(
+        session,
+        withdrawal.driver_id,
+        title="Demande refusee",
+        body=f"Demande de paiement refusee: {note}",
+        data={"type": "withdrawal_rejected"},
+    )
+    return _withdrawal_payload(withdrawal)
+
+
 async def get_admin_commission_ledger(
     session: AsyncSession,
     *,
@@ -416,8 +770,36 @@ async def get_admin_commission_ledger(
     limit: int = 100,
     offset: int = 0,
 ) -> CommissionLedgerRead:
-    client = aliased(User)
-    driver = aliased(User)
+    filters = _commission_ledger_filters(
+        driver_id=driver_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    total_count, total_gross_amount, total_commission_amount, total_net_amount = (
+        await _commission_ledger_totals(session, filters)
+    )
+    rows = await _commission_ledger_rows(
+        session,
+        filters=filters,
+        limit=limit,
+        offset=offset,
+    )
+    items = [_commission_ledger_item(ride, client_phone, driver_phone) for ride, client_phone, driver_phone in rows]
+    return CommissionLedgerRead(
+        total_count=total_count,
+        total_gross_amount=total_gross_amount,
+        total_commission_amount=total_commission_amount,
+        total_net_amount=total_net_amount,
+        items=items,
+    )
+
+
+def _commission_ledger_filters(
+    *,
+    driver_id: int | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
+):
     filters = [
         RideRequest.status == RideRequestStatus.COMPLETED,
         RideRequest.driver_id.is_not(None),
@@ -426,17 +808,17 @@ async def get_admin_commission_ledger(
     if driver_id is not None:
         filters.append(RideRequest.driver_id == driver_id)
     if date_from is not None:
-        filters.append(
-            func.coalesce(RideRequest.completed_at, RideRequest.created_at) >= date_from
-        )
+        filters.append(_ride_event_time() >= date_from)
     if date_to is not None:
-        filters.append(
-            func.coalesce(RideRequest.completed_at, RideRequest.created_at) <= date_to
-        )
+        filters.append(_ride_event_time() <= date_to)
+    return filters
 
-    count_result = await session.execute(
-        select(func.count(RideRequest.id)).where(*filters)
-    )
+
+async def _commission_ledger_totals(
+    session: AsyncSession,
+    filters,
+) -> tuple[int, float, float, float]:
+    count_result = await session.execute(select(func.count(RideRequest.id)).where(*filters))
     totals_result = await session.execute(
         select(
             func.coalesce(func.sum(RideRequest.final_price), 0.0),
@@ -444,6 +826,24 @@ async def get_admin_commission_ledger(
             func.coalesce(func.sum(RideRequest.driver_net_earnings), 0.0),
         ).where(*filters)
     )
+    total_gross_amount, total_commission_amount, total_net_amount = totals_result.one()
+    return (
+        int(count_result.scalar_one() or 0),
+        round(float(total_gross_amount or 0), 2),
+        round(float(total_commission_amount or 0), 2),
+        round(float(total_net_amount or 0), 2),
+    )
+
+
+async def _commission_ledger_rows(
+    session: AsyncSession,
+    *,
+    filters,
+    limit: int,
+    offset: int,
+):
+    client = aliased(User)
+    driver = aliased(User)
     rows_result = await session.execute(
         select(
             RideRequest,
@@ -460,26 +860,23 @@ async def get_admin_commission_ledger(
         .offset(offset)
         .limit(limit)
     )
-    total_gross_amount, total_commission_amount, total_net_amount = totals_result.one()
-    items = [
-        CommissionLedgerItemRead(
-            ride_id=ride.id,
-            client_phone_number=client_phone,
-            driver_id=ride.driver_id or 0,
-            driver_phone_number=driver_phone,
-            completed_at=ride.completed_at,
-            gross_amount=round(float(ride.final_price or 0), 2),
-            commission_amount=round(float(ride.platform_commission or 0), 2),
-            net_amount=round(float(ride.driver_net_earnings or 0), 2),
-        )
-        for ride, client_phone, driver_phone in rows_result.all()
-    ]
-    return CommissionLedgerRead(
-        total_count=int(count_result.scalar_one() or 0),
-        total_gross_amount=round(float(total_gross_amount or 0), 2),
-        total_commission_amount=round(float(total_commission_amount or 0), 2),
-        total_net_amount=round(float(total_net_amount or 0), 2),
-        items=items,
+    return rows_result.all()
+
+
+def _commission_ledger_item(
+    ride: RideRequest,
+    client_phone: str,
+    driver_phone: str,
+) -> CommissionLedgerItemRead:
+    return CommissionLedgerItemRead(
+        ride_id=ride.id,
+        client_phone_number=client_phone,
+        driver_id=ride.driver_id or 0,
+        driver_phone_number=driver_phone,
+        completed_at=ride.completed_at,
+        gross_amount=round(float(ride.final_price or 0), 2),
+        commission_amount=round(float(ride.platform_commission or 0), 2),
+        net_amount=round(float(ride.driver_net_earnings or 0), 2),
     )
 
 

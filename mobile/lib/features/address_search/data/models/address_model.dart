@@ -1,4 +1,5 @@
 import '../../domain/entities/address_result.dart';
+import '../../../../core/location/location_quality.dart';
 
 class AddressModel extends AddressResult {
   const AddressModel({
@@ -7,15 +8,20 @@ class AddressModel extends AddressResult {
     required super.latitude,
     required super.longitude,
     required super.type,
+    super.locationQuality,
+    super.accuracyMeters,
   });
 
   factory AddressModel.fromJson(Map<String, dynamic> json) {
+    final qualityValue = json['location_quality'] as String?;
     return AddressModel(
       name: json['name'] as String? ?? 'Adresse',
       displayName: json['display_name'] as String? ?? 'Niamey, Niger',
       latitude: (json['lat'] as num?)?.toDouble() ?? 0,
       longitude: (json['lon'] as num?)?.toDouble() ?? 0,
       type: json['type'] as String? ?? 'address',
+      locationQuality: _parseLocationQuality(qualityValue),
+      accuracyMeters: (json['accuracy_meters'] as num?)?.toDouble(),
     );
   }
 
@@ -26,7 +32,21 @@ class AddressModel extends AddressResult {
       latitude: result.latitude,
       longitude: result.longitude,
       type: result.type,
+      locationQuality: result.locationQuality,
+      accuracyMeters: result.accuracyMeters,
     );
+  }
+
+  static LocationQuality? _parseLocationQuality(String? raw) {
+    if (raw == null || raw.trim().isEmpty) {
+      return null;
+    }
+    for (final quality in LocationQuality.values) {
+      if (quality.name == raw) {
+        return quality;
+      }
+    }
+    return null;
   }
 
   static const knownNiameyZones = [

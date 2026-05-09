@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from fastapi import HTTPException, status
 from fastapi.responses import JSONResponse
 
+from app.core.messages import Messages
+
 
 def error_payload(code: str, message: str) -> dict[str, str]:
     return {
@@ -39,13 +41,13 @@ def normalize_http_exception(exc: HTTPException) -> dict[str, str]:
     detail = exc.detail
     if isinstance(detail, dict):
         code = str(detail.get("code") or _default_http_error_code(exc.status_code))
-        message = str(detail.get("message") or "HTTP error")
+        message = str(detail.get("message") or Messages.HTTP_ERROR)
         return error_payload(code, message)
 
     if isinstance(detail, str):
         return error_payload(_default_http_error_code(exc.status_code), detail)
 
-    return error_payload(_default_http_error_code(exc.status_code), "HTTP error")
+    return error_payload(_default_http_error_code(exc.status_code), Messages.HTTP_ERROR)
 
 
 def api_error_response(exc: ApiError) -> JSONResponse:
@@ -70,7 +72,7 @@ def bad_request(code: str, message: str) -> ApiError:
     )
 
 
-def unauthorized(message: str = "Authentication required") -> ApiError:
+def unauthorized(message: str = Messages.AUTHENTICATION_REQUIRED) -> ApiError:
     return ApiError(
         status_code=status.HTTP_401_UNAUTHORIZED,
         code="unauthorized",
@@ -78,7 +80,7 @@ def unauthorized(message: str = "Authentication required") -> ApiError:
     )
 
 
-def forbidden(message: str = "Access denied") -> ApiError:
+def forbidden(message: str = Messages.FORBIDDEN) -> ApiError:
     return ApiError(
         status_code=status.HTTP_403_FORBIDDEN,
         code="forbidden",

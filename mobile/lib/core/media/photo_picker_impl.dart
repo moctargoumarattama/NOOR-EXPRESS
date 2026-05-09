@@ -7,6 +7,7 @@ Future<NoorPickedPhoto?> pickPhoto({
   required bool preferFrontCamera,
   required double? maxWidth,
   required int imageQuality,
+  required int targetMaxBytes,
 }) async {
   try {
     final file = await ImagePicker().pickImage(
@@ -21,7 +22,16 @@ Future<NoorPickedPhoto?> pickPhoto({
     if (file == null) {
       return null;
     }
-    return NoorPickedPhoto(bytes: await file.readAsBytes(), name: file.name);
+    final bytes = await file.readAsBytes();
+    if (bytes.length > targetMaxBytes) {
+      final maxKb = targetMaxBytes ~/ 1024;
+      throw NoorPhotoPickerFailure(
+        'Image trop lourde (${bytes.length ~/ 1024} KB). Visez moins de $maxKb KB.',
+      );
+    }
+    return NoorPickedPhoto(bytes: bytes, name: file.name);
+  } on NoorPhotoPickerFailure {
+    rethrow;
   } catch (error) {
     throw NoorPhotoPickerFailure('Selection photo impossible: $error');
   }

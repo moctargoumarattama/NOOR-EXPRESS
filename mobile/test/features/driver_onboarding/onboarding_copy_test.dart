@@ -15,6 +15,7 @@ void main() {
       address: 'Niamey',
       idCardPhoto: 'id-card',
       selfiePhoto: 'selfie',
+      vehiclePhoto: 'vehicle',
       driverLicense: _document('license', DateTime(2027, 1, 1)),
       vehicleRegistration: _document('registration', DateTime(2027, 1, 2)),
       vehicleInsurance: _document('insurance', DateTime(2027, 1, 3)),
@@ -23,6 +24,7 @@ void main() {
 
     expect(input.isComplete, isTrue);
     expect(input.toJson()['driver_license_file'], 'license');
+    expect(input.toJson()['vehicle_photo'], 'vehicle');
     expect(input.toJson()['technical_inspection_expires_at'], '2027-01-04');
   });
 
@@ -77,10 +79,13 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: StepLegalDocuments(
+            vehiclePhoto: null,
             driverLicense: _document(null, null),
             vehicleRegistration: _document(null, null),
             vehicleInsurance: _document(null, null),
             technicalInspection: _document(null, null),
+            onVehicleCamera: _noop,
+            onVehicleGallery: _noop,
             onCamera: _noopDocument,
             onGallery: _noopDocument,
             onExpiryTap: _noopDocument,
@@ -109,6 +114,7 @@ void main() {
             address: 'Niamey',
             idCardPhoto: null,
             selfiePhoto: null,
+            vehiclePhoto: null,
             driverLicense: _document(null, null),
             vehicleRegistration: _document(null, null),
             vehicleInsurance: _document(null, null),

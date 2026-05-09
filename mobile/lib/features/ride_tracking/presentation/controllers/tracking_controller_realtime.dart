@@ -76,6 +76,9 @@ void _handleSocketEvent(
     case TrackingSocketEventType.rideMessage:
       _handleRideMessageEvent(controller, event);
       return;
+    case TrackingSocketEventType.passengerReady:
+      _handlePassengerReadyEvent(controller, event);
+      return;
   }
 }
 
@@ -122,6 +125,41 @@ void _handleDriverLocationEvent(
     driverPosition: position,
   ));
   _recomputeDerivedState(controller);
+}
+
+void _handlePassengerReadyEvent(
+  TrackingController controller,
+  TrackingSocketEvent event,
+) {
+  if (controller.mode != TrackingMode.driver) {
+    return;
+  }
+  final currentState = controller._currentStateOrNull;
+  final ride = currentState?.ride;
+  if (currentState == null ||
+      ride == null ||
+      event.rideId == null ||
+      event.rideId != ride.id) {
+    return;
+  }
+
+  final passengerName = (event.passengerName ?? '').trim();
+  if (passengerName.isEmpty) {
+    return;
+  }
+  controller._setStateIfAlive(currentState.copyWith(
+    ride: ride.copyWith(
+      passengerReadyAt: event.timestamp ?? DateTime.now(),
+    ),
+  ));
+  controller.showPassengerReadyBanner(
+    '$passengerName est pret, descendez le chercher',
+  );
+  try {
+    unawaited(HapticFeedback.lightImpact().catchError((_) => null));
+  } catch (_) {
+    // Some tests or platforms do not expose haptics; ignore gracefully.
+  }
 }
 
 bool _isRelevantDriverLocation(

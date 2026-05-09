@@ -39,11 +39,43 @@ class HelpScreen extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const _HelpCard(
+              icon: Icons.location_on_outlined,
+              title: 'Conseils pour Niamey',
+              children: [
+                'Choisissez un point visible (station, pharmacie, ecole, marche).',
+                'Confirmez votre numero pour rester joignable rapidement.',
+                'Ecrivez un repere clair: quartier, rond-point ou avenue.',
+              ],
+            ),
+            const SizedBox(height: 16),
+            const _HelpCard(
+              icon: Icons.shield_outlined,
+              title: 'Securite et respect',
+              children: [
+                'Client et chauffeur doivent rester polis et respectueux.',
+                'Aucune menace, insulte ou harcelement n est tolere.',
+                'Partagez la course avec un proche en cas de trajet de nuit.',
+                'Signalez tout incident depuis "Signaler un probleme".',
+              ],
+            ),
+            const SizedBox(height: 16),
+            const _HelpCard(
+              icon: Icons.rule_folder_outlined,
+              title: 'Bonnes pratiques',
+              children: [
+                'Ne validez pas une course sans accord sur le prix propose.',
+                'Evitez les points isoles et privilegiez les zones eclairees.',
+                'Le chauffeur peut refuser une course s il y a un risque securite.',
+              ],
+            ),
+            const SizedBox(height: 16),
+            const _HelpCard(
               icon: Icons.support_agent_rounded,
               title: 'Nous contacter',
               children: <String>[
                 'contact@noorexpress.ne',
                 AppConstants.supportPhone,
+                AppConstants.supportHours,
               ],
             ),
           ],

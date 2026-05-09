@@ -46,10 +46,13 @@ class Step2IdCardPhoto extends StatelessWidget {
 class StepLegalDocuments extends StatelessWidget {
   const StepLegalDocuments({
     super.key,
+    required this.vehiclePhoto,
     required this.driverLicense,
     required this.vehicleRegistration,
     required this.vehicleInsurance,
     required this.technicalInspection,
+    required this.onVehicleCamera,
+    required this.onVehicleGallery,
     required this.onCamera,
     required this.onGallery,
     required this.onExpiryTap,
@@ -57,21 +60,32 @@ class StepLegalDocuments extends StatelessWidget {
     required this.onNext,
   });
 
+  final String? vehiclePhoto;
   final DriverLegalDocumentInput driverLicense;
   final DriverLegalDocumentInput vehicleRegistration;
   final DriverLegalDocumentInput vehicleInsurance;
   final DriverLegalDocumentInput technicalInspection;
+  final VoidCallback onVehicleCamera;
+  final VoidCallback onVehicleGallery;
   final void Function(DriverLegalDocumentType type) onCamera;
   final void Function(DriverLegalDocumentType type) onGallery;
   final void Function(DriverLegalDocumentType type) onExpiryTap;
   final VoidCallback onBack;
   final VoidCallback onNext;
 
-  bool get _isComplete =>
-      driverLicense.isComplete &&
-      vehicleRegistration.isComplete &&
-      vehicleInsurance.isComplete &&
-      technicalInspection.isComplete;
+  bool get _hasAllDocumentPhotos =>
+      vehiclePhoto != null &&
+      vehiclePhoto!.trim().isNotEmpty &&
+      driverLicense.hasFile &&
+      vehicleRegistration.hasFile &&
+      vehicleInsurance.hasFile &&
+      technicalInspection.hasFile;
+
+  bool get _hasAllDocumentExpirations =>
+      driverLicense.expiresAt != null &&
+      vehicleRegistration.expiresAt != null &&
+      vehicleInsurance.expiresAt != null &&
+      technicalInspection.expiresAt != null;
 
   @override
   Widget build(BuildContext context) {
@@ -81,10 +95,15 @@ class StepLegalDocuments extends StatelessWidget {
         children: [
           const _StepTitle(
             title: 'Documents chauffeur prive',
-            subtitle: 'Ajoutez les documents du vehicule personnel.',
+            subtitle: 'Ajoutez la photo du vehicule et les documents legaux.',
             icon: Icons.folder_copy_rounded,
           ),
           const SizedBox(height: 16),
+          _VehiclePhotoTile(
+            photo: vehiclePhoto,
+            onCamera: onVehicleCamera,
+            onGallery: onVehicleGallery,
+          ),
           _LegalDocumentTile(
             type: DriverLegalDocumentType.driverLicense,
             document: driverLicense,
@@ -113,6 +132,26 @@ class StepLegalDocuments extends StatelessWidget {
             onGallery: onGallery,
             onExpiryTap: onExpiryTap,
           ),
+          if (_hasAllDocumentPhotos && !_hasAllDocumentExpirations) ...[
+            const SizedBox(height: 2),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.infoSoft,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.infoBorder),
+              ),
+              child: const Text(
+                'Vous pouvez continuer vers le selfie. '
+                'Les dates d expiration seront demandees avant la validation finale.',
+                style: TextStyle(
+                  color: AppColors.info,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           Row(
             children: [
@@ -123,7 +162,68 @@ class StepLegalDocuments extends StatelessWidget {
               Expanded(
                 child: AppButton(
                   label: 'Suivant',
-                  onPressed: _isComplete ? onNext : null,
+                  onPressed: _hasAllDocumentPhotos ? onNext : null,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _VehiclePhotoTile extends StatelessWidget {
+  const _VehiclePhotoTile({
+    required this.photo,
+    required this.onCamera,
+    required this.onGallery,
+  });
+
+  final String? photo;
+  final VoidCallback onCamera;
+  final VoidCallback onGallery;
+
+  @override
+  Widget build(BuildContext context) {
+    final Uint8List? bytes =
+        photo == null || photo!.trim().isEmpty ? null : base64Decode(photo!);
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF5F7F6),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Photo du vehicule',
+            style: TextStyle(fontWeight: FontWeight.w900),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _DocumentPreview(bytes: bytes),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: onCamera,
+                      icon: const Icon(Icons.photo_camera_rounded),
+                      label: const Text('Photo'),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: onGallery,
+                      icon: const Icon(Icons.photo_library_rounded),
+                      label: const Text('Galerie'),
+                    ),
+                  ],
                 ),
               ),
             ],

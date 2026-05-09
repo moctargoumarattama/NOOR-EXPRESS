@@ -5,6 +5,9 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     _realtimeSubscription = ref.listenManual<ClientRealtimeState>(
       clientRealtimeProvider,
       (previous, next) {
+        if (!_isUiMounted) {
+          return;
+        }
         final position = next.lastDriverPosition;
         if (position != null && position != previous?.lastDriverPosition) {
           ref
@@ -14,7 +17,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         }
 
         final message = next.lastMessage;
-        if (message == null || message == previous?.lastMessage || !mounted) {
+        if (message == null || message == previous?.lastMessage) {
           return;
         }
         final offerRideId = next.lastOfferRideId;
@@ -40,7 +43,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
 
   void _scheduleHomeOfferSync(ClientRide? ride) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _syncHomeOffers(ride);
@@ -74,6 +77,9 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     bool force = false,
     bool keepExisting = false,
   }) async {
+    if (!_isUiMounted) {
+      return;
+    }
     if (!force && (_homeOffersRideId == rideId || _isLoadingHomeOffers)) {
       return;
     }
@@ -94,7 +100,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       offers.sort(
         (left, right) => left.proposedPrice.compareTo(right.proposedPrice),
       );
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       final activeRide = ref.read(clientHomeControllerProvider).activeRide;
@@ -106,7 +112,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         _isLoadingHomeOffers = false;
       });
     } on NegotiationFailure catch (error) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _updateUi(() => _isLoadingHomeOffers = false);
@@ -135,6 +141,9 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       return;
     }
     _priceEstimateDebounce = Timer(const Duration(milliseconds: 600), () {
+      if (!_isUiMounted) {
+        return;
+      }
       _estimateSuggestedPrice(pickup, dropoff);
     });
   }
@@ -143,6 +152,9 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     AddressResult pickup,
     AddressResult dropoff,
   ) async {
+    if (!_isUiMounted) {
+      return null;
+    }
     final estimate =
         await ref.read(clientHomeControllerProvider.notifier).estimatePrice(
               pickupLat: pickup.latitude,
@@ -150,7 +162,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
               dropoffLat: dropoff.latitude,
               dropoffLng: dropoff.longitude,
             );
-    if (!mounted || estimate == null) {
+    if (!_isUiMounted || estimate == null) {
       return estimate;
     }
     if (!_hasReliableSuggestedPrice(estimate)) {
@@ -184,15 +196,16 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         mode == AddressSearchMode.pickup ? 'pickup' : 'dropoff',
       ),
     );
-    if (!mounted || result == null) {
+    if (!_isUiMounted || result == null) {
       return;
     }
+    final selectedAddress = _manualizedAddress(result);
     _updateUi(() {
       if (mode == AddressSearchMode.pickup) {
-        _pickupAddress = result;
+        _pickupAddress = selectedAddress;
       } else {
         _pickupAddress ??= _currentPickupAddress();
-        _dropoffAddress = result;
+        _dropoffAddress = selectedAddress;
       }
     });
     if (mode == AddressSearchMode.dropoff) {
@@ -202,25 +215,25 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     _schedulePriceEstimate();
   }
 
-  AddressResult _currentPickupAddress() {
+  AddressResult? _currentPickupAddress() {
     final position =
         ref.read(mapControllerProvider(MapMode.client)).currentPosition;
     if (position != null) {
+      final quality = locationQualityFromAccuracy(position.accuracyMeters);
+      if (quality == LocationQuality.unknown) {
+        return null;
+      }
       return AddressResult(
         name: 'Ma position actuelle',
-        displayName: 'Ma position actuelle',
+        displayName: locationQualityLabel(quality),
         latitude: position.latitude,
         longitude: position.longitude,
         type: 'current_location',
+        locationQuality: quality,
+        accuracyMeters: position.accuracyMeters,
       );
     }
-    return const AddressResult(
-      name: 'Niamey centre',
-      displayName: 'Position approximative',
-      latitude: 13.5137,
-      longitude: 2.1098,
-      type: 'current_location',
-    );
+    return null;
   }
 
   Future<void> _prepareRideAfterDestinationSelected() async {
@@ -230,6 +243,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       return;
     }
     await _estimateSuggestedPrice(pickup, dropoff);
+  }
+
+  Future<void> _selectQuickDestination(AddressResult dropoff) async {
+    _updateUi(() {
+      _pickupAddress ??= _currentPickupAddress();
+      _dropoffAddress = _manualizedAddress(dropoff);
+    });
+    await _prepareRideAfterDestinationSelected();
   }
 
   Future<void> _addDropoffToFavorites(AddressResult dropoff) async {
@@ -244,7 +265,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
             address: dropoff,
             label: label,
           );
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _showSnackBar(
@@ -252,7 +273,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         tone: AppSnackbarTone.success,
       );
     } on AddressSearchFailure catch (error) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _showSnackBar(
@@ -340,7 +361,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
     }
     final success =
         await ref.read(clientHomeControllerProvider.notifier).createRide(input);
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
 
@@ -393,7 +414,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       tone: AppSnackbarTone.info,
     );
     await Future<void>.delayed(const Duration(milliseconds: 180));
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
     _openRide(ride);
@@ -425,7 +446,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         );
       },
     );
-    if (!mounted || confirmed != true) {
+    if (!mounted || !_isUiMounted || confirmed != true) {
       return;
     }
 
@@ -436,7 +457,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       options: passengerCancellationReasonOptions,
       reasonRequired: false,
     );
-    if (!mounted || cancellationDraft == null) {
+    if (!_isUiMounted || cancellationDraft == null) {
       return;
     }
 
@@ -448,14 +469,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
             reason: cancellationDraft.reason,
             reasonCode: cancellationDraft.reasonCode,
           );
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       await ref.read(clientHomeControllerProvider.notifier).refreshRideStatus(
             rideId: ride.id,
             status: 'cancelled',
           );
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _updateUi(() {
@@ -472,7 +493,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       });
       _showSnackBar('Demande annulee.', tone: AppSnackbarTone.success);
     } on NegotiationFailure catch (error) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _showSnackBar(
@@ -499,16 +520,19 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       await ref
           .read(negotiationDatasourceProvider('client-home-offers'))
           .acceptOffer(offer.offerId);
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       final activeRide = await _resyncHomeTruth();
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       if (activeRide != null &&
           activeRide.id == ride.id &&
           _isTrackingRideStatus(activeRide)) {
+        if (!mounted) {
+          return;
+        }
         context.go(AppRoutes.clientMapWithRide(ride.id));
         return;
       }
@@ -518,7 +542,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
         tone: AppSnackbarTone.info,
       );
     } on NegotiationFailure catch (error) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _updateUi(() => _acceptingHomeOfferId = null);
@@ -546,11 +570,11 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       await ref
           .read(negotiationDatasourceProvider('client-home-offers'))
           .rejectOffer(offer.offerId);
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       final activeRide = await _resyncHomeTruth();
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       if (activeRide?.id == rideId && activeRide?.status == 'offered') {
@@ -564,7 +588,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
       }
       _showSnackBar('Offre refusee.', tone: AppSnackbarTone.info);
     } on NegotiationFailure catch (error) {
-      if (!mounted) {
+      if (!_isUiMounted) {
         return;
       }
       _updateUi(() => _rejectingHomeOfferId = null);
@@ -580,7 +604,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
 
   Future<void> _recoverExistingRideAfterCreateConflict() async {
     await ref.read(clientHomeControllerProvider.notifier).loadRides();
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
 
@@ -599,8 +623,17 @@ extension _ClientHomeActions on _ClientHomeScreenState {
   RideRequestCreateInput? _buildRideInput() {
     final pickup = _pickupAddress;
     final dropoff = _dropoffAddress;
+    final mapState = ref.read(mapControllerProvider(MapMode.client));
+    final pickupQuality = _resolvedPickupLocationQuality(mapState);
     final price = double.tryParse(_priceController.text.trim());
     if (pickup == null || dropoff == null) {
+      if (pickupQuality == LocationQuality.unknown) {
+        _showSnackBar(
+          'Position non disponible. Saisissez votre adresse de depart manuellement.',
+          tone: AppSnackbarTone.error,
+        );
+        return null;
+      }
       _showSnackBar(
         'Choisissez votre depart et votre arrivee.',
         tone: AppSnackbarTone.error,
@@ -657,7 +690,78 @@ extension _ClientHomeActions on _ClientHomeScreenState {
 
   Future<ClientRide?> _resyncHomeTruth() async {
     await ref.read(clientHomeControllerProvider.notifier).resumeFromLifecycle();
+    if (!_isUiMounted) {
+      return null;
+    }
     return ref.read(clientHomeControllerProvider).activeRide;
+  }
+
+  AddressResult _manualizedAddress(AddressResult result) {
+    if (result.isCurrentLocation) {
+      return result;
+    }
+    return result.copyWith(
+      locationQuality: LocationQuality.manual,
+      clearAccuracyMeters: true,
+    );
+  }
+
+  LocationQuality _resolvedPickupLocationQuality(MapState mapState) {
+    final pickup = _pickupAddress;
+    if (pickup == null) {
+      return locationQualityFromAccuracy(mapState.currentPosition?.accuracyMeters);
+    }
+    if (!pickup.isCurrentLocation) {
+      return LocationQuality.manual;
+    }
+    final liveQuality =
+        locationQualityFromAccuracy(mapState.currentPosition?.accuracyMeters);
+    if (liveQuality != LocationQuality.unknown) {
+      return liveQuality;
+    }
+    final explicitQuality = pickup.locationQuality;
+    if (explicitQuality != null && explicitQuality != LocationQuality.unknown) {
+      return explicitQuality;
+    }
+    return LocationQuality.unknown;
+  }
+
+  double? _resolvedPickupAccuracyMeters(MapState mapState) {
+    final pickup = _pickupAddress;
+    if (pickup == null || !pickup.isCurrentLocation) {
+      return mapState.currentPosition?.accuracyMeters;
+    }
+    return mapState.currentPosition?.accuracyMeters ?? pickup.accuracyMeters;
+  }
+
+  bool _shouldShowUnknownPositionCard(
+    ClientRide? activeRide,
+    LocationQuality pickupQuality,
+  ) {
+    if (activeRide != null) {
+      return false;
+    }
+    if (_pickupAddress != null) {
+      return false;
+    }
+    return pickupQuality == LocationQuality.unknown;
+  }
+
+  bool _shouldShowApproximateBanner(
+    ClientRide? activeRide,
+    LocationQuality pickupQuality,
+  ) {
+    if (activeRide != null) {
+      return false;
+    }
+    return pickupQuality == LocationQuality.approximate;
+  }
+
+  String? _submitDisabledReasonForQuality(LocationQuality quality) {
+    if (quality != LocationQuality.unknown) {
+      return null;
+    }
+    return 'Position non disponible. Recherchez votre adresse de depart manuellement.';
   }
 
   bool _isTrackingRideStatus(ClientRide ride) {
@@ -669,6 +773,7 @@ extension _ClientHomeActions on _ClientHomeScreenState {
   Future<void> _openGeneralReport() async {
     _updateUi(() => _isMenuOpen = false);
     final activeRide = ref.read(clientHomeControllerProvider).activeRide;
+    final trackingDatasource = ref.read(trackingRemoteDatasourceProvider);
     final draft = await showRideReportBottomSheet(
       context,
       onSubmit: (draft) async {
@@ -676,14 +781,14 @@ extension _ClientHomeActions on _ClientHomeScreenState {
           await Future<void>.delayed(const Duration(milliseconds: 350));
           return;
         }
-        await ref.read(trackingRemoteDatasourceProvider).reportRide(
+        await trackingDatasource.reportRide(
               rideId: activeRide.id,
               reason: draft.reason,
               description: draft.description,
             );
       },
     );
-    if (mounted && draft != null) {
+    if (_isUiMounted && draft != null) {
       _showSnackBar('Signalement envoye.', tone: AppSnackbarTone.success);
     }
   }

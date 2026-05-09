@@ -1,9 +1,11 @@
 from datetime import date, datetime
 
 from fastapi import HTTPException, status
+from sqlalchemy.exc import DataError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.messages import Messages
 from app.models.driver_profile import (
     DRIVER_DOCUMENT_FIELD_MAP,
     DriverDocumentStatus,
@@ -28,6 +30,7 @@ async def create_or_update_profile(
     data: DriverProfileCreate,
 ) -> DriverProfile:
     profile = await get_profile(session, user_id)
+    user = await session.get(User, user_id)
     now = datetime.utcnow()
 
     if profile is None:
@@ -39,13 +42,22 @@ async def create_or_update_profile(
     profile.address = data.address.strip() if data.address else None
     profile.id_card_photo = data.id_card_photo
     profile.selfie_photo = data.selfie_photo
+    if user is not None:
+        user.vehicle_photo = data.vehicle_photo
     _apply_document_uploads(profile, data)
     profile.verification_status = DriverVerificationStatus.PENDING
     profile.rejection_reason = None
     profile.submitted_at = now
     profile.verified_at = None
 
-    await session.commit()
+    try:
+        await session.commit()
+    except DataError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=Messages.VEHICLE_PHOTO_TOO_LARGE,
+        ) from exc
     await session.refresh(profile)
     return profile
 
@@ -90,7 +102,7 @@ async def admin_update_driver_profile(
     if user is None or getattr(user, "role", UserRole.DRIVER) != UserRole.DRIVER:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Driver not found",
+            detail=Messages.DRIVER_NOT_FOUND,
         )
 
     profile.first_name = data.first_name.strip()
@@ -147,7 +159,7 @@ async def review_driver_document(
     if document_status not in _REVIEWABLE_DOCUMENT_STATUSES:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Document status must be validé or rejeté",
+            detail=Messages.DRIVER_DOCUMENT_STATUS_INVALID,
         )
 
     _, _, status_field, _ = DRIVER_DOCUMENT_FIELD_MAP[document_type]
@@ -163,7 +175,7 @@ async def _get_profile_or_404(session: AsyncSession, user_id: int) -> DriverProf
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Driver profile not found",
+            detail=Messages.DRIVER_PROFILE_NOT_FOUND,
         )
     return profile
 
@@ -222,6 +234,7 @@ def _admin_row(profile: DriverProfile, user: User) -> dict:
         "vehicle_brand": getattr(user, "vehicle_brand", None),
         "vehicle_model": getattr(user, "vehicle_model", None),
         "vehicle_color": getattr(user, "vehicle_color", None),
+        "vehicle_photo": getattr(user, "vehicle_photo", None),
         "plate_number": getattr(user, "plate_number", None),
     }
     row.update(_document_row(profile))

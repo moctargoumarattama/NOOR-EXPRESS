@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/theme/app_colors.dart';
 import '../../data/models/ride_tracking_model.dart';
 
 class RideStatusBanner extends StatelessWidget {
@@ -23,16 +24,16 @@ class RideStatusBanner extends StatelessWidget {
     return RepaintBoundary(
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        padding: const EdgeInsets.all(18),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
           color: palette.background,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: palette.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.12),
-              blurRadius: 24,
-              offset: const Offset(0, 10),
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -44,11 +45,11 @@ class RideStatusBanner extends StatelessWidget {
             key: ValueKey('${status.name}|$showSpinner|$title|$subtitle'),
             children: [
               Container(
-                width: 46,
-                height: 46,
+                width: 42,
+                height: 42,
                 decoration: BoxDecoration(
                   color: palette.accent,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Center(
                   child: showSpinner
@@ -75,15 +76,16 @@ class RideStatusBanner extends StatelessWidget {
                       title,
                       style: const TextStyle(
                         color: Colors.white,
-                        fontSize: 16,
+                        fontSize: 15,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
                     Text(
                       subtitle,
                       style: TextStyle(
                         color: Colors.white.withValues(alpha: 0.8),
+                        fontSize: 13,
                         height: 1.35,
                       ),
                     ),
@@ -104,14 +106,14 @@ class RideStatusBanner extends StatelessWidget {
         return const _StatusPalette(
           background: Color(0xFF1F2533),
           border: Color(0xFF2C3548),
-          accent: Color(0xFFF5A623),
+          accent: AppColors.nigerOrange,
         );
       case RideTrackingStatus.accepted:
       case RideTrackingStatus.arrived:
         return const _StatusPalette(
           background: Color(0xFF172232),
           border: Color(0xFF1E334D),
-          accent: Color(0xFF1B8A5A),
+          accent: AppColors.nigerGreen,
         );
       case RideTrackingStatus.started:
         return const _StatusPalette(
@@ -123,7 +125,7 @@ class RideStatusBanner extends StatelessWidget {
         return const _StatusPalette(
           background: Color(0xFF18281E),
           border: Color(0xFF274132),
-          accent: Color(0xFF1B8A5A),
+          accent: AppColors.nigerGreen,
         );
       case RideTrackingStatus.cancelled:
       case RideTrackingStatus.expired:

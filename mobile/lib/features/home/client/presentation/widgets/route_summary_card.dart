@@ -200,77 +200,98 @@ class _CompactRouteSummaryCard extends StatelessWidget {
     final hasMetrics = distanceKm != null && durationMinutes != null;
     final hasPriceRange = minimumPrice != null && maximumPrice != null;
     final hasRecommendedPrice = recommendedPrice != null;
-    final hasFullEstimate =
-        hasMetrics && (hasPriceRange || hasRecommendedPrice);
+    final hasEstimate = hasPriceRange || hasRecommendedPrice;
+    final availabilityCount = availableDriversCount;
+    final hasAvailability = availabilityCount != null && availabilityCount >= 0;
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAF9),
+        color: AppColors.pearl,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE8EEE9)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.route_rounded,
-                color: AppColors.emerald,
-                size: 19,
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: AppColors.nigerGreenSoft,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(
+                  Icons.route_rounded,
+                  color: AppColors.nigerGreen,
+                  size: 17,
+                ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   '$pickupLabel \u2192 $dropoffLabel',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.ink,
+                        color: AppColors.textPrimary,
                         fontWeight: FontWeight.w900,
                       ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
-          if (hasFullEstimate)
+          if (hasMetrics || hasAvailability) ...[
+            const SizedBox(height: 10),
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
-              runSpacing: 4,
+              runSpacing: 8,
               children: [
-                Text(
-                  '${distanceKm!.toStringAsFixed(1)} km \u2022 '
-                  '$durationMinutes min',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.ink,
-                        fontWeight: FontWeight.w800,
-                      ),
-                ),
-                Text(
-                  hasPriceRange
-                      ? 'Estimation : ${minimumPrice!.round()} - ${maximumPrice!.round()} FCFA'
-                      : 'Prix recommande : ${recommendedPrice!.round()} FCFA',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.emerald,
-                        fontWeight: FontWeight.w900,
-                      ),
-                ),
+                if (distanceKm != null)
+                  _CompactMetricChip(
+                    icon: Icons.straighten_rounded,
+                    label: '${distanceKm!.toStringAsFixed(1)} km',
+                  ),
+                if (durationMinutes != null)
+                  _CompactMetricChip(
+                    icon: Icons.schedule_rounded,
+                    label: '$durationMinutes min',
+                  ),
+                if (hasAvailability)
+                  _CompactMetricChip(
+                    icon: Icons.local_taxi_rounded,
+                    label: availabilityCount == 0
+                        ? '0 dispo'
+                        : '$availabilityCount dispo',
+                  ),
               ],
+            ),
+          ],
+          const SizedBox(height: 10),
+          if (hasEstimate)
+            Text(
+              hasPriceRange
+                  ? 'Estimation : ${minimumPrice!.round()} - ${maximumPrice!.round()} FCFA'
+                  : 'Estimation : ${recommendedPrice!.round()} FCFA',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.nigerOrangeDark,
+                    fontWeight: FontWeight.w900,
+                  ),
             )
           else
             Text(
               _compactReliabilityMessage,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: AppColors.stone,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.textSecondary,
                     fontWeight: FontWeight.w700,
                   ),
             ),
           if (_availabilityMessage != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 4),
             Text(
               _availabilityMessage!,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -289,7 +310,7 @@ class _CompactRouteSummaryCard extends StatelessWidget {
     if (message != null && message.isNotEmpty) {
       return message;
     }
-    return 'Estimation indisponible';
+    return 'Estimation en cours...';
   }
 
   String? get _availabilityMessage {
@@ -308,9 +329,49 @@ class _CompactRouteSummaryCard extends StatelessWidget {
 
   Color get _availabilityColor {
     if (availableDriversCount == 0) {
-      return AppColors.coral;
+      return AppColors.error;
     }
-    return AppColors.emerald;
+    return AppColors.nigerGreen;
+  }
+}
+
+class _CompactMetricChip extends StatelessWidget {
+  const _CompactMetricChip({
+    required this.icon,
+    required this.label,
+  });
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.backgroundSubtle,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 14,
+            color: AppColors.textSecondary,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

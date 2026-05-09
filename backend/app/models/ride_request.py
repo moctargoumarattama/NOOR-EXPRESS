@@ -70,6 +70,10 @@ class RideRequest(Base):
         server_default=func.now(),
         nullable=False,
     )
+    passenger_ready_at: Mapped[datetime | None] = mapped_column(
+        DateTime,
+        nullable=True,
+    )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime,
         nullable=True,

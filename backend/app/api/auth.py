@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import create_access_token
+from app.core.messages import Messages
 from app.core.security import get_current_user
 from app.db.database import get_db_session
 from app.models.user import User, UserRole
@@ -12,6 +12,7 @@ from app.services.auth_service import (
     refresh_token,
     register,
     send_otp,
+    start_user_session,
     verify_otp,
 )
 from app.services.user_service import authenticate_user
@@ -29,7 +30,7 @@ class RegisterRequest(BaseModel):
     def validate_not_empty(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("Field cannot be empty")
+            raise ValueError(Messages.FIELD_REQUIRED)
         return cleaned
 
 
@@ -59,10 +60,10 @@ async def login_endpoint(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid credentials",
+            detail=Messages.INVALID_CREDENTIALS,
         )
 
-    return TokenResponse(access_token=create_access_token(user))
+    return await start_user_session(session, user)
 
 
 @router.post("/register", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -85,7 +86,7 @@ async def send_otp_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ) -> AuthMessageResponse:
     await send_otp(session, otp_in.phone_number)
-    return AuthMessageResponse(message="OTP sent")
+    return AuthMessageResponse(message=Messages.OTP_SENT)
 
 
 @router.post("/otp/verify", response_model=TokenResponse)
@@ -110,4 +111,4 @@ async def logout_endpoint(
     session: AsyncSession = Depends(get_db_session),
 ) -> AuthMessageResponse:
     await logout(session, current_user.id)
-    return AuthMessageResponse(message="Logged out")
+    return AuthMessageResponse(message=Messages.LOGOUT_SUCCESS)

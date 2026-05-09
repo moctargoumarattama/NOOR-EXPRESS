@@ -2,6 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.core.messages import Messages
 from app.models.pricing_zone import PricingSettings, PricingZone, TimePricingRule, ZoneFare
 from app.services.pricing_service import (
     PricingZoneNotFoundError,
@@ -38,7 +39,7 @@ async def create_zone(session: AsyncSession, data: dict) -> PricingZone:
 async def update_zone(session: AsyncSession, zone_id: int, data: dict) -> PricingZone:
     zone = await session.get(PricingZone, zone_id)
     if zone is None:
-        raise PricingZoneNotFoundError("Pricing zone not found")
+        raise PricingZoneNotFoundError(Messages.NOT_FOUND)
     for key, value in data.items():
         if value is not None:
             setattr(zone, key, value)
@@ -80,7 +81,7 @@ async def create_zone_fare(session: AsyncSession, data: dict) -> ZoneFare:
 async def update_zone_fare(session: AsyncSession, fare_id: int, data: dict) -> ZoneFare:
     fare = await session.get(ZoneFare, fare_id)
     if fare is None:
-        raise ZoneFareNotFoundError("Zone fare not found")
+        raise ZoneFareNotFoundError(Messages.NOT_FOUND)
     for key, value in data.items():
         if value is not None:
             setattr(fare, key, value)
@@ -115,7 +116,7 @@ async def update_time_rule(
 ) -> TimePricingRule:
     rule = await session.get(TimePricingRule, rule_id)
     if rule is None:
-        raise TimePricingRuleNotFoundError("Time pricing rule not found")
+        raise TimePricingRuleNotFoundError(Messages.NOT_FOUND)
     for key, value in data.items():
         if value is not None:
             setattr(rule, key, value)

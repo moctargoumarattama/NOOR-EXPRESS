@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -72,6 +73,7 @@ class TrackingController extends StateNotifier<TrackingState> {
   StreamSubscription<TrackingSocketEvent>? _eventSubscription;
   StreamSubscription<TrackingConnectionState>? _connectionSubscription;
   StreamSubscription<LocationResult<Position>>? _locationSubscription;
+  Timer? _passengerReadyBannerTimer;
   DateTime? _lastDriverPingAt;
   DateTime? _lastCurrentPositionAt;
   DateTime? _lastDriverPositionAt;
@@ -130,6 +132,8 @@ class TrackingController extends StateNotifier<TrackingState> {
     _eventSubscription = null;
     _connectionSubscription = null;
     _locationSubscription = null;
+    _passengerReadyBannerTimer?.cancel();
+    _passengerReadyBannerTimer = null;
     await eventSubscription?.cancel();
     await connectionSubscription?.cancel();
     await locationSubscription?.cancel();
@@ -251,6 +255,41 @@ class TrackingController extends StateNotifier<TrackingState> {
     }
   }
 
+  Future<void> rateClient({
+    required double rating,
+    String? comment,
+  }) async {
+    final ride = _currentStateOrNull?.ride;
+    if (ride == null) {
+      return;
+    }
+
+    _setStateIfAlive(state.copyWith(isActionLoading: true, clearError: true));
+    try {
+      final payload = await _remoteDatasource.rateClient(
+        rideId: ride.id,
+        rating: rating,
+        comment: comment,
+      );
+      if (!_isActive) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
+        isActionLoading: false,
+        ride: RideTrackingModel.fromJson(payload),
+        toastMessage: 'Merci pour votre note.',
+      ));
+    } on TrackingRemoteFailure catch (error) {
+      if (_isDisposed) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(
+        isActionLoading: false,
+        errorMessage: error.message,
+      ));
+    }
+  }
+
   Future<void> reportRide({
     required String reason,
     String? description,
@@ -298,7 +337,8 @@ class TrackingController extends StateNotifier<TrackingState> {
       return;
     }
 
-    _setStateIfAlive(currentState.copyWith(isActionLoading: true, clearError: true));
+    _setStateIfAlive(
+        currentState.copyWith(isActionLoading: true, clearError: true));
     await _requestAndShareRideLink(ride.id);
   }
 
@@ -332,14 +372,12 @@ class TrackingController extends StateNotifier<TrackingState> {
     }
   }
 
-  void acknowledgePassengerReady() {
-    if (_isDisposed) {
-      return;
-    }
-    _setStateIfAlive(state.copyWith(
-      toastMessage:
-          'Parfait. Votre chauffeur vous attend juste devant le point de depart.',
-    ));
+  Future<void> acknowledgePassengerReady() async {
+    await _runRideAction(
+      this,
+      action: (rideId) => _remoteDatasource.passengerReady(rideId),
+      successMessage: 'Le chauffeur a ete prevenu que vous etes pret.',
+    );
   }
 
   Future<void> openAppSettings() => _locationService.openAppSettings();
@@ -365,6 +403,20 @@ class TrackingController extends StateNotifier<TrackingState> {
       return;
     }
     _setStateIfAlive(state.copyWith(clearToast: true));
+  }
+
+  void showPassengerReadyBanner(String message) {
+    if (_isDisposed) {
+      return;
+    }
+    _passengerReadyBannerTimer?.cancel();
+    _setStateIfAlive(state.copyWith(passengerReadyBannerMessage: message));
+    _passengerReadyBannerTimer = Timer(const Duration(seconds: 4), () {
+      if (_isDisposed) {
+        return;
+      }
+      _setStateIfAlive(state.copyWith(clearPassengerReadyBanner: true));
+    });
   }
 
   String _readTrackingUrl(Map<String, dynamic> payload) {
@@ -411,6 +463,8 @@ class TrackingController extends StateNotifier<TrackingState> {
     _eventSubscription = null;
     _connectionSubscription = null;
     _locationSubscription = null;
+    _passengerReadyBannerTimer?.cancel();
+    _passengerReadyBannerTimer = null;
 
     unawaited(eventSubscription?.cancel() ?? Future<void>.value());
     unawaited(connectionSubscription?.cancel() ?? Future<void>.value());

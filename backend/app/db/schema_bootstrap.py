@@ -468,6 +468,26 @@ def _ensure_driver_pause_fields(connection: Connection) -> None:
     )
 
 
+def _ensure_driver_last_known_position_fields(connection: Connection) -> None:
+    table_names = _table_names(connection)
+    if "users" not in table_names:
+        return
+
+    user_columns = _column_names(connection, "users")
+    if "last_known_lat" not in user_columns:
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN last_known_lat FLOAT NULL")
+        )
+    if "last_known_lon" not in user_columns:
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN last_known_lon FLOAT NULL")
+        )
+    if "last_position_at" not in user_columns:
+        connection.execute(
+            text("ALTER TABLE users ADD COLUMN last_position_at DATETIME NULL")
+        )
+
+
 def _ensure_ride_request_cancelled_role_values(connection: Connection) -> None:
     if connection.dialect.name != "mysql":
         return
@@ -550,14 +570,18 @@ def _ensure_broadcast_history_table(connection: Connection) -> None:
     if "broadcast_history" not in table_names:
         if connection.dialect.name == "mysql":
             connection.execute(text("""
-                    CREATE TABLE broadcast_history (
+                CREATE TABLE broadcast_history (
                         id INTEGER PRIMARY KEY AUTO_INCREMENT,
                         target VARCHAR(32) NOT NULL,
                         title VARCHAR(60) NOT NULL,
                         message VARCHAR(200) NOT NULL,
                         notification_type VARCHAR(20) NOT NULL,
                         sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        estimated_recipients INTEGER NOT NULL DEFAULT 0
+                        estimated_recipients INTEGER NOT NULL DEFAULT 0,
+                        fcm_sent_count INTEGER NOT NULL DEFAULT 0,
+                        fcm_failed_count INTEGER NOT NULL DEFAULT 0,
+                        fcm_status VARCHAR(32) NOT NULL DEFAULT 'failed',
+                        fcm_error_reason TEXT NULL
                     )
                     """))
         else:
@@ -569,7 +593,11 @@ def _ensure_broadcast_history_table(connection: Connection) -> None:
                         message VARCHAR(200) NOT NULL,
                         notification_type VARCHAR(20) NOT NULL,
                         sent_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                        estimated_recipients INTEGER NOT NULL DEFAULT 0
+                        estimated_recipients INTEGER NOT NULL DEFAULT 0,
+                        fcm_sent_count INTEGER NOT NULL DEFAULT 0,
+                        fcm_failed_count INTEGER NOT NULL DEFAULT 0,
+                        fcm_status VARCHAR(32) NOT NULL DEFAULT 'failed',
+                        fcm_error_reason TEXT NULL
                     )
                     """))
         connection.execute(
@@ -623,6 +651,51 @@ def _ensure_broadcast_history_table(connection: Connection) -> None:
                 "ADD COLUMN estimated_recipients INTEGER NOT NULL DEFAULT 0"
             )
         )
+    if "fcm_sent_count" not in history_columns:
+        connection.execute(
+            text(
+                "ALTER TABLE broadcast_history "
+                "ADD COLUMN fcm_sent_count INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+    if "fcm_failed_count" not in history_columns:
+        connection.execute(
+            text(
+                "ALTER TABLE broadcast_history "
+                "ADD COLUMN fcm_failed_count INTEGER NOT NULL DEFAULT 0"
+            )
+        )
+    if "fcm_status" not in history_columns:
+        connection.execute(
+            text(
+                "ALTER TABLE broadcast_history "
+                "ADD COLUMN fcm_status VARCHAR(32) NOT NULL DEFAULT 'sent'"
+            )
+        )
+    if "fcm_error_reason" not in history_columns:
+        connection.execute(
+            text(
+                "ALTER TABLE broadcast_history "
+                "ADD COLUMN fcm_error_reason TEXT NULL"
+            )
+        )
+
+    connection.execute(
+        text(
+            "UPDATE broadcast_history "
+            "SET fcm_sent_count = estimated_recipients "
+            "WHERE fcm_sent_count = 0 "
+            "AND estimated_recipients > 0 "
+            "AND fcm_status = 'sent'"
+        )
+    )
+    connection.execute(
+        text(
+            "UPDATE broadcast_history "
+            "SET fcm_status = 'failed' "
+            "WHERE fcm_status IS NULL OR fcm_status = ''"
+        )
+    )
 
     indexes = inspect(connection).get_indexes("broadcast_history")
     index_names = {index["name"] for index in indexes}
@@ -642,6 +715,7 @@ def ensure_database_schema_sync(connection: Connection) -> None:
     _ensure_user_cancellation_policy_fields(connection)
     _ensure_driver_max_radius_field(connection)
     _ensure_driver_pause_fields(connection)
+    _ensure_driver_last_known_position_fields(connection)
     _ensure_ride_request_agreed_price(connection)
     _ensure_ride_request_history_columns(connection)
     _ensure_ride_request_share_fields(connection)

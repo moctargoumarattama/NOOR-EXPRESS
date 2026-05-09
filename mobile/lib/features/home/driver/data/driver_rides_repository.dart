@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/app_messages.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_error.dart';
 import 'models/driver_ride.dart';
@@ -32,7 +33,7 @@ class DriverRidesRepository {
       throw DriverRideFailure(
         ApiErrorPayload.messageOrFallback(
           error,
-          fallbackMessage: 'Impossible de charger les demandes disponibles.',
+          fallbackMessage: AppMessages.driverRidesAvailableLoadFailed,
         ),
       );
     }
@@ -60,7 +61,7 @@ class DriverRidesRepository {
       throw DriverRideFailure(
         ApiErrorPayload.messageOrFallback(
           error,
-          fallbackMessage: 'Impossible de charger les courses driver.',
+          fallbackMessage: AppMessages.driverRidesLoadFailed,
         ),
       );
     }
@@ -82,7 +83,7 @@ class DriverRidesRepository {
       throw DriverRideFailure(
         ApiErrorPayload.messageOrFallback(
           error,
-          fallbackMessage: 'Impossible de charger la course active.',
+          fallbackMessage: AppMessages.driverActiveRideLoadFailed,
         ),
       );
     }
@@ -97,7 +98,7 @@ class DriverRidesRepository {
 
       final payload = response.data;
       if (payload == null) {
-        throw const DriverRideFailure('Refus impossible.');
+        throw const DriverRideFailure(AppMessages.driverRideRejectFailed);
       }
 
       return DriverRide.fromJson(payload);
@@ -105,7 +106,7 @@ class DriverRidesRepository {
       throw DriverRideFailure(
         ApiErrorPayload.messageOrFallback(
           error,
-          fallbackMessage: 'Impossible de refuser cette course.',
+          fallbackMessage: AppMessages.driverRideRejectUnavailable,
         ),
       );
     }

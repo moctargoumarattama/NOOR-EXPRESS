@@ -9,6 +9,7 @@ from app.realtime.schemas import (
     DriverPositionNotification,
     DriverLocationUpdate,
     NearbyDriverLocation,
+    PassengerReadyNotification,
     NewRideRequestNotification,
     NewOfferNotification,
     OfferAcceptedNotification,
@@ -210,6 +211,20 @@ class RealtimeConnectionManager:
 
         try:
             await websocket.send_json(notification.model_dump())
+        except (RuntimeError, WebSocketDisconnect):
+            await self.disconnect_driver(driver_id)
+
+    async def send_passenger_ready_notification_to_driver(
+        self,
+        driver_id: int,
+        notification: PassengerReadyNotification,
+    ) -> None:
+        websocket = self._connection_registry.get_driver_connection(driver_id)
+        if websocket is None:
+            return
+
+        try:
+            await websocket.send_json(notification.model_dump(mode="json"))
         except (RuntimeError, WebSocketDisconnect):
             await self.disconnect_driver(driver_id)
 

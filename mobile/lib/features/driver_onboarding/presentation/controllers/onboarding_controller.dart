@@ -11,6 +11,7 @@ class DriverOnboardingState {
     this.address = '',
     this.idCardPhoto,
     this.selfiePhoto,
+    this.vehiclePhoto,
     this.driverLicense = const DriverLegalDocumentInput(
       file: null,
       expiresAt: null,
@@ -39,6 +40,7 @@ class DriverOnboardingState {
   final String address;
   final String? idCardPhoto;
   final String? selfiePhoto;
+  final String? vehiclePhoto;
   final DriverLegalDocumentInput driverLicense;
   final DriverLegalDocumentInput vehicleRegistration;
   final DriverLegalDocumentInput vehicleInsurance;
@@ -82,6 +84,7 @@ class DriverOnboardingState {
     String? address,
     String? idCardPhoto,
     String? selfiePhoto,
+    String? vehiclePhoto,
     DriverLegalDocumentInput? driverLicense,
     DriverLegalDocumentInput? vehicleRegistration,
     DriverLegalDocumentInput? vehicleInsurance,
@@ -99,6 +102,7 @@ class DriverOnboardingState {
       address: address ?? this.address,
       idCardPhoto: idCardPhoto ?? this.idCardPhoto,
       selfiePhoto: selfiePhoto ?? this.selfiePhoto,
+      vehiclePhoto: vehiclePhoto ?? this.vehiclePhoto,
       driverLicense: driverLicense ?? this.driverLicense,
       vehicleRegistration: vehicleRegistration ?? this.vehicleRegistration,
       vehicleInsurance: vehicleInsurance ?? this.vehicleInsurance,
@@ -141,6 +145,10 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
 
   void setSelfiePhoto(String value) {
     state = state.copyWith(selfiePhoto: value, clearError: true);
+  }
+
+  void setVehiclePhoto(String value) {
+    state = state.copyWith(vehiclePhoto: value, clearError: true);
   }
 
   void setLegalDocumentFile(DriverLegalDocumentType type, String value) {
@@ -192,6 +200,7 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
           address: state.address.trim(),
           idCardPhoto: state.idCardPhoto!,
           selfiePhoto: state.selfiePhoto!,
+          vehiclePhoto: state.vehiclePhoto!,
           driverLicense: state.driverLicense,
           vehicleRegistration: state.vehicleRegistration,
           vehicleInsurance: state.vehicleInsurance,
@@ -241,7 +250,8 @@ class DriverOnboardingController extends StateNotifier<DriverOnboardingState> {
   String? _missingSubmissionMessage() {
     if (!state.hasPersonalInfo ||
         state.idCardPhoto == null ||
-        state.selfiePhoto == null) {
+        state.selfiePhoto == null ||
+        state.vehiclePhoto == null) {
       return 'Completez toutes les etapes.';
     }
     return state.legalDocumentsError;

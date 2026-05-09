@@ -215,6 +215,7 @@ class DriverProfileSubmitInput {
     required this.address,
     required this.idCardPhoto,
     required this.selfiePhoto,
+    required this.vehiclePhoto,
     required this.driverLicense,
     required this.vehicleRegistration,
     required this.vehicleInsurance,
@@ -226,6 +227,7 @@ class DriverProfileSubmitInput {
   final String address;
   final String idCardPhoto;
   final String selfiePhoto;
+  final String vehiclePhoto;
   final DriverLegalDocumentInput driverLicense;
   final DriverLegalDocumentInput vehicleRegistration;
   final DriverLegalDocumentInput vehicleInsurance;
@@ -245,6 +247,7 @@ class DriverProfileSubmitInput {
       'address': address,
       'id_card_photo': idCardPhoto,
       'selfie_photo': selfiePhoto,
+      'vehicle_photo': vehiclePhoto,
       'driver_license_file': driverLicense.file,
       'driver_license_expires_at': _dateOnly(driverLicense.expiresAt),
       'vehicle_registration_file': vehicleRegistration.file,

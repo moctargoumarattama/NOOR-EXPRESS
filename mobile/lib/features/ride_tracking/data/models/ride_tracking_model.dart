@@ -39,6 +39,7 @@ class TrackingCounterpartModel {
     this.rating,
     this.plateNumber,
     this.vehicleLabel,
+    this.vehiclePhoto,
   });
 
   final int id;
@@ -47,6 +48,7 @@ class TrackingCounterpartModel {
   final double? rating;
   final String? plateNumber;
   final String? vehicleLabel;
+  final String? vehiclePhoto;
 
   String get avatarLabel {
     final sanitized = displayName.replaceAll('+', '').replaceAll(' ', '');
@@ -65,8 +67,9 @@ class TrackingCounterpartModel {
     final brand = json['vehicle_brand'] as String?;
     final model = json['vehicle_model'] as String?;
     final color = json['vehicle_color'] as String?;
-    final displayName =
-        rawName == null || rawName.trim().isEmpty ? phoneNumber : rawName.trim();
+    final displayName = rawName == null || rawName.trim().isEmpty
+        ? phoneNumber
+        : rawName.trim();
 
     final vehicleParts = [brand, model, color]
         .whereType<String>()
@@ -80,6 +83,7 @@ class TrackingCounterpartModel {
       rating: rating,
       plateNumber: json['plate_number'] as String?,
       vehicleLabel: vehicleParts.isEmpty ? null : vehicleParts.join(' - '),
+      vehiclePhoto: json['vehicle_photo'] as String?,
     );
   }
 }
@@ -104,6 +108,8 @@ class RideTrackingModel {
     this.driverNetEarnings,
     this.cancellationReason,
     this.clientRatingForDriver,
+    this.driverRatingForClient,
+    this.passengerReadyAt,
     this.completedAt,
   });
 
@@ -125,6 +131,8 @@ class RideTrackingModel {
   final double? driverNetEarnings;
   final String? cancellationReason;
   final double? clientRatingForDriver;
+  final double? driverRatingForClient;
+  final DateTime? passengerReadyAt;
   final DateTime? completedAt;
 
   bool get hasDriver => driverId != null;
@@ -145,8 +153,30 @@ class RideTrackingModel {
   bool get canDriverCancel =>
       status == RideTrackingStatus.accepted ||
       status == RideTrackingStatus.arrived;
-  bool get canRateDriver =>
-      status == RideTrackingStatus.completed && clientRatingForDriver == null;
+  DateTime? get ratingWindowOpensAt =>
+      completedAt?.add(const Duration(seconds: 30));
+  DateTime? get ratingWindowClosesAt =>
+      completedAt?.add(const Duration(hours: 24));
+
+  bool get isRatingWindowClosed {
+    final closesAt = ratingWindowClosesAt;
+    if (closesAt == null) {
+      return true;
+    }
+    return DateTime.now().isAfter(closesAt);
+  }
+
+  bool get canRateDriver {
+    return status == RideTrackingStatus.completed &&
+        clientRatingForDriver == null &&
+        !isRatingWindowClosed;
+  }
+
+  bool get canRateClient {
+    return status == RideTrackingStatus.completed &&
+        driverRatingForClient == null &&
+        !isRatingWindowClosed;
+  }
 
   double get displayedPrice => finalPrice ?? agreedPrice ?? estimatedPrice;
 
@@ -181,8 +211,13 @@ class RideTrackingModel {
       cancellationReason: json['cancellation_reason'] as String?,
       clientRatingForDriver:
           (json['client_rating_for_driver'] as num?)?.toDouble(),
-      completedAt: DateTime.tryParse(json['completed_at'] as String? ?? '')
-          ?.toLocal(),
+      driverRatingForClient:
+          (json['driver_rating_for_client'] as num?)?.toDouble(),
+      passengerReadyAt:
+          DateTime.tryParse(json['passenger_ready_at'] as String? ?? '')
+              ?.toLocal(),
+      completedAt:
+          DateTime.tryParse(json['completed_at'] as String? ?? '')?.toLocal(),
     );
   }
 
@@ -199,6 +234,8 @@ class RideTrackingModel {
     double? driverNetEarnings,
     String? cancellationReason,
     double? clientRatingForDriver,
+    double? driverRatingForClient,
+    DateTime? passengerReadyAt,
     DateTime? completedAt,
   }) {
     return RideTrackingModel(
@@ -221,6 +258,9 @@ class RideTrackingModel {
       cancellationReason: cancellationReason ?? this.cancellationReason,
       clientRatingForDriver:
           clientRatingForDriver ?? this.clientRatingForDriver,
+      driverRatingForClient:
+          driverRatingForClient ?? this.driverRatingForClient,
+      passengerReadyAt: passengerReadyAt ?? this.passengerReadyAt,
       completedAt: completedAt ?? this.completedAt,
     );
   }
@@ -291,8 +331,7 @@ class RideChatMessageModel {
     return RideChatMessageModel(
       id: (json['id'] as num?)?.toInt() ?? 0,
       rideId: ((json['ride_id'] ?? json['rideId']) as num?)?.toInt() ?? 0,
-      senderId:
-          ((json['sender_id'] ?? json['senderId']) as num?)?.toInt() ?? 0,
+      senderId: ((json['sender_id'] ?? json['senderId']) as num?)?.toInt() ?? 0,
       senderRole: json['sender_role'] as String? ?? '',
       content: (json['content'] as String? ?? '').trim(),
       isRead: json['is_read'] as bool? ?? false,

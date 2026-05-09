@@ -9,6 +9,7 @@ import 'package:noor_express_mobile/core/network/api_client.dart';
 import 'package:noor_express_mobile/core/notifications/fcm_service.dart';
 import 'package:noor_express_mobile/core/notifications/local_notification_service.dart';
 import 'package:noor_express_mobile/core/notifications/notification_handler.dart';
+import 'package:noor_express_mobile/core/notifications/notification_inbox_service.dart';
 import 'package:noor_express_mobile/core/state/session_controller.dart';
 import 'package:noor_express_mobile/core/storage/secure_storage_service.dart';
 import 'package:noor_express_mobile/features/auth/data/auth_repository.dart';
@@ -222,6 +223,142 @@ void main() {
 
     expect(container.read(provider).unreadChatCount, 2);
   });
+
+  test('client acknowledgePassengerReady calls API and stores passenger_ready_at',
+      () async {
+    final activeRide = _rideJson(id: 91, status: 'arrived');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: [activeRide],
+    );
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: websocketDatasource,
+      foregroundGateway: _FakeForegroundLocationGateway(),
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.client),
+    );
+    final subscription = container.listen(provider, (_, __) {});
+    addTearDown(subscription.close);
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+    await controller.acknowledgePassengerReady();
+
+    final ride = container.read(provider).ride;
+    expect(remoteDatasource.passengerReadyCalls, 1);
+    expect(ride?.passengerReadyAt, isNotNull);
+  });
+
+  test('client acknowledgePassengerReady exposes a clear retry error on failure',
+      () async {
+    final activeRide = _rideJson(id: 92, status: 'arrived');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: [activeRide],
+      failPassengerReady: true,
+    );
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: _FakeTrackingWebSocketDatasource(),
+      foregroundGateway: _FakeForegroundLocationGateway(),
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.client),
+    );
+    final subscription = container.listen(provider, (_, __) {});
+    addTearDown(subscription.close);
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+    await controller.acknowledgePassengerReady();
+
+    final state = container.read(provider);
+    expect(remoteDatasource.passengerReadyCalls, 1);
+    expect(
+      state.errorMessage,
+      'Impossible de prevenir le chauffeur. Reessayez.',
+    );
+    expect(state.ride?.passengerReadyAt, isNull);
+  });
+
+  test('driver banner appears and auto-clears after passenger-ready signal',
+      () async {
+    final activeRide = _rideJson(id: 93, status: 'arrived');
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: const [],
+    );
+    final websocketDatasource = _FakeTrackingWebSocketDatasource();
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: websocketDatasource,
+      foregroundGateway: _FakeForegroundLocationGateway(),
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.driver),
+    );
+    final subscription = container.listen(provider, (_, __) {});
+    addTearDown(subscription.close);
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+    expect(container.read(provider).ride?.id, 93);
+    controller.showPassengerReadyBanner(
+      'Amina est pret, descendez le chercher',
+    );
+    expect(
+      container.read(provider).passengerReadyBannerMessage,
+      'Amina est pret, descendez le chercher',
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+
+    final afterEvent = container.read(provider);
+    expect(
+      afterEvent.passengerReadyBannerMessage,
+      'Amina est pret, descendez le chercher',
+    );
+
+    await Future<void>.delayed(const Duration(seconds: 5));
+    expect(container.read(provider).passengerReadyBannerMessage, isNull);
+  });
+
+  test('driver keeps passenger_ready_at from snapshot after reconnect',
+      () async {
+    final activeRide = _rideJson(
+      id: 94,
+      status: 'arrived',
+      passengerReadyAt: '2026-05-05T09:15:00Z',
+    );
+    final remoteDatasource = _MutableTrackingRemoteDatasource(
+      activeRide: activeRide,
+      clientRides: const [],
+    );
+    final container = _trackingContainer(
+      remoteDatasource: remoteDatasource,
+      websocketDatasource: _FakeTrackingWebSocketDatasource(),
+      foregroundGateway: _FakeForegroundLocationGateway(),
+    );
+    addTearDown(container.dispose);
+
+    final provider = trackingControllerProvider(
+      const TrackingControllerScope(mode: TrackingMode.driver),
+    );
+    final subscription = container.listen(provider, (_, __) {});
+    addTearDown(subscription.close);
+    final controller = container.read(provider.notifier);
+
+    await controller.start();
+    expect(container.read(provider).ride?.passengerReadyAt, isNotNull);
+  });
 }
 
 ProviderContainer _trackingContainer({
@@ -347,11 +484,14 @@ class _MutableTrackingRemoteDatasource extends TrackingRemoteDatasource {
     required this.activeRide,
     required this.clientRides,
     this.unreadChatCount = 0,
+    this.failPassengerReady = false,
   }) : super(apiClient: ApiClient());
 
   Map<String, dynamic>? activeRide;
   List<Map<String, dynamic>> clientRides;
   int unreadChatCount;
+  bool failPassengerReady;
+  int passengerReadyCalls = 0;
 
   @override
   Future<Map<String, dynamic>?> fetchActiveRide() async {
@@ -391,6 +531,23 @@ class _MutableTrackingRemoteDatasource extends TrackingRemoteDatasource {
       'phone_number': '+22790000000',
     };
   }
+
+  @override
+  Future<Map<String, dynamic>> passengerReady(int rideId) async {
+    passengerReadyCalls += 1;
+    if (failPassengerReady) {
+      throw const TrackingRemoteFailure(
+        'Impossible de prevenir le chauffeur. Reessayez.',
+      );
+    }
+    final updatedRide = Map<String, dynamic>.from(activeRide ?? _rideJson(
+          id: rideId,
+          status: 'arrived',
+        ));
+    updatedRide['passenger_ready_at'] = '2026-05-05T10:30:00Z';
+    activeRide = updatedRide;
+    return updatedRide;
+  }
 }
 
 class _FakeSessionController extends SessionController {
@@ -402,6 +559,7 @@ class _FakeSessionController extends SessionController {
             apiClient: ApiClient(),
             localNotificationService: LocalNotificationService(),
             notificationHandler: NotificationHandler(),
+            notificationInboxService: NotificationInboxService(),
           ),
           storageService: const SecureStorageService(),
         ) {
@@ -514,6 +672,7 @@ Position _position() {
 Map<String, dynamic> _rideJson({
   required int id,
   required String status,
+  String? passengerReadyAt,
 }) {
   return {
     'id': id,
@@ -523,5 +682,6 @@ Map<String, dynamic> _rideJson({
     'estimated_price': 2500,
     'created_at': '2026-04-24T10:00:00Z',
     'status': status,
+    'passenger_ready_at': passengerReadyAt,
   };
 }

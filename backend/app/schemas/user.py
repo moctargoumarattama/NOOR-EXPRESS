@@ -3,6 +3,7 @@ import re
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
+from app.core.messages import Messages
 from app.models.user import DriverStatus, UserRole
 
 
@@ -16,11 +17,11 @@ class UserCreate(BaseModel):
     def validate_phone_number(cls, value: str) -> str:
         phone_number = value.strip()
         if not phone_number:
-            raise ValueError("Phone number cannot be empty")
+            raise ValueError(Messages.PHONE_NUMBER_EMPTY)
 
         digits_only = phone_number[1:] if phone_number.startswith("+") else phone_number
         if not re.fullmatch(r"\+?\d+", phone_number) or not 8 <= len(digits_only) <= 15:
-            raise ValueError("Phone number format is invalid")
+            raise ValueError(Messages.PHONE_NUMBER_INVALID)
 
         return phone_number
 
@@ -111,7 +112,7 @@ class SavedAddressCreate(BaseModel):
     def validate_label(cls, value: str) -> str:
         label = value.strip()
         if not label:
-            raise ValueError("Label cannot be empty")
+            raise ValueError(Messages.LABEL_EMPTY)
         return label
 
     @field_validator("address_display")
@@ -119,21 +120,21 @@ class SavedAddressCreate(BaseModel):
     def validate_address_display(cls, value: str) -> str:
         address_display = value.strip()
         if not address_display:
-            raise ValueError("Address display cannot be empty")
+            raise ValueError(Messages.ADDRESS_DISPLAY_EMPTY)
         return address_display
 
     @field_validator("lat")
     @classmethod
     def validate_latitude(cls, value: float) -> float:
         if value < -90 or value > 90:
-            raise ValueError("Latitude must be between -90 and 90")
+            raise ValueError(Messages.LATITUDE_OUT_OF_RANGE)
         return value
 
     @field_validator("lon")
     @classmethod
     def validate_longitude(cls, value: float) -> float:
         if value < -180 or value > 180:
-            raise ValueError("Longitude must be between -180 and 180")
+            raise ValueError(Messages.LONGITUDE_OUT_OF_RANGE)
         return value
 
 

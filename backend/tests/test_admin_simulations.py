@@ -1,3 +1,4 @@
+import base64
 from pathlib import Path
 from types import SimpleNamespace
 import sys
@@ -68,6 +69,20 @@ class AdminSimulationDataTest(unittest.TestCase):
             self.assertGreater(price, 0)
             self.assertLessEqual(price, simulations.MAX_SIMULATION_PRICE_FCFA)
             self.assertNotEqual(price, 800000)
+
+    def test_simulation_driver_profile_payload_uses_valid_base64_documents(self) -> None:
+        profile = simulations._build_simulation_driver_profile("Amine El Idrissi")
+
+        self.assertEqual(profile.first_name, "Amine")
+        self.assertEqual(profile.last_name, "El Idrissi")
+        self.assertEqual(
+            base64.b64decode(profile.vehicle_photo).decode("utf-8"),
+            "simulation-vehicle-photo",
+        )
+        self.assertEqual(
+            base64.b64decode(profile.driver_license_file).decode("utf-8"),
+            "simulation-license",
+        )
 
 
 class AdminSimulationStateTest(unittest.IsolatedAsyncioTestCase):

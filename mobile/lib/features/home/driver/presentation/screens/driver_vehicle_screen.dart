@@ -17,18 +17,28 @@ class _DriverVehicleScreenState extends ConsumerState<DriverVehicleScreen> {
   final _modelController = TextEditingController();
   final _colorController = TextEditingController();
   final _plateController = TextEditingController();
+  bool _isDisposed = false;
+
+  bool get _isUiMounted => mounted && !_isDisposed;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(() async {
+      if (!_isUiMounted) {
+        return;
+      }
       await ref.read(driverProvider.notifier).loadProfile();
+      if (!_isUiMounted) {
+        return;
+      }
       _fill(ref.read(driverProvider).profile);
     });
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _brandController.dispose();
     _modelController.dispose();
     _colorController.dispose();
@@ -115,7 +125,7 @@ class _DriverVehicleScreenState extends ConsumerState<DriverVehicleScreen> {
             plateNumber: _plateController.text.trim(),
           ),
         );
-    if (!mounted) {
+    if (!mounted || !_isUiMounted) {
       return;
     }
     ScaffoldMessenger.of(context).showSnackBar(

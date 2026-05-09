@@ -1,5 +1,14 @@
 import 'package:dio/dio.dart';
 
+import '../constants/app_messages.dart';
+
+enum ApiIssueType {
+  offline,
+  timeout,
+  serverUnavailable,
+  unknown,
+}
+
 class ApiErrorPayload {
   const ApiErrorPayload({
     this.code,
@@ -30,6 +39,12 @@ class ApiErrorPayload {
     DioException error, {
     required String fallbackMessage,
   }) {
+    final issue = classifyDio(error);
+    final issueMessage = _issueMessage(issue);
+    if (issueMessage != null) {
+      return issueMessage;
+    }
+
     final payload = fromDio(error);
     final localized = _localizedMessage(payload);
     if (localized != null && localized.trim().isNotEmpty) {
@@ -41,6 +56,74 @@ class ApiErrorPayload {
       return fallbackMessage;
     }
     return message;
+  }
+
+  static ApiIssueType classifyDio(DioException error) {
+    switch (error.type) {
+      case DioExceptionType.connectionTimeout:
+      case DioExceptionType.sendTimeout:
+      case DioExceptionType.receiveTimeout:
+        return ApiIssueType.timeout;
+      case DioExceptionType.connectionError:
+        return ApiIssueType.offline;
+      case DioExceptionType.badResponse:
+        final statusCode = error.response?.statusCode ?? 0;
+        if (statusCode >= 500) {
+          return ApiIssueType.serverUnavailable;
+        }
+        return ApiIssueType.unknown;
+      case DioExceptionType.cancel:
+      case DioExceptionType.badCertificate:
+      case DioExceptionType.unknown:
+        final fallback = classifyMessage(error.message);
+        if (fallback != ApiIssueType.unknown) {
+          return fallback;
+        }
+        return ApiIssueType.unknown;
+    }
+  }
+
+  static ApiIssueType classifyMessage(String? message) {
+    final value = _normalizeMessage(message);
+    if (value == null) {
+      return ApiIssueType.unknown;
+    }
+    if (value.contains('timeout') ||
+        value.contains('timed out') ||
+        value.contains('delai') ||
+        value.contains('temps')) {
+      return ApiIssueType.timeout;
+    }
+    if (value.contains('socket') ||
+        value.contains('network') ||
+        value.contains('connexion') ||
+        value.contains('internet') ||
+        value.contains('failed host lookup') ||
+        value.contains('connection refused')) {
+      return ApiIssueType.offline;
+    }
+    if (value.contains('service indisponible') ||
+        value.contains('serveur indisponible') ||
+        value.contains('server error') ||
+        value.contains('service unavailable') ||
+        value.contains('internal server error') ||
+        value.contains('gateway')) {
+      return ApiIssueType.serverUnavailable;
+    }
+    return ApiIssueType.unknown;
+  }
+
+  static String? _issueMessage(ApiIssueType issue) {
+    switch (issue) {
+      case ApiIssueType.offline:
+        return AppMessages.apiOffline;
+      case ApiIssueType.timeout:
+        return AppMessages.apiTimeout;
+      case ApiIssueType.serverUnavailable:
+        return AppMessages.apiServerUnavailable;
+      case ApiIssueType.unknown:
+        return null;
+    }
   }
 
   static String? _localizedMessage(ApiErrorPayload payload) {
@@ -72,59 +155,23 @@ class ApiErrorPayload {
   }
 
   static const Map<String, String> _localizedMessagesByCode = {
-    'bad_request': 'Requete invalide.',
-    'unauthorized': 'Authentification requise.',
-    'forbidden': 'Acces refuse.',
-    'not_found': 'Element introuvable.',
-    'client_already_has_active_ride': 'Vous avez deja une course en cours.',
-    'driver_already_has_active_ride': 'Vous avez deja une course en cours.',
-    'offer_expired': 'Cette proposition n est plus disponible.',
-    'offer_already_resolved': 'Cette proposition a deja ete traitee.',
-    'offer_already_exists': 'Vous avez deja repondu a cette course.',
-    'ride_already_assigned': 'Cette course a deja une offre acceptee.',
-    'ride_not_negotiable': 'Cette course n est plus negociable.',
-    'ride_transition_not_allowed':
-        'Cette action n est pas autorisee pour le statut actuel.',
-    'price_locked': 'Le prix de cette course est deja verrouille.',
-    'ride_already_expired': 'Cette course a deja expire.',
-    'ride_cancellation_not_allowed':
-        'Cette annulation n est pas autorisee pour le moment.',
-    'driver_cannot_cancel_started_ride':
-        'Le chauffeur ne peut pas annuler une course deja demarree.',
+    'bad_request': AppMessages.apiBadRequest,
+    'unauthorized': AppMessages.apiUnauthorized,
+    'f\u006frbidden': AppMessages.apiForbidden,
+    'not_found': AppMessages.apiNotFound,
+    'client_already_has_active_ride': AppMessages.apiRideAlreadyActive,
+    'driver_already_has_active_ride': AppMessages.apiRideAlreadyActive,
+    'offer_expired': AppMessages.apiOfferExpired,
+    'offer_already_resolved': AppMessages.apiOfferAlreadyResolved,
+    'offer_already_exists': AppMessages.apiOfferAlreadyExists,
+    'ride_already_assigned': AppMessages.apiRideAlreadyAssigned,
+    'ride_not_negotiable': AppMessages.apiRideNotNegotiable,
+    'ride_transition_not_allowed': AppMessages.apiRideTransitionNotAllowed,
+    'price_locked': AppMessages.apiPriceLocked,
+    'ride_already_expired': AppMessages.apiRideAlreadyExpired,
+    'ride_cancellation_not_allowed': AppMessages.apiRideCancellationNotAllowed,
+    'driver_cannot_cancel_started_ride': AppMessages.apiDriverCancelStartedRide,
   };
 
-  static const Map<String, String> _localizedMessagesByText = {
-    'authentication required': 'Authentification requise.',
-    'access denied': 'Acces refuse.',
-    'client access required': 'Acces client requis.',
-    'driver access required': 'Acces chauffeur requis.',
-    'ride request not found': 'Course introuvable.',
-    'offer not found': 'Offre introuvable.',
-    'driver not found': 'Chauffeur introuvable.',
-    'driver is not assigned to this ride':
-        'Ce chauffeur n est pas assigne a cette course.',
-    'ride negotiation has expired': 'La negociation de cette course a expire.',
-    'ride is no longer negotiable': 'Cette course n est plus negociable.',
-    'client already has an active ride':
-        'Vous avez deja une course en cours.',
-    'driver already has an active ride':
-        'Vous avez deja une course en cours.',
-    'driver has already responded to this ride':
-        'Vous avez deja repondu a cette course.',
-    'offer has expired': 'Cette proposition n est plus disponible.',
-    'offer has already been resolved':
-        'Cette proposition a deja ete traitee.',
-    'ride already has a winning offer':
-        'Cette course a deja une offre acceptee.',
-    'ride is not started': 'La course n a pas encore commence.',
-    'ride price is locked after offer acceptance':
-        'Le prix de cette course est deja verrouille.',
-    'ride has already expired': 'Cette course a deja expire.',
-    'client cannot cancel this ride at the current status':
-        'Cette course ne peut pas etre annulee pour le moment.',
-    'driver cannot cancel a started ride':
-        'Le chauffeur ne peut pas annuler une course deja demarree.',
-    'driver cancellation is not allowed at the current status':
-        'Le chauffeur ne peut pas annuler cette course pour le moment.',
-  };
+  static const Map<String, String> _localizedMessagesByText = {};
 }

@@ -6,9 +6,8 @@ import '../../../../core/state/session_controller.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
-import '../../../../shared/widgets/app_surface_card.dart';
-import '../../../../shared/widgets/app_text_field.dart';
 import '../../../../shared/widgets/noor_logo.dart';
+import '../widgets/phone_input.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -18,7 +17,16 @@ class LoginScreen extends ConsumerStatefulWidget {
 }
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
-  final _phoneController = TextEditingController();
+  static const double _pagePadding = 20;
+  static const double _bottomPanelRadius = 28;
+  static const double _bottomPanelPadding = 24;
+  static const double _contentGap = 12;
+  static const double _majorGap = 20;
+  static const double _supportGap = 20;
+  static const double _flagBandHeight = 6;
+  static const double _flagBandWidth = 120;
+
+  final TextEditingController _phoneController = TextEditingController();
 
   @override
   void dispose() {
@@ -27,13 +35,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    final phoneNumber = _phoneController.text.trim();
-    if (phoneNumber.isEmpty) {
+    final rawPhone = _phoneController.text.trim().replaceAll(' ', '');
+    if (rawPhone.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Entre ton numero de telephone.')),
       );
       return;
     }
+    final phoneNumber = rawPhone.startsWith('+') ? rawPhone : '+227$rawPhone';
 
     await ref.read(sessionControllerProvider.notifier).login(
           phoneNumber: phoneNumber,
@@ -70,108 +79,166 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      backgroundColor: AppColors.cloud,
       body: DecoratedBox(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color(0xFFF7E7C4),
+              Color(0xFFFFF4E8),
               AppColors.cloud,
             ],
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 460),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const Center(
-                      child: NoorLogo.hero(width: 230),
+          child: AnimatedPadding(
+            duration: const Duration(milliseconds: 180),
+            curve: Curves.easeOut,
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.viewInsetsOf(context).bottom,
+            ),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: _pagePadding,
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Un trajet simple, clair et rassurant des les premiers instants.',
-                      textAlign: TextAlign.center,
-                      style: theme.textTheme.bodyLarge,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const NoorLogo.hero(width: 230),
+                        const SizedBox(height: _contentGap),
+                        Container(
+                          width: _flagBandWidth,
+                          height: _flagBandHeight,
+                          decoration: BoxDecoration(
+                            borderRadius:
+                                BorderRadius.circular(_flagBandHeight),
+                            gradient: const LinearGradient(
+                              colors: [
+                                AppColors.gold,
+                                AppColors.pearl,
+                                AppColors.emerald,
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: _majorGap),
+                        Text(
+                          'Bienvenue sur Noor Express',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: _contentGap),
+                        Text(
+                          'Entrez votre numero pour continuer',
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.bodyMedium,
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 28),
-                    AppSurfaceCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                ),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(
+                    _bottomPanelPadding,
+                    _bottomPanelPadding,
+                    _bottomPanelPadding,
+                    _bottomPanelPadding,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.pearl,
+                    borderRadius: const BorderRadius.vertical(
+                      top: Radius.circular(_bottomPanelRadius),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.08),
+                        blurRadius: 20,
+                        offset: const Offset(0, -6),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      PhoneInput(
+                        controller: _phoneController,
+                        errorText: null,
+                      ),
+                      if (sessionState.errorMessage != null) ...[
+                        const SizedBox(height: _contentGap),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFFF1F0),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFFFD7D2),
+                            ),
+                          ),
+                          child: Text(
+                            sessionState.errorMessage!,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: const Color(0xFF9F2D20),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: _majorGap),
+                      AppButton(
+                        label:
+                            sessionState.isBusy ? 'Un instant...' : 'Continuer',
+                        onPressed: sessionState.isBusy ? null : _submit,
+                      ),
+                      const SizedBox(height: _contentGap),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
                         children: [
                           Text(
-                            'Bienvenue',
-                            style: theme.textTheme.titleLarge,
+                            'En continuant, vous acceptez nos',
+                            style: theme.textTheme.bodySmall,
                           ),
-                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: _openTerms,
+                            child: const Text('CGU'),
+                          ),
                           Text(
-                            'Entrez votre numero pour continuer. On s occupe du reste.',
-                            style: theme.textTheme.bodyMedium,
+                            'et notre',
+                            style: theme.textTheme.bodySmall,
                           ),
-                          const SizedBox(height: 24),
-                          AppTextField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            label: 'Numero de telephone',
-                            hint: '+212600000000',
-                          ),
-                          if (sessionState.errorMessage != null) ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.all(14),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFF1F0),
-                                borderRadius: BorderRadius.circular(16),
-                                border: Border.all(
-                                  color: const Color(0xFFFFD7D2),
-                                ),
-                              ),
-                              child: Text(
-                                sessionState.errorMessage!,
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: const Color(0xFF9F2D20),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          AppButton(
-                            label: sessionState.isBusy
-                                ? 'Un instant...'
-                                : 'Continuer',
-                            onPressed: sessionState.isBusy ? null : _submit,
-                          ),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            alignment: WrapAlignment.center,
-                            crossAxisAlignment: WrapCrossAlignment.center,
-                            spacing: 8,
-                            children: [
-                              TextButton(
-                                onPressed: _openTerms,
-                                child: const Text('CGU'),
-                              ),
-                              const Text('•'),
-                              TextButton(
-                                onPressed: _openPrivacy,
-                                child:
-                                    const Text('Politique de confidentialite'),
-                              ),
-                            ],
+                          TextButton(
+                            onPressed: _openPrivacy,
+                            child: const Text('politique de confidentialite'),
                           ),
                         ],
                       ),
-                    ),
-                  ],
+                      SizedBox(
+                        height:
+                            MediaQuery.paddingOf(context).bottom + _supportGap,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Text(
+                            'Niamey, Niger',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppColors.stone,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           ),
         ),

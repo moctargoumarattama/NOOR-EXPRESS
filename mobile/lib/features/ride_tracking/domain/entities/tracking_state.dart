@@ -29,6 +29,7 @@ class TrackingState {
     this.routePoints = const [],
     this.unreadChatCount = 0,
     this.isChatOpen = false,
+    this.passengerReadyBannerMessage,
     this.errorMessage,
     this.toastMessage,
   });
@@ -56,6 +57,7 @@ class TrackingState {
   final List<TrackingCoordinates> routePoints;
   final int unreadChatCount;
   final bool isChatOpen;
+  final String? passengerReadyBannerMessage;
   final String? errorMessage;
   final String? toastMessage;
 
@@ -76,6 +78,7 @@ class TrackingState {
     List<TrackingCoordinates>? routePoints,
     int? unreadChatCount,
     bool? isChatOpen,
+    String? passengerReadyBannerMessage,
     String? errorMessage,
     String? toastMessage,
     bool clearRide = false,
@@ -86,6 +89,7 @@ class TrackingState {
     bool clearEta = false,
     bool clearDistanceRemaining = false,
     bool clearRoute = false,
+    bool clearPassengerReadyBanner = false,
     bool clearError = false,
     bool clearToast = false,
   }) {
@@ -111,6 +115,9 @@ class TrackingState {
       routePoints: clearRoute ? const [] : routePoints ?? this.routePoints,
       unreadChatCount: unreadChatCount ?? this.unreadChatCount,
       isChatOpen: isChatOpen ?? this.isChatOpen,
+      passengerReadyBannerMessage: clearPassengerReadyBanner
+          ? null
+          : passengerReadyBannerMessage ?? this.passengerReadyBannerMessage,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
       toastMessage: clearToast ? null : toastMessage ?? this.toastMessage,
     );

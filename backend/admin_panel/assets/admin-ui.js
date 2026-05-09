@@ -1,6 +1,6 @@
-const AdminUI = (() => {
+﻿const AdminUI = (() => {
   const navItems = [
-    { key: 'dashboard', label: 'Dashboard', href: 'dashboard.html' },
+    { key: 'dashboard', label: 'Tableau de bord', href: 'dashboard.html' },
     { key: 'rides', label: 'Courses', href: 'rides.html' },
     { key: 'users', label: 'Utilisateurs', href: 'users.html' },
     { key: 'drivers', label: 'Chauffeurs à valider', href: 'drivers.html' },
@@ -31,7 +31,7 @@ const AdminUI = (() => {
         <div class="logo-mark" aria-hidden="true">N</div>
         <div>
           <strong>Noor Express</strong>
-          <span>Admin Operations</span>
+          <span>Opérations admin</span>
         </div>
       </div>
       <nav class="admin-nav">
@@ -42,7 +42,7 @@ const AdminUI = (() => {
         `).join('')}
       </nav>
       <button class="theme-toggle" onclick="AdminUI.toggleTheme()" type="button">Mode sombre</button>
-      <button class="logout-button" onclick="AdminApi.logout()">Logout</button>
+      <button class="logout-button" onclick="AdminApi.logout()">Déconnexion</button>
     `;
     updateThemeButton();
     updateDevNavigation();
@@ -105,3 +105,4 @@ const AdminUI = (() => {
 })();
 
 document.addEventListener('DOMContentLoaded', () => AdminUI.initShell());
+

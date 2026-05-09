@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.api_errors import conflict, forbidden, not_found
+from app.core.messages import Messages
 from app.core.firebase import notify_user
 from app.db.database import AsyncSessionLocal
 from app.models.driver_profile import DriverProfile, all_driver_documents_valid
@@ -42,26 +43,26 @@ async def create_offer(
 ) -> RideOfferDriverRead:
     ride_request = await session.get(RideRequest, ride_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
 
     driver = await session.get(User, driver_id)
     if driver is None:
-        raise not_found("Driver not found")
+        raise not_found(Messages.DRIVER_NOT_FOUND)
     if driver.role != UserRole.DRIVER:
-        raise forbidden("Driver access required")
+        raise forbidden(Messages.DRIVER_ACCESS_REQUIRED)
     await ensure_user_not_suspended(session, driver)
 
     ensure_verified_driver(is_verified=await is_driver_verified(session, driver_id))
 
     ride_request = await expire_ride(session, ride_id) or ride_request
     if ride_request.status == RideRequestStatus.EXPIRED:
-        raise conflict("offer_expired", "Ride negotiation has expired.")
+        raise conflict("offer_expired", Messages.OFFER_EXPIRED)
     if ride_request.status not in NEGOTIABLE_RIDE_STATUSES:
-        raise conflict("ride_not_negotiable", "Ride is no longer negotiable.")
+        raise conflict("ride_not_negotiable", Messages.RIDE_NOT_NEGOTIABLE)
     if await _driver_has_active_ride(session, driver_id):
         raise conflict(
             "driver_already_has_active_ride",
-            "Driver already has an active ride.",
+            Messages.RIDE_ALREADY_ACTIVE,
         )
 
     existing_offer = await session.execute(
@@ -73,7 +74,7 @@ async def create_offer(
     if existing_offer.scalar_one_or_none() is not None:
         raise conflict(
             "offer_already_exists",
-            "Driver has already responded to this ride.",
+            Messages.OFFER_ALREADY_EXISTS,
         )
 
     offer = RideOffer(
@@ -89,7 +90,7 @@ async def create_offer(
         await session.rollback()
         raise conflict(
             "offer_already_exists",
-            "Driver has already responded to this ride.",
+            Messages.OFFER_ALREADY_EXISTS,
         ) from exc
 
     await session.refresh(offer)
@@ -140,9 +141,9 @@ async def get_offers_for_ride(
 ) -> list[RideOfferDriverRead]:
     ride_request = await session.get(RideRequest, ride_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
     if ride_request.client_id != client_id:
-        raise forbidden("Access denied")
+        raise forbidden(Messages.FORBIDDEN)
 
     ride_request = await expire_ride(session, ride_id) or ride_request
     if ride_request.status == RideRequestStatus.EXPIRED:
@@ -170,22 +171,22 @@ async def reject_offer(
 ) -> RideOffer:
     offer = await session.get(RideOffer, offer_id)
     if offer is None:
-        raise not_found("Offer not found")
+        raise not_found(Messages.OFFER_NOT_FOUND)
 
     ride_request = await session.get(RideRequest, offer.ride_request_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
     if ride_request.client_id != client_id:
-        raise forbidden("Access denied")
+        raise forbidden(Messages.FORBIDDEN)
 
     ride_request = await expire_ride(session, ride_request.id) or ride_request
     if (
         offer.status == RideOfferStatus.EXPIRED
         or ride_request.status == RideRequestStatus.EXPIRED
     ):
-        raise conflict("offer_expired", "Offer has expired.")
+        raise conflict("offer_expired", Messages.OFFER_EXPIRED)
     if offer.status != RideOfferStatus.PENDING:
-        raise conflict("offer_already_resolved", "Offer has already been resolved.")
+        raise conflict("offer_already_resolved", Messages.OFFER_ALREADY_RESOLVED)
 
     offer.status = RideOfferStatus.REJECTED
     offer.responded_at = datetime.utcnow()

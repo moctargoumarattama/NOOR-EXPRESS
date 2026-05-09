@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../core/models/app_role.dart';
 import '../../../../core/services/support_contact_service.dart';
+import '../../../../core/theme/app_colors.dart';
 import '../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../shared/widgets/app_button.dart';
 import '../../../../shared/widgets/app_snackbar.dart';
@@ -18,6 +19,7 @@ import 'ride_chat_screen.dart';
 import '../tracking_status_presenter.dart';
 import '../widgets/bottom_ride_sheet.dart';
 import '../widgets/map_view.dart';
+import '../widgets/rating_bottom_sheet.dart';
 import '../widgets/report_bottom_sheet.dart';
 import '../widgets/ride_chat_fab.dart';
 import '../widgets/ride_detail_section.dart';
@@ -39,11 +41,17 @@ class DriverTrackingScreen extends ConsumerStatefulWidget {
 
 class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   ProviderSubscription<TrackingState>? _subscription;
+  Timer? _ratingPromptTimer;
+  int? _ratingPromptRideId;
+  int? _autoPromptedRideId;
+  bool _isDisposed = false;
 
   TrackingControllerScope get _scope => TrackingControllerScope(
         mode: TrackingMode.driver,
         rideId: widget.rideId,
       );
+
+  bool get _isUiMounted => mounted && !_isDisposed;
 
   @override
   void initState() {
@@ -51,8 +59,11 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     _subscription = ref.listenManual<TrackingState>(
       trackingControllerProvider(_scope),
       (previous, next) {
+        _syncAutoRatingPrompt(previous?.ride, next.ride);
         final message = next.toastMessage;
-        if (message == null || message == previous?.toastMessage || !mounted) {
+        if (message == null ||
+            message == previous?.toastMessage ||
+            !_isUiMounted) {
           return;
         }
         AppSnackbar.show(context, message: _humanizeMessage(message));
@@ -65,6 +76,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   @override
   void dispose() {
+    _isDisposed = true;
+    _cancelAutoRatingPrompt();
     _subscription?.close();
     super.dispose();
   }
@@ -76,6 +89,8 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     final pickup = ride?.pickupPosition;
     final statusPresentation = buildDriverTrackingStatusPresentation(ride);
     final recoveryMessage = _recoveryMessage(state);
+    final showPassengerReadyBanner =
+        (state.passengerReadyBannerMessage ?? '').isNotEmpty;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B1220),
@@ -157,6 +172,38 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                           : statusPresentation.showSpinner,
                     ),
                   ),
+                  if (ride?.passengerReadyAt != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.nigerGreenSoft,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(color: AppColors.nigerGreenBorder),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.check_circle,
+                            color: AppColors.nigerGreen,
+                            size: 16,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Passager pret',
+                            style: TextStyle(
+                              color: AppColors.nigerGreen,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   if (ride == null && !state.isLoading) ...[
                     const SizedBox(height: 20),
                     const TrackingEmptyCard(
@@ -166,6 +213,49 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
                     ),
                   ],
                 ],
+              ),
+            ),
+            ),
+          Positioned(
+            top: 74,
+            left: 16,
+            right: 16,
+            child: IgnorePointer(
+              child: AnimatedSlide(
+                duration: const Duration(milliseconds: 240),
+                curve: Curves.easeOut,
+                offset: showPassengerReadyBanner
+                    ? Offset.zero
+                    : const Offset(0, -1.4),
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: showPassengerReadyBanner ? 1 : 0,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF0D7A37),
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Text(
+                      state.passengerReadyBannerMessage ?? '',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        height: 1.2,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -243,6 +333,14 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
       );
     }
 
+    if (ride.canRateClient) {
+      return AppButton(
+        label: 'Noter le client',
+        isLoading: state.isActionLoading,
+        onPressed: state.isActionLoading ? null : _openClientRatingSheet,
+      );
+    }
+
     return null;
   }
 
@@ -284,15 +382,36 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   }
 
   Future<void> _openReportSheet() async {
+    final notifier = ref.read(trackingControllerProvider(_scope).notifier);
     await showRideReportBottomSheet(
       context,
       onSubmit: (draft) {
-        return ref.read(trackingControllerProvider(_scope).notifier).reportRide(
-              reason: draft.reason,
-              description: draft.description,
-            );
+        return notifier.reportRide(
+          reason: draft.reason,
+          description: draft.description,
+        );
       },
     );
+  }
+
+  Future<void> _openClientRatingSheet() async {
+    final ride = ref.read(trackingControllerProvider(_scope)).ride;
+    if (ride == null || !ride.canRateClient) {
+      return;
+    }
+    final draft = await showRideRatingBottomSheet(
+      context,
+      title: 'Noter le client',
+      submitLabel: 'Envoyer la note',
+    );
+    if (draft == null) {
+      return;
+    }
+
+    await ref.read(trackingControllerProvider(_scope).notifier).rateClient(
+          rating: draft.rating.toDouble(),
+          comment: draft.comment,
+        );
   }
 
   Future<void> _openChat() async {
@@ -310,7 +429,9 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     final result = await ref
         .read(supportContactServiceProvider)
         .openSupportChat(AppRole.driver);
-    if (!mounted || result.type != SupportContactResultType.failed) {
+    if (!mounted ||
+        !_isUiMounted ||
+        result.type != SupportContactResultType.failed) {
       return;
     }
     AppSnackbar.show(
@@ -328,7 +449,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
       options: driverCancellationReasonOptions,
       reasonRequired: true,
     );
-    if (!mounted || draft == null) {
+    if (!_isUiMounted || draft == null) {
       return;
     }
     await ref.read(trackingControllerProvider(_scope).notifier).cancelRide(
@@ -407,7 +528,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   ) async {
     final navigationService = ref.read(navigationServiceProvider);
     final launchPlan = await navigationService.buildLaunchPlan(coordinates);
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
 
@@ -418,7 +539,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
     final launched =
         await navigationService.openWithOption(selectedOption, coordinates);
-    if (!mounted || launched) {
+    if (!_isUiMounted || launched) {
       return;
     }
 
@@ -441,7 +562,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   }
 
   void _showNavigationFeedback(String message) {
-    if (!mounted) {
+    if (!_isUiMounted) {
       return;
     }
     AppSnackbar.show(context, message: message);
@@ -452,6 +573,67 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
         status == RideTrackingStatus.arrived ||
         status == RideTrackingStatus.started ||
         status == RideTrackingStatus.completed;
+  }
+
+  void _syncAutoRatingPrompt(
+    RideTrackingModel? previousRide,
+    RideTrackingModel? nextRide,
+  ) {
+    if (!_isUiMounted) {
+      return;
+    }
+    if (nextRide == null || !nextRide.canRateClient) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+
+    if (previousRide?.id != nextRide.id) {
+      _cancelAutoRatingPrompt();
+    }
+    if (_autoPromptedRideId == nextRide.id) {
+      return;
+    }
+
+    final opensAt = nextRide.ratingWindowOpensAt;
+    final closesAt = nextRide.ratingWindowClosesAt;
+    if (opensAt == null || closesAt == null) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+
+    final now = DateTime.now();
+    if (now.isAfter(closesAt)) {
+      _cancelAutoRatingPrompt();
+      return;
+    }
+    if (_ratingPromptRideId == nextRide.id && _ratingPromptTimer != null) {
+      return;
+    }
+
+    final delay =
+        opensAt.isAfter(now) ? opensAt.difference(now) : Duration.zero;
+    _ratingPromptRideId = nextRide.id;
+    _ratingPromptTimer = Timer(delay, () {
+      if (!_isUiMounted) {
+        return;
+      }
+      final latestRide = ref.read(trackingControllerProvider(_scope)).ride;
+      if (latestRide == null ||
+          latestRide.id != nextRide.id ||
+          !latestRide.canRateClient) {
+        _cancelAutoRatingPrompt();
+        return;
+      }
+      _autoPromptedRideId = nextRide.id;
+      _cancelAutoRatingPrompt();
+      unawaited(_openClientRatingSheet());
+    });
+  }
+
+  void _cancelAutoRatingPrompt() {
+    _ratingPromptTimer?.cancel();
+    _ratingPromptTimer = null;
+    _ratingPromptRideId = null;
   }
 
   String? _recoveryMessage(TrackingState state) {

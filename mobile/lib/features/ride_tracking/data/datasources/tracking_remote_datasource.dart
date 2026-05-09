@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/app_messages.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/api_error.dart';
 
@@ -64,6 +65,10 @@ class TrackingRemoteDatasource {
     return _post('/ride-requests/$rideId/complete');
   }
 
+  Future<Map<String, dynamic>> passengerReady(int rideId) {
+    return _post('/ride-requests/$rideId/passenger-ready');
+  }
+
   Future<Map<String, dynamic>> rateDriver({
     required int rideId,
     required double rating,
@@ -71,6 +76,20 @@ class TrackingRemoteDatasource {
   }) {
     return _post(
       '/ride-requests/$rideId/rate-driver',
+      data: {
+        'rating': rating,
+        'comment': comment,
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>> rateClient({
+    required int rideId,
+    required double rating,
+    String? comment,
+  }) {
+    return _post(
+      '/ride-requests/$rideId/rate-client',
       data: {
         'rating': rating,
         'comment': comment,
@@ -130,7 +149,7 @@ class TrackingRemoteDatasource {
     } on DioException catch (error) {
       throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
         error,
-        fallbackMessage: 'Impossible de charger vos trajets.',
+        fallbackMessage: AppMessages.trackingRidesLoadFailed,
       ));
     }
   }
@@ -141,7 +160,7 @@ class TrackingRemoteDatasource {
       return response.data ?? <String, dynamic>{};
     } on DioException catch (error) {
       throw TrackingRemoteFailure(_readError(error,
-          fallback: 'Impossible de charger les informations du trajet.'));
+          fallback: AppMessages.trackingRideInfoLoadFailed));
     }
   }
 
@@ -158,7 +177,7 @@ class TrackingRemoteDatasource {
     } on DioException catch (error) {
       throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
         error,
-        fallbackMessage: 'Cette action n est pas disponible pour le moment.',
+        fallbackMessage: AppMessages.trackingActionUnavailable,
       ));
     }
   }
@@ -176,7 +195,7 @@ class TrackingRemoteDatasource {
     } on DioException catch (error) {
       throw TrackingRemoteFailure(ApiErrorPayload.messageOrFallback(
         error,
-        fallbackMessage: 'Cette action n est pas disponible pour le moment.',
+        fallbackMessage: AppMessages.trackingActionUnavailable,
       ));
     }
   }

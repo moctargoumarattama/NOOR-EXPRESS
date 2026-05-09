@@ -12,6 +12,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.messages import Messages
 from app.core.security import get_current_client, get_current_user
 from app.db.database import get_db_session
 from app.models.user import User
@@ -193,7 +194,7 @@ async def get_current_client_profile_endpoint(
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client profile not found",
+            detail=Messages.NOT_FOUND,
         )
     return profile
 
@@ -208,7 +209,7 @@ async def update_current_client_profile_endpoint(
     if profile is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Client profile not found",
+            detail=Messages.NOT_FOUND,
         )
     return profile
 
@@ -287,7 +288,7 @@ async def get_user_endpoint(
     if user is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found",
+            detail=Messages.USER_NOT_FOUND,
         )
     return UserRead.model_validate(user)
 

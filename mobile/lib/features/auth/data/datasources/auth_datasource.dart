@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/constants/app_messages.dart';
 import '../../../../core/models/app_role.dart';
 import '../../../../core/models/auth_session.dart';
+import '../../../../core/network/api_error.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/auth_model.dart';
 
@@ -58,7 +60,7 @@ class AuthDatasource {
       );
       final tokens = AuthTokenPair.fromJson(response.data ?? {});
       if (tokens.accessToken.isEmpty || tokens.refreshToken.isEmpty) {
-        throw const AuthDataFailure('Token de session invalide.');
+        throw const AuthDataFailure(AppMessages.authDataTokenInvalid);
       }
       return getCurrentSession(
         tokens.accessToken,
@@ -78,7 +80,7 @@ class AuthDatasource {
       );
       final user = AuthUserModel.fromJson(response.data ?? {});
       if (user.id == 0 || user.phoneNumber.isEmpty) {
-        throw const AuthDataFailure('Profil utilisateur invalide.');
+        throw const AuthDataFailure(AppMessages.authUserProfileInvalid);
       }
       final authHeader = _apiClient.dio.options.headers['Authorization'];
       final activeToken =
@@ -104,7 +106,7 @@ class AuthDatasource {
       );
       final accessToken = response.data?['access_token'] as String?;
       if (accessToken == null || accessToken.isEmpty) {
-        throw const AuthDataFailure('Refresh token invalide.');
+        throw const AuthDataFailure(AppMessages.authRefreshTokenInvalid);
       }
       return accessToken;
     });
@@ -129,7 +131,12 @@ class AuthDatasource {
           throw AuthDataFailure(message);
         }
       }
-      throw const AuthDataFailure('Service auth indisponible.');
+      throw AuthDataFailure(
+        ApiErrorPayload.messageOrFallback(
+          error,
+          fallbackMessage: AppMessages.authServiceUnavailable,
+        ),
+      );
     }
   }
 }

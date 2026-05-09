@@ -63,14 +63,14 @@ class _HamburgerMenuState extends State<HamburgerMenu> {
                 key: const ValueKey('client-menu-overlay'),
                 onTap: widget.onClose,
                 behavior: HitTestBehavior.opaque,
-                child: Container(
-                  color: Colors.black.withValues(alpha: 0.34),
+                child: ColoredBox(
+                  color: AppColors.overlay.withValues(alpha: 0.56),
                 ),
               ),
             ),
             AnimatedSlide(
               offset: widget.isOpen ? Offset.zero : const Offset(-1, 0),
-              duration: const Duration(milliseconds: 250),
+              duration: const Duration(milliseconds: 260),
               curve: Curves.easeOutCubic,
               child: SafeArea(
                 child: Align(
@@ -84,82 +84,123 @@ class _HamburgerMenuState extends State<HamburgerMenu> {
                       onPointerDown: _handlePointerDown,
                       onPointerMove: _handlePointerMove,
                       child: Material(
-                        color: AppColors.pearl,
-                        clipBehavior: Clip.antiAlias,
+                        color: Colors.transparent,
                         borderRadius: const BorderRadius.horizontal(
-                          right: Radius.circular(28),
+                          right: Radius.circular(32),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.fromLTRB(18, 18, 16, 14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _MenuHeader(
-                                displayName: widget.displayName,
-                                initials: widget.initials,
-                                phoneNumber: widget.phoneNumber,
-                                onProfileTap: widget.onProfileTap,
+                        clipBehavior: Clip.antiAlias,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                Color(0xFFFFFFFF),
+                                Color(0xFFF8FBF9),
+                              ],
+                            ),
+                            borderRadius: const BorderRadius.horizontal(
+                              right: Radius.circular(32),
+                            ),
+                            border: Border.all(
+                              color: AppColors.nigerGreenBorder
+                                  .withValues(alpha: 0.40),
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.14),
+                                blurRadius: 30,
+                                offset: const Offset(0, 14),
                               ),
-                              const SizedBox(height: 18),
-                              Expanded(
-                                child: ListView(
-                                  padding: EdgeInsets.zero,
-                                  children: [
-                                    _MenuItem(
-                                      icon: Icons.history_rounded,
-                                      label: 'Mes trajets',
-                                      onTap: widget.onHistoryTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.notifications_none_rounded,
-                                      label: 'Notifications',
-                                      onTap: widget.onNotificationsTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.person_outline_rounded,
-                                      label: 'Mon profil',
-                                      onTap: widget.onProfileTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.settings_outlined,
-                                      label: 'Reglages',
-                                      onTap: widget.onSettingsTap,
-                                    ),
-                                    const _MenuDivider(),
-                                    _MenuItem(
-                                      icon: Icons.help_outline_rounded,
-                                      label: 'Aide',
-                                      onTap: widget.onHelpTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.support_agent_rounded,
-                                      label: 'Assistance',
-                                      onTap: widget.onSupportTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.privacy_tip_outlined,
-                                      label: 'Politique d utilisation',
-                                      onTap: widget.onPolicyTap,
-                                    ),
-                                    _MenuItem(
-                                      icon: Icons.report_problem_outlined,
-                                      label: 'Signaler un probleme',
-                                      color: AppColors.coral,
-                                      onTap: widget.onReportTap,
-                                    ),
-                                    const _MenuDivider(),
-                                    _MenuItem(
-                                      icon: Icons.logout_rounded,
-                                      label: 'Se deconnecter',
-                                      color: const Color(0xFFE5484D),
-                                      onTap: widget.onLogout,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 10),
-                              _DriverSpaceFooter(onTap: widget.onDriverModeTap),
                             ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 10, 14, 10),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Center(child: _MenuGrabber()),
+                                const SizedBox(height: 8),
+                                _MenuHeader(
+                                  displayName: widget.displayName,
+                                  initials: widget.initials,
+                                  phoneNumber: widget.phoneNumber,
+                                  onTap: widget.onProfileTap,
+                                ),
+                                const SizedBox(height: 12),
+                                Expanded(
+                                  child: ListView(
+                                    padding: EdgeInsets.zero,
+                                    children: [
+                                      _MenuSection(
+                                        title: 'Navigation',
+                                        children: [
+                                          _MenuItem(
+                                            icon: Icons.history_rounded,
+                                            label: 'Mes trajets',
+                                            onTap: widget.onHistoryTap,
+                                          ),
+                                          _MenuItem(
+                                            icon: Icons
+                                                .notifications_none_rounded,
+                                            label: 'Notifications',
+                                            onTap: widget.onNotificationsTap,
+                                          ),
+                                          _MenuItem(
+                                            icon: Icons.settings_outlined,
+                                            label: 'Reglages',
+                                            onTap: widget.onSettingsTap,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _MenuSection(
+                                        title: 'Aide et securite',
+                                        children: [
+                                          _MenuItem(
+                                            icon: Icons.help_outline_rounded,
+                                            label: 'Aide',
+                                            onTap: widget.onHelpTap,
+                                          ),
+                                          _MenuItem(
+                                            icon: Icons.support_agent_rounded,
+                                            label: 'Assistance',
+                                            onTap: widget.onSupportTap,
+                                          ),
+                                          _MenuItem(
+                                            icon: Icons.privacy_tip_outlined,
+                                            label: 'Politique d utilisation',
+                                            onTap: widget.onPolicyTap,
+                                          ),
+                                          _MenuItem(
+                                            icon: Icons.report_problem_outlined,
+                                            label: 'Signaler un probleme',
+                                            color: AppColors.warning,
+                                            onTap: widget.onReportTap,
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 10),
+                                      _MenuSection(
+                                        title: 'Compte',
+                                        children: [
+                                          _MenuItem(
+                                            icon: Icons.logout_rounded,
+                                            label: 'Se deconnecter',
+                                            color: AppColors.error,
+                                            isDestructive: true,
+                                            onTap: widget.onLogout,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                _DriverSpaceFooter(
+                                    onTap: widget.onDriverModeTap),
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -197,124 +238,232 @@ class _HamburgerMenuState extends State<HamburgerMenu> {
   }
 }
 
+class _MenuGrabber extends StatelessWidget {
+  const _MenuGrabber();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 38,
+      height: 3.5,
+      decoration: BoxDecoration(
+        color: AppColors.nigerGreen.withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(99),
+      ),
+    );
+  }
+}
+
 class _MenuHeader extends StatelessWidget {
   const _MenuHeader({
     required this.displayName,
     required this.initials,
     required this.phoneNumber,
-    required this.onProfileTap,
+    required this.onTap,
   });
 
   final String displayName;
   final String initials;
   final String phoneNumber;
-  final VoidCallback onProfileTap;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final phoneLabel =
         phoneNumber.trim().isEmpty ? 'Telephone non renseigne' : phoneNumber;
+    final theme = Theme.of(context);
 
-    return Material(
-      color: AppColors.mint,
-      borderRadius: BorderRadius.circular(22),
-      child: InkWell(
-        onTap: onProfileTap,
+    return DecoratedBox(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        splashColor: AppColors.emerald.withValues(alpha: 0.08),
-        highlightColor: AppColors.emerald.withValues(alpha: 0.05),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 58,
-                height: 58,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.pearl,
-                  border: Border.all(
-                    color: AppColors.emerald.withValues(alpha: 0.20),
-                    width: 2,
-                  ),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: AppColors.shadow,
-                      blurRadius: 16,
-                      offset: Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: AppColors.emerald,
-                          fontWeight: FontWeight.w900,
-                        ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 13),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      displayName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.ink,
-                            fontWeight: FontWeight.w900,
-                          ),
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.phone_iphone_rounded,
-                          size: 14,
-                          color: AppColors.stone,
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            phoneLabel,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: AppColors.stone),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text(
-                          'Voir mon profil',
-                          style:
-                              Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: AppColors.emerald,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                        ),
-                        const SizedBox(width: 4),
-                        const Icon(
-                          Icons.chevron_right_rounded,
-                          size: 19,
-                          color: AppColors.emerald,
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFF2FBF7),
+            Color(0xFFE4F4EC),
+          ],
+        ),
+        border: Border.all(
+          color: AppColors.nigerGreenBorder.withValues(alpha: 0.48),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.nigerGreen.withValues(alpha: 0.09),
+            blurRadius: 18,
+            offset: const Offset(0, 9),
           ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(22),
+          splashColor: AppColors.nigerGreen.withValues(alpha: 0.10),
+          highlightColor: AppColors.nigerGreen.withValues(alpha: 0.06),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                Container(
+                  width: 52,
+                  height: 52,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFFFFFFF),
+                        Color(0xFFF5FBF8),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: AppColors.nigerGreenBorder,
+                      width: 1.4,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.10),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Center(
+                    child: Text(
+                      initials,
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        color: AppColors.nigerGreen,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.nigerGreenSoft,
+                              borderRadius: BorderRadius.circular(99),
+                            ),
+                            child: Text(
+                              'Client',
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: AppColors.nigerGreen,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.phone_iphone_rounded,
+                            size: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              phoneLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MenuSection extends StatelessWidget {
+  const _MenuSection({
+    required this.title,
+    required this.children,
+  });
+
+  final String title;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final sectionChildren = <Widget>[];
+    for (final child in children) {
+      if (sectionChildren.isNotEmpty) {
+        sectionChildren.add(const SizedBox(height: 6));
+      }
+      sectionChildren.add(child);
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: AppColors.pearl.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 4),
+              child: Text(
+                title,
+                style: theme.textTheme.labelMedium?.copyWith(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...sectionChildren,
+          ],
         ),
       ),
     );
@@ -327,69 +476,82 @@ class _MenuItem extends StatelessWidget {
     required this.label,
     required this.onTap,
     this.color = AppColors.ink,
+    this.isDestructive = false,
   });
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final Color color;
+  final bool isDestructive;
 
   @override
   Widget build(BuildContext context) {
-    final isAccent = color != AppColors.ink;
-    final iconColor = isAccent ? color : AppColors.emerald;
+    final isDefault = color == AppColors.ink;
+    final textColor = isDestructive
+        ? AppColors.error
+        : (isDefault ? AppColors.textPrimary : color);
+    final iconColor = isDestructive
+        ? AppColors.error
+        : (isDefault ? AppColors.nigerGreen : color);
+    final tileColor = isDestructive
+        ? AppColors.errorSoft.withValues(alpha: 0.32)
+        : Colors.white.withValues(alpha: 0.85);
+    final borderColor = isDestructive
+        ? AppColors.error.withValues(alpha: 0.22)
+        : AppColors.border;
 
     return Semantics(
       button: true,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: AppColors.emerald.withValues(alpha: 0.10),
-          highlightColor: AppColors.emerald.withValues(alpha: 0.05),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-            child: Row(
-              children: [
-                Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(13),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: tileColor,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: borderColor),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(14),
+            splashColor: iconColor.withValues(alpha: 0.10),
+            highlightColor: iconColor.withValues(alpha: 0.06),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 9),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: 0.11),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(icon, color: iconColor, size: 19),
                   ),
-                  child: Icon(icon, color: iconColor, size: 21),
-                ),
-                const SizedBox(width: 13),
-                Expanded(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                        ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                            color: textColor,
+                            fontWeight: FontWeight.w800,
+                          ),
+                    ),
                   ),
-                ),
-              ],
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: textColor.withValues(alpha: 0.75),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    );
-  }
-}
-
-class _MenuDivider extends StatelessWidget {
-  const _MenuDivider();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 8),
-      child: Divider(height: 1, color: AppColors.border),
     );
   }
 }
@@ -403,41 +565,78 @@ class _DriverSpaceFooter extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: onTap,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.emerald,
-              foregroundColor: AppColors.pearl,
-              elevation: 0,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(16),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.centerLeft,
+              end: Alignment.centerRight,
+              colors: [
+                AppColors.nigerGreen,
+                AppColors.emerald,
+              ],
             ),
-            child: const Row(
-              children: [
-                Icon(Icons.drive_eta_rounded, size: 20),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'Espace chauffeur',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontWeight: FontWeight.w900),
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.nigerGreen.withValues(alpha: 0.26),
+                blurRadius: 14,
+                offset: const Offset(0, 7),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 50,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.22),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.drive_eta_rounded,
+                          size: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Espace chauffeur',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 14,
+                        color: Colors.white,
+                      ),
+                    ],
                   ),
                 ),
-                Icon(Icons.chevron_right_rounded, size: 22),
-              ],
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         const Align(
           alignment: Alignment.center,
-          child: NoorLogo.compact(width: 82),
+          child: NoorLogo.compact(width: 74),
         ),
       ],
     );

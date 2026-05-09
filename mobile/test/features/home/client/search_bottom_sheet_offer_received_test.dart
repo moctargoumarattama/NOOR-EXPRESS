@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:noor_express_mobile/core/location/location_quality.dart';
 import 'package:noor_express_mobile/features/home/client/data/models/client_ride.dart';
 import 'package:noor_express_mobile/features/home/client/presentation/widgets/search_bottom_sheet.dart';
 import 'package:noor_express_mobile/features/map/models/route_result.dart';
@@ -162,6 +163,8 @@ class _Harness extends StatelessWidget {
               priceController: controller,
               isCreating: false,
               isEstimatingPrice: false,
+              pickupLocationQuality: LocationQuality.confirmed,
+              canSubmitRideRequest: true,
               activeRide: _ride,
               activeRideRoute: _route,
               offers: offers,

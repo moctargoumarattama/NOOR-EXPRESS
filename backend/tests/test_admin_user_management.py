@@ -643,6 +643,51 @@ class AdminUserManagementRoutesTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.exception.headers.get("Retry-After"), "120")
 
 
+class AdminInitSecurityRoutesTest(unittest.IsolatedAsyncioTestCase):
+    async def test_admin_init_get_returns_404_when_disabled(self) -> None:
+        with patch.dict("os.environ", {"ADMIN_INIT_ENABLED": ""}, clear=False):
+            with self.assertRaises(HTTPException) as context:
+                await admin.admin_init_probe_endpoint()
+
+        self.assertEqual(context.exception.status_code, 404)
+
+    async def test_admin_init_post_returns_404_when_disabled(self) -> None:
+        with patch.dict("os.environ", {"ADMIN_INIT_ENABLED": ""}, clear=False):
+            with patch("app.api.admin.create_admin", new=AsyncMock()) as create_admin_mock:
+                with self.assertRaises(HTTPException) as context:
+                    await admin.admin_init_endpoint(
+                        init_in=admin.AdminInitRequest(
+                            username="local-admin",
+                            password="super-secret",
+                        ),
+                        session=object(),
+                    )
+
+        self.assertEqual(context.exception.status_code, 404)
+        create_admin_mock.assert_not_awaited()
+
+    async def test_admin_init_post_keeps_existing_behavior_when_enabled(self) -> None:
+        with patch.dict("os.environ", {"ADMIN_INIT_ENABLED": "true"}, clear=False):
+            with patch(
+                "app.api.admin.create_admin",
+                new=AsyncMock(return_value=SimpleNamespace(username="local-admin")),
+            ) as create_admin_mock, patch(
+                "app.api.admin.login_admin",
+                new=AsyncMock(return_value="test-token"),
+            ) as login_admin_mock:
+                payload = await admin.admin_init_endpoint(
+                    init_in=admin.AdminInitRequest(
+                        username="local-admin",
+                        password="super-secret",
+                    ),
+                    session=object(),
+                )
+
+        self.assertEqual(payload.access_token, "test-token")
+        create_admin_mock.assert_awaited_once()
+        login_admin_mock.assert_awaited_once()
+
+
 def _build_deletable_user(*, role: UserRole) -> SimpleNamespace:
     return SimpleNamespace(
         id=77,

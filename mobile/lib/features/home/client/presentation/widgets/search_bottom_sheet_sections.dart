@@ -8,11 +8,16 @@ class _BookingPanel extends StatelessWidget {
     required this.route,
     required this.routeError,
     required this.recentDepartureLabels,
+    required this.recentAddresses,
     required this.priceController,
     required this.isCreating,
     required this.isEstimatingPrice,
+    required this.pickupLocationQuality,
+    required this.canSubmitRideRequest,
+    required this.submitDisabledReason,
     required this.onPickupTap,
     required this.onDropoffTap,
+    required this.onRecentTap,
     required this.onClearPickup,
     required this.onClearDropoff,
     required this.onSubmit,
@@ -25,12 +30,17 @@ class _BookingPanel extends StatelessWidget {
   final RouteResult? route;
   final String? routeError;
   final List<String> recentDepartureLabels;
+  final List<AddressResult> recentAddresses;
   final TextEditingController priceController;
   final bool isCreating;
   final bool isEstimatingPrice;
+  final LocationQuality pickupLocationQuality;
+  final bool canSubmitRideRequest;
+  final String? submitDisabledReason;
   final PriceEstimate? estimate;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
+  final SelectRecentAddress? onRecentTap;
   final VoidCallback onClearPickup;
   final VoidCallback onClearDropoff;
   final VoidCallback onSubmit;
@@ -41,9 +51,12 @@ class _BookingPanel extends StatelessWidget {
     if (dropoff == null) {
       return _IdlePanel(
         pickup: pickup,
+        pickupLocationQuality: pickupLocationQuality,
         recentLabels: _recentLabels,
+        recentAddresses: recentAddresses,
         onPickupTap: onPickupTap,
         onDropoffTap: onDropoffTap,
+        onRecentTap: onRecentTap,
         onClearPickup: onClearPickup,
       );
     }
@@ -56,6 +69,8 @@ class _BookingPanel extends StatelessWidget {
       priceController: priceController,
       isCreating: isCreating,
       isEstimatingPrice: isEstimatingPrice,
+      canSubmitRideRequest: canSubmitRideRequest,
+      submitDisabledReason: submitDisabledReason,
       estimate: estimate,
       onPickupTap: onPickupTap,
       onDropoffTap: onDropoffTap,
@@ -81,16 +96,22 @@ class _BookingPanel extends StatelessWidget {
 class _IdlePanel extends StatelessWidget {
   const _IdlePanel({
     required this.pickup,
+    required this.pickupLocationQuality,
     required this.recentLabels,
+    required this.recentAddresses,
     required this.onPickupTap,
     required this.onDropoffTap,
+    required this.onRecentTap,
     required this.onClearPickup,
   });
 
   final AddressResult? pickup;
+  final LocationQuality pickupLocationQuality;
   final List<String> recentLabels;
+  final List<AddressResult> recentAddresses;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
+  final SelectRecentAddress? onRecentTap;
   final VoidCallback onClearPickup;
 
   @override
@@ -107,6 +128,7 @@ class _IdlePanel extends StatelessWidget {
         const SizedBox(height: 14),
         _PickupMiniCard(
           pickup: pickup,
+          pickupLocationQuality: pickupLocationQuality,
           onTap: onPickupTap,
           onClear: pickup == null ? null : onClearPickup,
         ),
@@ -118,7 +140,14 @@ class _IdlePanel extends StatelessWidget {
               ),
         ),
         const SizedBox(height: 10),
-        for (final label in recentLabels) _RecentAddress(label: label),
+        if (recentAddresses.isNotEmpty)
+          for (final address in recentAddresses.take(3))
+            _RecentAddressAction(
+              label: address.name,
+              onTap: onRecentTap == null ? null : () => onRecentTap!(address),
+            )
+        else
+          for (final label in recentLabels) _RecentAddress(label: label),
       ],
     );
   }
@@ -133,6 +162,8 @@ class _RoutePreviewPanel extends StatelessWidget {
     required this.priceController,
     required this.isCreating,
     required this.isEstimatingPrice,
+    required this.canSubmitRideRequest,
+    required this.submitDisabledReason,
     required this.onPickupTap,
     required this.onDropoffTap,
     required this.onClearPickup,
@@ -149,6 +180,8 @@ class _RoutePreviewPanel extends StatelessWidget {
   final TextEditingController priceController;
   final bool isCreating;
   final bool isEstimatingPrice;
+  final bool canSubmitRideRequest;
+  final String? submitDisabledReason;
   final PriceEstimate? estimate;
   final VoidCallback onPickupTap;
   final VoidCallback onDropoffTap;
@@ -160,11 +193,32 @@ class _RoutePreviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reliableRecommendedPrice = _reliableRecommendedPrice;
-    final canSubmit = pickup != null && dropoff != null && !isCreating;
+    final hasPickup = pickup != null;
+    final canSubmit =
+        hasPickup && dropoff != null && !isCreating && canSubmitRideRequest;
+    final helperText = isEstimatingPrice
+        ? 'Estimation en cours...'
+        : 'Ajustez votre proposition avant d\'envoyer.';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Text(
+          'Confirmez votre trajet',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w900,
+              ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Proposez un prix clair pour recevoir des offres rapidement.',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+        ),
+        const SizedBox(height: 12),
         RouteSummaryCard(
           pickupLabel: pickup?.name ?? 'Choisir le depart',
           dropoffLabel: dropoff?.name ?? 'Choisir l arrivee',
@@ -185,17 +239,41 @@ class _RoutePreviewPanel extends StatelessWidget {
           controller: priceController,
           recommendedPrice: reliableRecommendedPrice,
           enabled: !isCreating,
+          helperText: helperText,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
         if (onAddToFavorites != null) ...[
-          AppButton.secondary(
-            label: 'Ajouter aux favoris',
-            icon: Icons.bookmark_add_rounded,
-            onPressed: isCreating ? null : () => onAddToFavorites!(dropoff!),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton.icon(
+              onPressed: isCreating ? null : () => onAddToFavorites!(dropoff!),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.nigerOrangeDark,
+                textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              icon: const Icon(Icons.bookmark_add_rounded, size: 18),
+              label: const Text('Ajouter aux favoris'),
+            ),
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
         ],
-        const SizedBox(height: 2),
+        if (submitDisabledReason != null) ...[
+          const SizedBox(height: 8),
+          AppInlineFeedback(
+            message: submitDisabledReason!,
+            tone: AppInlineFeedbackTone.warning,
+          ),
+        ] else if (!hasPickup) ...[
+          const SizedBox(height: 8),
+          const AppInlineFeedback(
+            message:
+                'Selectionnez votre point de depart avant de continuer.',
+            tone: AppInlineFeedbackTone.warning,
+          ),
+        ],
+        const SizedBox(height: 4),
         AppButton(
           label: 'Trouver un chauffeur',
           icon: Icons.local_taxi_rounded,
@@ -286,7 +364,7 @@ class _RoutePreviewPanel extends StatelessWidget {
   }
 }
 
-class _OfferReceivedPanel extends StatelessWidget {
+class _OfferReceivedPanel extends StatefulWidget {
   const _OfferReceivedPanel({
     super.key,
     required this.ride,
@@ -311,19 +389,41 @@ class _OfferReceivedPanel extends StatelessWidget {
   final VoidCallback? onViewAllOffers;
 
   @override
+  State<_OfferReceivedPanel> createState() => _OfferReceivedPanelState();
+}
+
+class _OfferReceivedPanelState extends State<_OfferReceivedPanel> {
+  static const _previewLimit = 3;
+  bool _showAllOffers = false;
+
+  @override
   Widget build(BuildContext context) {
-    final primaryOffer = offers.first;
-    final hasBusyOffer = acceptingOfferId != null || rejectingOfferId != null;
-    final isPrimaryBusy = acceptingOfferId == primaryOffer.offerId ||
-        rejectingOfferId == primaryOffer.offerId;
+    final hasBusyOffer =
+        widget.acceptingOfferId != null || widget.rejectingOfferId != null;
+    final hasMoreThanPreview = widget.offers.length > _previewLimit;
+    final visibleOffers = _showAllOffers
+        ? widget.offers
+        : widget.offers.take(_previewLimit).toList(growable: false);
+    final title = widget.offers.length == 1
+        ? '1 offre recue'
+        : '${widget.offers.length} offres recues';
+    final toggleLabel = _showAllOffers
+        ? 'Replier la liste'
+        : hasMoreThanPreview
+            ? 'Voir ${widget.offers.length - _previewLimit} autres offres'
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _OfferReceivedHeader(),
+        _OfferReceivedHeader(
+          title: title,
+          subtitle: 'Comparez et choisissez le meilleur chauffeur.',
+          badgeLabel: 'Nouveau',
+        ),
         const SizedBox(height: 12),
-        _CompactRideSummary(ride: ride, route: route),
-        if (isRefreshingOffers) ...[
+        _CompactRideSummary(ride: widget.ride, route: widget.route),
+        if (widget.isRefreshingOffers) ...[
           const SizedBox(height: 10),
           const AppInlineFeedback(
             message: 'Mise a jour des offres...',
@@ -331,34 +431,47 @@ class _OfferReceivedPanel extends StatelessWidget {
             isLoading: true,
           ),
         ],
-        const SizedBox(height: 12),
-        if (offers.length > 1 && onViewAllOffers != null) ...[
+        if (toggleLabel != null) ...[
+          const SizedBox(height: 8),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
-              onPressed: onViewAllOffers,
-              icon: const Icon(Icons.list_alt_rounded, size: 18),
-              label: const Text('Voir toutes les offres'),
+              onPressed: () => setState(() => _showAllOffers = !_showAllOffers),
+              icon: Icon(
+                _showAllOffers
+                    ? Icons.keyboard_arrow_up_rounded
+                    : Icons.list_alt_rounded,
+                size: 18,
+              ),
+              label: Text(toggleLabel),
               style: TextButton.styleFrom(
-                foregroundColor: AppColors.emerald,
+                foregroundColor: AppColors.nigerOrangeDark,
                 textStyle: const TextStyle(fontWeight: FontWeight.w900),
               ),
             ),
           ),
-          const SizedBox(height: 4),
         ],
-        OfferCard(
-          offer: primaryOffer,
-          compact: true,
-          isAccepting: acceptingOfferId == primaryOffer.offerId,
-          isRejecting: rejectingOfferId == primaryOffer.offerId,
-          isDisabled: hasBusyOffer && !isPrimaryBusy,
-          onSelect: onAcceptOffer == null
-              ? () {}
-              : () => onAcceptOffer!(primaryOffer),
-          onReject:
-              onRejectOffer == null ? null : () => onRejectOffer!(primaryOffer),
-        ),
+        const SizedBox(height: 10),
+        for (var index = 0; index < visibleOffers.length; index++) ...[
+          OfferCard(
+            offer: visibleOffers[index],
+            compact: true,
+            isAccepting:
+                widget.acceptingOfferId == visibleOffers[index].offerId,
+            isRejecting:
+                widget.rejectingOfferId == visibleOffers[index].offerId,
+            isDisabled: hasBusyOffer &&
+                widget.acceptingOfferId != visibleOffers[index].offerId &&
+                widget.rejectingOfferId != visibleOffers[index].offerId,
+            onSelect: widget.onAcceptOffer == null
+                ? () {}
+                : () => widget.onAcceptOffer!(visibleOffers[index]),
+            onReject: widget.onRejectOffer == null
+                ? null
+                : () => widget.onRejectOffer!(visibleOffers[index]),
+          ),
+          if (index != visibleOffers.length - 1) const SizedBox(height: 10),
+        ],
       ],
     );
   }
@@ -379,13 +492,16 @@ class _OffersLoadingPanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _OfferReceivedHeader(),
+        const _OfferReceivedHeader(
+          title: 'Offres en chargement',
+          subtitle: 'Les propositions des chauffeurs arrivent...',
+          badgeLabel: 'Patientez',
+        ),
         const SizedBox(height: 12),
         _CompactRideSummary(ride: ride, route: route),
-        const SizedBox(height: 14),
-        const AppInlineFeedback(
+        const SizedBox(height: 12),
+        const _SearchingProgressCard(
           message: 'Chargement des offres...',
-          tone: AppInlineFeedbackTone.info,
           isLoading: true,
         ),
       ],
@@ -394,7 +510,15 @@ class _OffersLoadingPanel extends StatelessWidget {
 }
 
 class _OfferReceivedHeader extends StatelessWidget {
-  const _OfferReceivedHeader();
+  const _OfferReceivedHeader({
+    required this.title,
+    required this.subtitle,
+    required this.badgeLabel,
+  });
+
+  final String title;
+  final String subtitle;
+  final String badgeLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -406,17 +530,17 @@ class _OfferReceivedHeader extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Offre recue',
+                title,
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      color: AppColors.ink,
+                      color: AppColors.textPrimary,
                       fontWeight: FontWeight.w900,
                     ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Un chauffeur vous propose un prix',
+                subtitle,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppColors.stone,
+                      color: AppColors.textSecondary,
                       fontWeight: FontWeight.w600,
                     ),
               ),
@@ -426,13 +550,14 @@ class _OfferReceivedHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.mint,
+            color: AppColors.nigerOrangeSoft,
+            border: Border.all(color: AppColors.nigerOrangeBorder),
             borderRadius: BorderRadius.circular(999),
           ),
-          child: const Text(
-            'Nouvelle',
-            style: TextStyle(
-              color: AppColors.emerald,
+          child: Text(
+            badgeLabel,
+            style: const TextStyle(
+              color: AppColors.nigerOrangeDark,
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -458,9 +583,9 @@ class _CompactRideSummary extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAF9),
+        color: AppColors.backgroundSubtle,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFE8EEE9)),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         children: [
@@ -532,7 +657,7 @@ class _CompactRouteLabel extends StatelessWidget {
         Text(
           label,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppColors.stone,
+                color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
               ),
         ),
@@ -542,7 +667,7 @@ class _CompactRouteLabel extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.ink,
+                color: AppColors.textPrimary,
                 fontWeight: FontWeight.w900,
               ),
         ),
@@ -565,8 +690,9 @@ class _CompactSummaryPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.pearl,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,7 +700,7 @@ class _CompactSummaryPill extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: AppColors.stone,
+                  color: AppColors.textSecondary,
                   fontWeight: FontWeight.w700,
                 ),
           ),
@@ -584,7 +710,7 @@ class _CompactSummaryPill extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.emerald,
+                  color: AppColors.nigerOrangeDark,
                   fontWeight: FontWeight.w900,
                 ),
           ),
@@ -598,7 +724,6 @@ class _SearchingRidePanel extends StatefulWidget {
   const _SearchingRidePanel({
     super.key,
     required this.ride,
-    required this.onOpen,
     required this.route,
     this.nearbyDriversCount,
     this.onCancel,
@@ -607,7 +732,6 @@ class _SearchingRidePanel extends StatefulWidget {
   final ClientRide ride;
   final RouteResult? route;
   final int? nearbyDriversCount;
-  final VoidCallback onOpen;
   final VoidCallback? onCancel;
 
   @override
@@ -640,11 +764,15 @@ class _SearchingRidePanelState extends State<_SearchingRidePanel> {
 
   @override
   Widget build(BuildContext context) {
+    final helperText = _hasReliableProposedPrice
+        ? 'Prix envoye aux chauffeurs'
+        : 'Prix propose indisponible pour cette demande.';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const _SearchingHeader(),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
         RouteSummaryCard(
           pickupLabel: widget.ride.pickupLocation,
           dropoffLabel: widget.ride.dropoffLocation,
@@ -658,29 +786,28 @@ class _SearchingRidePanelState extends State<_SearchingRidePanel> {
           controller: _proposedPriceController,
           enabled: false,
           compact: true,
-          helperText: _hasReliableProposedPrice
-              ? 'Prix envoye aux chauffeurs'
-              : 'Prix propose indisponible pour cette demande.',
+          helperText: helperText,
         ),
-        const SizedBox(height: 14),
-        AppInlineFeedback(
+        const SizedBox(height: 12),
+        _SearchingProgressCard(
           message: _feedbackMessage,
-          tone: AppInlineFeedbackTone.info,
           isLoading: widget.ride.status == 'pending',
         ),
-        const SizedBox(height: 16),
-        if (_hasOffers) ...[
-          AppButton(
-            label: 'Voir les offres',
-            icon: Icons.receipt_long_rounded,
-            onPressed: widget.onOpen,
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          child: TextButton.icon(
+            onPressed: widget.onCancel,
+            icon: const Icon(Icons.close_rounded, size: 18),
+            style: TextButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              foregroundColor: AppColors.error,
+              textStyle: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+            label: const Text('Annuler la demande'),
           ),
-          const SizedBox(height: 10),
-        ],
-        AppButton.secondary(
-          label: 'Annuler la demande',
-          icon: Icons.close_rounded,
-          onPressed: widget.onCancel,
         ),
       ],
     );
@@ -734,7 +861,7 @@ class _SearchingHeader extends StatelessWidget {
           child: Text(
             'On cherche un chauffeur',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.ink,
+                  color: AppColors.textPrimary,
                   fontWeight: FontWeight.w900,
                 ),
           ),
@@ -743,18 +870,80 @@ class _SearchingHeader extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
           decoration: BoxDecoration(
-            color: AppColors.mint,
+            color: AppColors.nigerGreenSoft,
+            border: Border.all(color: AppColors.nigerGreenBorder),
             borderRadius: BorderRadius.circular(999),
           ),
           child: const Text(
             'En cours',
             style: TextStyle(
-              color: AppColors.emerald,
+              color: AppColors.nigerGreen,
               fontWeight: FontWeight.w900,
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _SearchingProgressCard extends StatelessWidget {
+  const _SearchingProgressCard({
+    required this.message,
+    required this.isLoading,
+  });
+
+  final String message;
+  final bool isLoading;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.nigerOrangeSoft,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.nigerOrangeBorder),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: AppColors.pearl,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: isLoading
+                ? const Center(
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.nigerOrangeDark,
+                      ),
+                    ),
+                  )
+                : const Icon(
+                    Icons.check_rounded,
+                    color: AppColors.nigerOrangeDark,
+                    size: 18,
+                  ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: AppColors.nigerOrangeDark,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -870,11 +1059,13 @@ class _RideModeHeader extends StatelessWidget {
 class _PickupMiniCard extends StatelessWidget {
   const _PickupMiniCard({
     required this.pickup,
+    required this.pickupLocationQuality,
     required this.onTap,
     this.onClear,
   });
 
   final AddressResult? pickup;
+  final LocationQuality pickupLocationQuality;
   final VoidCallback onTap;
   final VoidCallback? onClear;
 
@@ -926,6 +1117,17 @@ class _PickupMiniCard extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                   ),
+                  const SizedBox(height: 3),
+                  if (_qualityLabel.isNotEmpty)
+                    Text(
+                      _qualityLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: const Color(0xFF757575),
+                            fontWeight: FontWeight.w600,
+                          ),
+                    ),
                 ],
               ),
             ),
@@ -938,6 +1140,53 @@ class _PickupMiniCard extends StatelessWidget {
                     : Icons.close_rounded,
                 color: const Color(0xFF757575),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String get _qualityLabel {
+    if (pickup == null) {
+      return '';
+    }
+    if (!pickup!.isCurrentLocation) {
+      return locationQualityLabel(LocationQuality.manual);
+    }
+    return locationQualityLabel(pickupLocationQuality);
+  }
+}
+
+class _RecentAddressAction extends StatelessWidget {
+  const _RecentAddressAction({
+    required this.label,
+    required this.onTap,
+  });
+
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            const Icon(Icons.history_rounded, color: Color(0xFF757575)),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                label,
+                style: Theme.of(context).textTheme.bodyLarge,
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: Color(0xFF757575),
             ),
           ],
         ),

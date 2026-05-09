@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from app.core.api_errors import ApiError, conflict
+from app.core.messages import Messages
 from app.models.ride_offer import RideOffer, RideOfferStatus
 from app.models.ride_request import RideRequest, RideRequestStatus
 
@@ -85,7 +86,7 @@ def assert_transition_allowed(
     if target_status not in _ALLOWED_TRANSITIONS.get(current_status, set()):
         raise conflict(
             "ride_transition_not_allowed",
-            f"Ride transition {current_status.value} -> {target_status.value} is not allowed.",
+            Messages.RIDE_TRANSITION_NOT_ALLOWED,
         )
 
 
@@ -96,7 +97,7 @@ def ensure_verified_driver(*, is_verified: bool) -> None:
     raise ApiError(
         status_code=403,
         code="driver_not_verified",
-        message="Driver verification is required.",
+        message=Messages.DRIVER_NOT_VERIFIED,
     )
 
 
@@ -110,25 +111,25 @@ def ensure_offer_acceptance_allowed(
     ensure_verified_driver(is_verified=driver_is_verified)
 
     if offer.status == RideOfferStatus.EXPIRED:
-        raise conflict("offer_expired", "Offer has expired.")
+        raise conflict("offer_expired", Messages.OFFER_EXPIRED)
 
     if offer.status != RideOfferStatus.PENDING:
-        raise conflict("offer_already_resolved", "Offer has already been resolved.")
+        raise conflict("offer_already_resolved", Messages.OFFER_ALREADY_RESOLVED)
 
     if ride.status in {
         RideRequestStatus.ACCEPTED,
         RideRequestStatus.ARRIVED,
         RideRequestStatus.STARTED,
     }:
-        raise conflict("ride_already_assigned", "Ride already has a winning offer.")
+        raise conflict("ride_already_assigned", Messages.RIDE_ALREADY_ASSIGNED)
 
     if ride.status not in NEGOTIABLE_RIDE_STATUSES:
-        raise conflict("ride_not_negotiable", "Ride is no longer negotiable.")
+        raise conflict("ride_not_negotiable", Messages.RIDE_NOT_NEGOTIABLE)
 
     if driver_has_active_ride:
         raise conflict(
             "driver_already_has_active_ride",
-            "Driver already has an active ride.",
+            Messages.RIDE_ALREADY_ACTIVE,
         )
 
 
@@ -167,7 +168,7 @@ def apply_driver_cancellation_reset(
     }:
         raise conflict(
             "ride_transition_not_allowed",
-            "Driver cancellation is only allowed before the ride starts.",
+            Messages.DRIVER_CANCELLATION_NOT_ALLOWED,
         )
 
     ride.status = RideRequestStatus.PENDING
@@ -192,7 +193,7 @@ def apply_ride_completion(
     if ride.agreed_price is None:
         raise conflict(
             "ride_price_missing",
-            "Ride cannot be completed without a locked agreed price.",
+            Messages.PRICE_LOCKED,
         )
 
     assert_transition_allowed(

@@ -18,6 +18,9 @@ import 'step3_selfie.dart';
 import 'step4_confirmation.dart';
 
 const _maxDocumentExpiryYears = 10;
+const _driverOnboardingPhotoMaxWidth = 800.0;
+const _driverOnboardingPhotoQuality = 60;
+const _driverOnboardingPhotoMaxBytes = 900 * 1024;
 
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key});
@@ -50,6 +53,12 @@ class _DriverOnboardingScreenState
         return;
       }
       final state = ref.read(driverOnboardingControllerProvider);
+      final profile = state.profile;
+      if (profile != null &&
+          profile.verificationStatus != DriverVerificationStatus.rejected) {
+        context.go(AppRoutes.driverOnboardingStatus);
+        return;
+      }
       _firstNameController.text = state.firstName;
       _lastNameController.text = state.lastName;
       _addressController.text = state.address;
@@ -116,10 +125,19 @@ class _DriverOnboardingScreenState
         ),
       2 => StepLegalDocuments(
           key: const ValueKey('step-3'),
+          vehiclePhoto: state.vehiclePhoto,
           driverLicense: state.driverLicense,
           vehicleRegistration: state.vehicleRegistration,
           vehicleInsurance: state.vehicleInsurance,
           technicalInspection: state.technicalInspection,
+          onVehicleCamera: () => _pickPhoto(
+            source: NoorPhotoSource.camera,
+            target: _PhotoTarget.vehiclePhoto,
+          ),
+          onVehicleGallery: () => _pickPhoto(
+            source: NoorPhotoSource.gallery,
+            target: _PhotoTarget.vehiclePhoto,
+          ),
           onCamera: (type) => _pickLegalDocument(
             source: NoorPhotoSource.camera,
             type: type,
@@ -153,6 +171,7 @@ class _DriverOnboardingScreenState
           address: state.address,
           idCardPhoto: state.idCardPhoto,
           selfiePhoto: state.selfiePhoto,
+          vehiclePhoto: state.vehiclePhoto,
           driverLicense: state.driverLicense,
           vehicleRegistration: state.vehicleRegistration,
           vehicleInsurance: state.vehicleInsurance,
@@ -193,8 +212,9 @@ class _DriverOnboardingScreenState
       final photo = await ref.read(noorPhotoPickerServiceProvider).pickPhoto(
             source: source,
             preferFrontCamera: preferFrontCamera,
-            maxWidth: 800,
-            imageQuality: 75,
+            maxWidth: _driverOnboardingPhotoMaxWidth,
+            imageQuality: _driverOnboardingPhotoQuality,
+            targetMaxBytes: _driverOnboardingPhotoMaxBytes,
           );
       if (photo == null) {
         return;
@@ -256,6 +276,8 @@ class _DriverOnboardingScreenState
         controller.setIdCardPhoto(encoded);
       case _PhotoTarget.selfie:
         controller.setSelfiePhoto(encoded);
+      case _PhotoTarget.vehiclePhoto:
+        controller.setVehiclePhoto(encoded);
       case _PhotoTarget.driverLicense:
         controller.setLegalDocumentFile(
           DriverLegalDocumentType.driverLicense,
@@ -296,6 +318,7 @@ class _DriverOnboardingScreenState
 enum _PhotoTarget {
   idCard,
   selfie,
+  vehiclePhoto,
   driverLicense,
   vehicleRegistration,
   vehicleInsurance,

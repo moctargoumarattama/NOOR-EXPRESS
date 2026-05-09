@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.api_errors import ApiError, conflict, forbidden, not_found
+from app.core.messages import Messages
 from app.core.firebase import notify_user, notify_users
 from app.models.driver_profile import DriverProfile, DriverVerificationStatus
 from app.models.ride_offer import RideOffer, RideOfferStatus
@@ -100,7 +101,7 @@ async def create_ride(
     current_user: User,
 ) -> RideRequest:
     if current_user.role != UserRole.CLIENT:
-        raise forbidden("Client access required")
+        raise forbidden(Messages.PASSENGER_ACCESS_REQUIRED)
     await ensure_user_not_suspended(session, current_user)
     _ensure_passenger_not_temporarily_blocked(current_user, now=datetime.utcnow())
 
@@ -206,7 +207,7 @@ async def mark_ride_as_offered(
 ) -> RideRequest:
     ride_request = await _get_ride_for_update(session, ride_request_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
 
     if await _expire_ride_if_needed(session, ride_request):
         return ride_request
@@ -230,32 +231,32 @@ async def accept_offer(
     current_user: User,
 ) -> RideOffer:
     if current_user.role != UserRole.CLIENT:
-        raise forbidden("Client access required")
+        raise forbidden(Messages.PASSENGER_ACCESS_REQUIRED)
     await ensure_user_not_suspended(session, current_user)
 
     offer = await _get_offer_for_update(session, offer_id)
     if offer is None:
-        raise not_found("Offer not found")
+        raise not_found(Messages.OFFER_NOT_FOUND)
 
     ride_request = await _get_ride_for_update(session, offer.ride_request_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
 
     if ride_request.client_id != current_user.id:
-        raise forbidden("Access denied")
+        raise forbidden(Messages.FORBIDDEN)
 
     if await _expire_ride_if_needed(session, ride_request):
-        raise conflict("offer_expired", "Offer has expired.")
+        raise conflict("offer_expired", Messages.OFFER_EXPIRED)
 
     locked_offers = await _get_ride_offers_for_update(session, ride_request.id)
     selected_offer = next((item for item in locked_offers if item.id == offer_id), None)
     if selected_offer is None:
-        raise not_found("Offer not found")
+        raise not_found(Messages.OFFER_NOT_FOUND)
     if any(
         item.id != selected_offer.id and item.status == RideOfferStatus.ACCEPTED
         for item in locked_offers
     ):
-        raise conflict("ride_already_assigned", "Ride already has a winning offer.")
+        raise conflict("ride_already_assigned", Messages.RIDE_ALREADY_ASSIGNED)
 
     ensure_offer_acceptance_allowed(
         ride=ride_request,
@@ -432,13 +433,13 @@ async def complete_ride(
         session, ride_request_id, current_user
     )
     if ride_request.status != RideRequestStatus.STARTED:
-        raise conflict("ride_transition_not_allowed", "Ride is not started.")
+        raise conflict("ride_transition_not_allowed", Messages.RIDE_NOT_STARTED)
 
     if (
         ride_request_complete_in is not None
         and ride_request_complete_in.model_fields_set
     ):
-        raise conflict("price_locked", "Ride price is locked after offer acceptance.")
+        raise conflict("price_locked", Messages.PRICE_LOCKED)
 
     apply_ride_completion(
         ride_request,
@@ -490,16 +491,16 @@ async def cancel_by_client(
     ride_request_cancel_in: RideRequestCancel,
 ) -> RideRequest:
     if current_user.role != UserRole.CLIENT:
-        raise forbidden("Client access required")
+        raise forbidden(Messages.PASSENGER_ACCESS_REQUIRED)
 
     ride_request = await _get_ride_for_update(session, ride_request_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
     if ride_request.client_id != current_user.id:
-        raise forbidden("Access denied")
+        raise forbidden(Messages.FORBIDDEN)
 
     if await _expire_ride_if_needed(session, ride_request):
-        raise conflict("ride_already_expired", "Ride has already expired.")
+        raise conflict("ride_already_expired", Messages.RIDE_NOT_ACTIVE)
 
     if ride_request.status not in {
         RideRequestStatus.PENDING,
@@ -508,7 +509,7 @@ async def cancel_by_client(
     }:
         raise conflict(
             "ride_cancellation_not_allowed",
-            "Client cannot cancel this ride at the current status.",
+            Messages.FORBIDDEN,
         )
 
     now = datetime.utcnow()
@@ -587,7 +588,7 @@ async def cancel_by_driver(
     if ride_request.status == RideRequestStatus.STARTED:
         raise conflict(
             "driver_cannot_cancel_started_ride",
-            "Driver cannot cancel a started ride.",
+            Messages.DRIVER_CANNOT_CANCEL_STARTED_RIDE,
         )
     if ride_request.status not in {
         RideRequestStatus.ACCEPTED,
@@ -595,7 +596,7 @@ async def cancel_by_driver(
     }:
         raise conflict(
             "ride_cancellation_not_allowed",
-            "Driver cancellation is not allowed at the current status.",
+            Messages.DRIVER_CANCELLATION_NOT_ALLOWED,
         )
 
     locked_offers = await _get_ride_offers_for_update(session, ride_request.id)
@@ -821,16 +822,16 @@ async def _get_driver_assigned_ride(
     current_user: User,
 ) -> RideRequest:
     if current_user.role != UserRole.DRIVER:
-        raise forbidden("Driver access required")
+        raise forbidden(Messages.DRIVER_ACCESS_REQUIRED)
     ensure_verified_driver(
         is_verified=await _is_driver_verified(session, current_user.id)
     )
 
     ride_request = await _get_ride_for_update(session, ride_request_id)
     if ride_request is None:
-        raise not_found("Ride request not found")
+        raise not_found(Messages.RIDE_NOT_FOUND)
     if ride_request.driver_id != current_user.id:
-        raise forbidden("Driver is not assigned to this ride.")
+        raise forbidden(Messages.DRIVER_NOT_ASSIGNED_TO_RIDE)
     return ride_request
 
 
@@ -1364,3 +1365,4 @@ def _expire_pending_offers(offers: list[RideOffer]) -> list[int]:
         offer.responded_at = now
         expired_driver_ids.append(offer.driver_id)
     return expired_driver_ids
+

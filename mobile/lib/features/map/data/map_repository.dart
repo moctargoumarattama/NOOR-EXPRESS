@@ -1,6 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/app_messages.dart';
+import '../../../core/network/api_error.dart';
 import '../../../core/network/api_client.dart';
 import 'models/realtime_driver_marker.dart';
 
@@ -28,7 +30,7 @@ class MapRepository {
       throw MapRepositoryFailure(
         _readErrorMessage(
           error,
-          fallbackMessage: 'Impossible de charger les drivers en direct.',
+          fallbackMessage: AppMessages.mapLiveDriversLoadFailed,
         ),
       );
     }
@@ -57,7 +59,7 @@ class MapRepository {
       throw MapRepositoryFailure(
         _readErrorMessage(
           error,
-          fallbackMessage: 'Impossible de charger les drivers proches.',
+          fallbackMessage: AppMessages.mapNearbyDriversLoadFailed,
         ),
       );
     }
@@ -67,16 +69,10 @@ class MapRepository {
     DioException error, {
     required String fallbackMessage,
   }) {
-    final data = error.response?.data;
-
-    if (data is Map<String, dynamic>) {
-      final detail = data['detail'];
-      if (detail is String && detail.isNotEmpty) {
-        return detail;
-      }
-    }
-
-    return fallbackMessage;
+    return ApiErrorPayload.messageOrFallback(
+      error,
+      fallbackMessage: fallbackMessage,
+    );
   }
 }
 

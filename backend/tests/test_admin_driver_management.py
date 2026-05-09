@@ -1,4 +1,5 @@
 import unittest
+import base64
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,6 +7,8 @@ import sys
 from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import HTTPException
+from pydantic import ValidationError
+from sqlalchemy.exc import DataError
 
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -20,6 +23,7 @@ from app.models.driver_profile import (
     DriverVerificationStatus,
 )
 from app.schemas.driver_profile import (
+    DRIVER_PROFILE_MAX_IMAGE_BYTES,
     DriverDocumentReviewRequest,
     DriverProfileCreate,
     DriverProfileRead,
@@ -32,11 +36,27 @@ class AdminDriverManagementServiceTest(unittest.IsolatedAsyncioTestCase):
         payload = _profile_create_payload()
         profile = DriverProfileCreate(**payload)
 
-        self.assertEqual(profile.driver_license_file, "license")
+        self.assertEqual(profile.driver_license_file, _sample_base64("license"))
+        self.assertEqual(profile.vehicle_photo, _sample_base64("vehicle-photo"))
         self.assertEqual(
             profile.technical_inspection_expires_at.isoformat(),
             "2027-01-04",
         )
+
+    def test_driver_profile_create_rejects_invalid_base64_document(self) -> None:
+        payload = _profile_create_payload()
+        payload["vehicle_photo"] = "not-base64@@"
+
+        with self.assertRaises(ValidationError):
+            DriverProfileCreate(**payload)
+
+    def test_driver_profile_create_rejects_oversized_document(self) -> None:
+        payload = _profile_create_payload()
+        oversized = b"x" * (DRIVER_PROFILE_MAX_IMAGE_BYTES + 1)
+        payload["vehicle_photo"] = base64.b64encode(oversized).decode("ascii")
+
+        with self.assertRaises(ValidationError):
+            DriverProfileCreate(**payload)
 
     def test_driver_profile_read_marks_expired_documents_and_alerts(self) -> None:
         profile = DriverProfileRead.model_validate(
@@ -149,6 +169,38 @@ class AdminDriverManagementServiceTest(unittest.IsolatedAsyncioTestCase):
             DriverDocumentStatus.EXPIRED.value,
         )
 
+    async def test_get_all_drivers_tolerates_missing_document_status(self) -> None:
+        profile = SimpleNamespace(
+            id=7,
+            user_id=11,
+            first_name="Amine",
+            last_name="El Idrissi",
+            address="Rabat Agdal",
+            id_card_photo="card",
+            selfie_photo="selfie",
+            verification_status=DriverVerificationStatus.PENDING,
+            rejection_reason=None,
+            submitted_at=None,
+            verified_at=None,
+            **_document_namespace_values(),
+        )
+        profile.driver_license_status = None
+        user = SimpleNamespace(
+            phone_number="+212600000000",
+            name="Amine",
+            is_blocked=False,
+        )
+        result = Mock()
+        result.all.return_value = [(profile, user)]
+        session = SimpleNamespace(execute=AsyncMock(return_value=result))
+
+        rows = await driver_profile_service.get_all_drivers(session)
+
+        self.assertEqual(
+            rows[0]["driver_license_status"],
+            DriverDocumentStatus.PENDING.value,
+        )
+
     async def test_admin_update_driver_profile_saves_contact_details(self) -> None:
         profile = SimpleNamespace(
             first_name="Old",
@@ -186,8 +238,10 @@ class AdminDriverManagementServiceTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_create_or_update_profile_stores_private_driver_documents(self) -> None:
         profile = SimpleNamespace(user_id=9)
+        user = SimpleNamespace(vehicle_photo=None)
         session = SimpleNamespace(
             add=Mock(),
+            get=AsyncMock(return_value=user),
             commit=AsyncMock(),
             refresh=AsyncMock(),
         )
@@ -202,12 +256,45 @@ class AdminDriverManagementServiceTest(unittest.IsolatedAsyncioTestCase):
                 DriverProfileCreate(**_profile_create_payload()),
             )
 
-        self.assertEqual(profile.driver_license_file, "license")
+        self.assertEqual(profile.driver_license_file, _sample_base64("license"))
+        self.assertEqual(user.vehicle_photo, _sample_base64("vehicle-photo"))
         self.assertEqual(
             profile.vehicle_insurance_status,
             DriverDocumentStatus.PENDING,
         )
         session.commit.assert_awaited_once()
+
+    async def test_create_or_update_profile_maps_vehicle_photo_data_error(self) -> None:
+        profile = SimpleNamespace(user_id=9)
+        user = SimpleNamespace(vehicle_photo=None)
+        session = SimpleNamespace(
+            add=Mock(),
+            get=AsyncMock(return_value=user),
+            commit=AsyncMock(
+                side_effect=DataError(
+                    "UPDATE users SET vehicle_photo=%s",
+                    {"vehicle_photo": "too-long-value"},
+                    Exception("Data too long for column 'vehicle_photo'"),
+                )
+            ),
+            rollback=AsyncMock(),
+            refresh=AsyncMock(),
+        )
+
+        with patch(
+            "app.services.driver_profile_service.get_profile",
+            new=AsyncMock(return_value=profile),
+        ):
+            with self.assertRaises(HTTPException) as context:
+                await driver_profile_service.create_or_update_profile(
+                    session,
+                    9,
+                    DriverProfileCreate(**_profile_create_payload()),
+                )
+
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertIn("Photo vehicule trop volumineuse", context.exception.detail)
+        session.rollback.assert_awaited_once()
 
     async def test_review_driver_document_updates_only_selected_document(self) -> None:
         profile = SimpleNamespace(**_document_namespace_values())
@@ -293,15 +380,16 @@ def _profile_create_payload() -> dict:
         "first_name": "Amine",
         "last_name": "El Idrissi",
         "address": "Niamey Plateau",
-        "id_card_photo": "card",
-        "selfie_photo": "selfie",
-        "driver_license_file": "license",
+        "id_card_photo": _sample_base64("card"),
+        "selfie_photo": _sample_base64("selfie"),
+        "vehicle_photo": _sample_base64("vehicle-photo"),
+        "driver_license_file": _sample_base64("license"),
         "driver_license_expires_at": "2027-01-01",
-        "vehicle_registration_file": "registration",
+        "vehicle_registration_file": _sample_base64("registration"),
         "vehicle_registration_expires_at": "2027-01-02",
-        "vehicle_insurance_file": "insurance",
+        "vehicle_insurance_file": _sample_base64("insurance"),
         "vehicle_insurance_expires_at": "2027-01-03",
-        "technical_inspection_file": "inspection",
+        "technical_inspection_file": _sample_base64("inspection"),
         "technical_inspection_expires_at": "2027-01-04",
     }
 
@@ -325,3 +413,7 @@ def _document_namespace_values() -> dict:
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _sample_base64(text: str) -> str:
+    return base64.b64encode(text.encode("utf-8")).decode("ascii")

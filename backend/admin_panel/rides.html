@@ -1,7 +1,7 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Courses - Noor Express</title>
   <link rel="stylesheet" href="assets/style.css">
@@ -23,12 +23,12 @@
         <label>Statut
           <select id="status-filter" onchange="AdminApi.renderRides()">
             <option value="">Tous statuts</option>
-            <option value="pending">pending</option>
-            <option value="offered">offered</option>
-            <option value="accepted">accepted</option>
-            <option value="started">started</option>
-            <option value="completed">completed</option>
-            <option value="cancelled">cancelled</option>
+            <option value="pending">En attente</option>
+            <option value="offered">Offres reçues</option>
+            <option value="accepted">Acceptée</option>
+            <option value="started">En cours</option>
+            <option value="completed">Terminée</option>
+            <option value="cancelled">Annulée</option>
           </select>
         </label>
         <label>Date
@@ -77,3 +77,4 @@
   <script>AdminApi.requireAuth(); AdminApi.loadRides();</script>
 </body>
 </html>
+

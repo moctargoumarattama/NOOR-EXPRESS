@@ -16,6 +16,7 @@ enum TrackingSocketEventType {
   rideStatus,
   driverLocation,
   rideMessage,
+  passengerReady,
 }
 
 class TrackingSocketEvent {
@@ -25,7 +26,9 @@ class TrackingSocketEvent {
   })  : type = TrackingSocketEventType.rideStatus,
         driverId = null,
         position = null,
-        message = null;
+        message = null,
+        passengerName = null,
+        timestamp = null;
 
   const TrackingSocketEvent.driverLocation({
     required this.driverId,
@@ -33,7 +36,9 @@ class TrackingSocketEvent {
   })  : type = TrackingSocketEventType.driverLocation,
         rideId = null,
         status = null,
-        message = null;
+        message = null,
+        passengerName = null,
+        timestamp = null;
 
   const TrackingSocketEvent.rideMessage({
     required this.rideId,
@@ -41,7 +46,19 @@ class TrackingSocketEvent {
   })  : type = TrackingSocketEventType.rideMessage,
         status = null,
         driverId = null,
-        position = null;
+        position = null,
+        passengerName = null,
+        timestamp = null;
+
+  const TrackingSocketEvent.passengerReady({
+    required this.rideId,
+    required this.passengerName,
+    required this.timestamp,
+  })  : type = TrackingSocketEventType.passengerReady,
+        status = null,
+        driverId = null,
+        position = null,
+        message = null;
 
   final TrackingSocketEventType type;
   final int? rideId;
@@ -49,6 +66,8 @@ class TrackingSocketEvent {
   final int? driverId;
   final TrackingCoordinates? position;
   final RideChatMessageModel? message;
+  final String? passengerName;
+  final DateTime? timestamp;
 }
 
 class TrackingWebSocketDatasource {
@@ -221,6 +240,24 @@ class TrackingWebSocketDatasource {
         );
         return;
       }
+      if (message['type'] == 'passenger_ready') {
+        final passengerName =
+            (message['passenger_name'] as String? ?? '').trim();
+        final eventRideId = _parseRideId(message['ride_id']);
+        if (eventRideId == null || passengerName.isEmpty) {
+          return;
+        }
+        _eventsController.add(
+          TrackingSocketEvent.passengerReady(
+            rideId: eventRideId,
+            passengerName: passengerName,
+            timestamp:
+                DateTime.tryParse(message['timestamp'] as String? ?? '')
+                    ?.toLocal(),
+          ),
+        );
+        return;
+      }
 
       final type = message['type'] as String?;
       if (type == 'driver_position_update' || type == 'location_update') {
@@ -243,6 +280,19 @@ class TrackingWebSocketDatasource {
     } catch (error) {
       debugPrint('[$debugLabel] invalid websocket payload: $error');
     }
+  }
+
+  int? _parseRideId(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num) {
+      return value.toInt();
+    }
+    if (value is String) {
+      return int.tryParse(value.trim());
+    }
+    return null;
   }
 
   void _handleDisconnect([Object? error]) {

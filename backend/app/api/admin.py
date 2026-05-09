@@ -1,3 +1,4 @@
+﻿import os
 from datetime import date, datetime, time
 from enum import Enum
 
@@ -5,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.messages import Messages
 from app.db.database import get_db_session
 from app.services.admin_service import (
     AdminAlreadyExistsError,
@@ -48,10 +50,21 @@ from app.services.driver_profile_service import (
     verify_driver,
 )
 from app.services.ride_request_service import get_top_drivers
-from app.services.wallet_service import get_admin_commission_ledger
+from app.services.wallet_service import (
+    WithdrawalRequestNotFoundError,
+    WithdrawalRequestStateConflictError,
+    WithdrawalRequestValidationError,
+    get_admin_commission_ledger,
+    list_admin_withdrawal_requests,
+    resolve_admin_withdrawal_request,
+)
 from app.schemas.ride_report import RideReportAdminUpdate
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+
+
+def _admin_init_enabled() -> bool:
+    return os.getenv("ADMIN_INIT_ENABLED", "").strip().lower() == "true"
 
 
 class AdminLoginRequest(BaseModel):
@@ -94,15 +107,15 @@ class AdminNotificationBroadcastRequest(BaseModel):
     def validate_non_empty_text(cls, value: str) -> str:
         cleaned = value.strip()
         if not cleaned:
-            raise ValueError("must not be empty")
+            raise ValueError(Messages.FIELD_REQUIRED)
         return cleaned
 
     @model_validator(mode="after")
     def validate_target_user(self) -> "AdminNotificationBroadcastRequest":
         if self.target == AdminNotificationTarget.USER_ID and self.user_id is None:
-            raise ValueError("user_id is required when target is user_id")
+            raise ValueError(Messages.USER_ID_REQUIRED_FOR_TARGET)
         if self.target != AdminNotificationTarget.USER_ID and self.user_id is not None:
-            raise ValueError("user_id is allowed only when target is user_id")
+            raise ValueError(Messages.USER_ID_ALLOWED_ONLY_FOR_TARGET)
         return self
 
 
@@ -114,9 +127,33 @@ class AdminUserSuspendRequest(BaseModel):
     @model_validator(mode="after")
     def validate_duration_or_permanent(self) -> "AdminUserSuspendRequest":
         if self.is_permanent and self.duration_days is not None:
-            raise ValueError("duration_days must be omitted for permanent suspension")
+            raise ValueError(Messages.DURATION_OMITTED_FOR_PERMANENT_SUSPENSION)
         if not self.is_permanent and self.duration_days is None:
-            raise ValueError("duration_days is required for temporary suspension")
+            raise ValueError(Messages.DURATION_REQUIRED_FOR_TEMP_SUSPENSION)
+        return self
+
+
+class AdminWithdrawalStatus(str, Enum):
+    PENDING = "pending"
+    CONFIRMED = "confirmed"
+    REJECTED = "rejected"
+
+
+class AdminWithdrawalAction(str, Enum):
+    CONFIRM = "confirm"
+    REJECT = "reject"
+
+
+class AdminWithdrawalResolveRequest(BaseModel):
+    action: AdminWithdrawalAction
+    admin_note: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_reject_note(self) -> "AdminWithdrawalResolveRequest":
+        if self.action == AdminWithdrawalAction.REJECT and (
+            self.admin_note is None or not self.admin_note.strip()
+        ):
+            raise ValueError(Messages.ADMIN_NOTE_REQUIRED_FOR_REJECT)
         return self
 
 
@@ -138,12 +175,23 @@ async def admin_init_endpoint(
     init_in: AdminInitRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> AdminTokenResponse:
+    # Route désactivée en production.
+    # Utiliser backend/scripts/create_admin.py en local uniquement.
+    if not _admin_init_enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
     try:
         admin = await create_admin(session, init_in.username, init_in.password)
     except AdminAlreadyExistsError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     token = await login_admin(session, admin.username, init_in.password)
     return AdminTokenResponse(access_token=token)
+
+
+@router.get("/init", include_in_schema=False)
+async def admin_init_probe_endpoint() -> None:
+    if not _admin_init_enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    raise HTTPException(status_code=status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 @router.get("/users")
@@ -172,12 +220,12 @@ async def admin_notification_estimate_endpoint(
     if target == AdminNotificationTarget.USER_ID and user_id is None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "user_id is required when target is user_id",
+            Messages.USER_ID_REQUIRED_FOR_TARGET,
         )
     if target != AdminNotificationTarget.USER_ID and user_id is not None:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "user_id is allowed only when target is user_id",
+            Messages.USER_ID_ALLOWED_ONLY_FOR_TARGET,
         )
     estimated = await estimate_broadcast_recipients(
         session,
@@ -207,7 +255,7 @@ async def admin_notification_broadcast_endpoint(
     except AdminNotificationRateLimitError as exc:
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
-            f"Broadcast limit reached. Retry in {exc.retry_after_seconds} seconds.",
+            Messages.BROADCAST_LIMIT_REACHED,
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from exc
 
@@ -462,6 +510,47 @@ async def admin_review_driver_document_endpoint(
     }
 
 
+@router.get("/withdrawal-requests")
+async def admin_withdrawal_requests_endpoint(
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+    status: AdminWithdrawalStatus | None = Query(default=None),
+    driver_id: int | None = Query(default=None, ge=1),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, object]:
+    return await list_admin_withdrawal_requests(
+        session,
+        status=None if status is None else status.value,
+        driver_id=driver_id,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.patch("/withdrawal-requests/{withdrawal_request_id}")
+async def admin_resolve_withdrawal_request_endpoint(
+    withdrawal_request_id: str,
+    resolve_in: AdminWithdrawalResolveRequest,
+    _admin: dict = Depends(require_admin),
+    session: AsyncSession = Depends(get_db_session),
+) -> dict[str, object]:
+    try:
+        return await resolve_admin_withdrawal_request(
+            session,
+            withdrawal_request_id=withdrawal_request_id,
+            action=resolve_in.action.value,
+            admin_id=int(_admin.get("sub", 0)),
+            admin_note=resolve_in.admin_note,
+        )
+    except WithdrawalRequestNotFoundError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    except WithdrawalRequestStateConflictError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
+    except WithdrawalRequestValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+
 @router.get("/commissions/ledger", response_model=CommissionLedgerRead)
 async def admin_commission_ledger_endpoint(
     _admin: dict = Depends(require_admin),
@@ -482,3 +571,4 @@ async def admin_commission_ledger_endpoint(
         limit=limit,
         offset=offset,
     )
+

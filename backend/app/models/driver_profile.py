@@ -163,9 +163,7 @@ def effective_document_status(
     expires_at: date | datetime | None,
     today: date | datetime | None = None,
 ) -> DriverDocumentStatus:
-    document_status = status
-    if not isinstance(document_status, DriverDocumentStatus):
-        document_status = DriverDocumentStatus(document_status)
+    document_status = _coerce_document_status(status)
     expires_on = _as_date(expires_at)
     if document_status == DriverDocumentStatus.REJECTED or expires_on is None:
         return document_status
@@ -215,3 +213,14 @@ def _as_date(value: date | datetime | None) -> date | None:
     if isinstance(value, datetime):
         return value.date()
     return value
+
+
+def _coerce_document_status(status: DriverDocumentStatus | str | None) -> DriverDocumentStatus:
+    if isinstance(status, DriverDocumentStatus):
+        return status
+    if isinstance(status, str):
+        try:
+            return DriverDocumentStatus(status)
+        except ValueError:
+            return DriverDocumentStatus.PENDING
+    return DriverDocumentStatus.PENDING

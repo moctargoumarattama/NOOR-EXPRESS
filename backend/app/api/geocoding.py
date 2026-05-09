@@ -4,8 +4,10 @@ from datetime import datetime, timedelta
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
+
+from app.core.messages import Messages
 
 router = APIRouter(prefix="/geocoding", tags=["geocoding"])
 
@@ -78,13 +80,12 @@ async def reverse_address_endpoint(lat: float, lng: float) -> GeocodingResult:
         "format": "json",
     }
     results = await _request_nominatim(NOMINATIM_REVERSE_URL, params)
-    item = _normalize_reverse_item(results, lat, lng) or {
-        "name": "Position actuelle",
-        "display_name": "Position actuelle, Niamey",
-        "lat": lat,
-        "lon": lng,
-        "type": "current_location",
-    }
+    item = _normalize_reverse_item(results, lat, lng)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=Messages.LOCATION_NOT_FOUND,
+        )
     _write_cache(cache_key, [item])
     return GeocodingResult(**item)
 
@@ -121,14 +122,18 @@ def _normalize_search_item(item: dict) -> dict | None:
 def _normalize_reverse_item(item: list | dict, lat: float, lng: float) -> dict | None:
     if not isinstance(item, dict):
         return None
-    display_name = str(item.get("display_name") or "Position actuelle, Niamey")
+    display_name = str(item.get("display_name") or "").strip()
+    if not display_name:
+        return None
     address = item.get("address") if isinstance(item.get("address"), dict) else {}
     name = str(
         address.get("suburb")
         or address.get("neighbourhood")
         or address.get("road")
         or display_name.split(",")[0]
-    )
+    ).strip()
+    if not name:
+        return None
     return {
         "name": name,
         "display_name": display_name,

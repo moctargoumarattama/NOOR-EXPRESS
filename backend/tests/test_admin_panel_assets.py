@@ -1,4 +1,4 @@
-from pathlib import Path
+﻿from pathlib import Path
 import re
 import unittest
 
@@ -55,7 +55,7 @@ class AdminPanelAssetsTest(unittest.TestCase):
 
         admin_ui = (ADMIN_PANEL_DIR / "assets" / "admin-ui.js").read_text(encoding="utf-8")
         for label in [
-            "Dashboard",
+            "Tableau de bord",
             "Courses",
             "Utilisateurs",
             "Chauffeurs à valider",
@@ -108,6 +108,16 @@ class AdminPanelAssetsTest(unittest.TestCase):
         self.assertIn("Taux d'annulation", dashboard_html)
         self.assertIn("loadOperationsDashboard", api_js)
 
+    def test_login_page_hides_admin_bootstrap_shortcuts(self) -> None:
+        index_html = (ADMIN_PANEL_DIR / "index.html").read_text(encoding="utf-8")
+
+        self.assertNotIn("admin123", index_html)
+        self.assertNotIn("Créer le premier admin", index_html)
+        self.assertNotIn("init-admin", index_html)
+        self.assertIn("Identifiant (email ou téléphone)", index_html)
+        self.assertIn("Mot de passe", index_html)
+        self.assertIn("Se connecter", index_html)
+
     def test_rides_page_exposes_filters_pagination_and_detail(self) -> None:
         rides_html = (ADMIN_PANEL_DIR / "rides.html").read_text(encoding="utf-8")
         api_js = (ADMIN_PANEL_DIR / "assets" / "api.js").read_text(encoding="utf-8")
@@ -123,7 +133,7 @@ class AdminPanelAssetsTest(unittest.TestCase):
 
         self.assertIn("AdminApi.loadSimulationStatus()", simulations_html)
         self.assertIn("renderSimulationDisabled", api_js)
-        self.assertIn("Dev simulations are disabled", api_js)
+        self.assertIn("Simulations de developpement desactivees", api_js)
 
     def test_users_page_exposes_user_management_actions(self) -> None:
         users_html = (ADMIN_PANEL_DIR / "users.html").read_text(encoding="utf-8")
@@ -165,11 +175,15 @@ class AdminPanelAssetsTest(unittest.TestCase):
         self.assertIn('id="notification-target"', notifications_html)
         self.assertIn('id="notification-estimated-recipients"', notifications_html)
         self.assertIn('id="notifications-history-body"', notifications_html)
+        self.assertIn('id="firebase-warning-panel"', notifications_html)
         self.assertIn("AdminApi.loadNotificationsPage()", notifications_html)
         self.assertIn("/admin/notifications/broadcast", api_js)
         self.assertIn("/admin/notifications/history", api_js)
         self.assertIn("/admin/notifications/estimate", api_js)
+        self.assertIn("notificationStatusLabel", api_js)
+        self.assertIn("setFirebaseWarning", api_js)
 
 
 if __name__ == "__main__":
     unittest.main()
+

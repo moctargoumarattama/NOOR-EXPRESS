@@ -7,10 +7,12 @@ class DevicePosition {
   const DevicePosition({
     required this.latitude,
     required this.longitude,
+    this.accuracyMeters,
   });
 
   final double latitude;
   final double longitude;
+  final double? accuracyMeters;
 }
 
 enum DeviceLocationAccessState {
@@ -55,6 +57,7 @@ class DeviceLocationService {
     return DevicePosition(
       latitude: position.latitude,
       longitude: position.longitude,
+      accuracyMeters: position.accuracy,
     );
   }
 
@@ -71,6 +74,7 @@ class DeviceLocationService {
       yield DevicePosition(
         latitude: position.latitude,
         longitude: position.longitude,
+        accuracyMeters: position.accuracy,
       );
     }
   }

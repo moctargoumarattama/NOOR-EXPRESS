@@ -149,6 +149,25 @@ class SchemaBootstrapTest(unittest.TestCase):
         self.assertIn("cancellation_window_started_at", user_columns)
         self.assertIn("ride_request_blocked_until", user_columns)
 
+    def test_adds_driver_last_known_position_columns_to_users(self) -> None:
+        with self.engine.begin() as connection:
+            connection.execute(text("""
+                    CREATE TABLE users (
+                        id INTEGER PRIMARY KEY,
+                        phone_number VARCHAR(20) NOT NULL,
+                        role VARCHAR(20) NOT NULL
+                    )
+                    """))
+
+        with self.engine.begin() as connection:
+            ensure_database_schema_sync(connection)
+
+        inspector = inspect(self.engine)
+        user_columns = {column["name"] for column in inspector.get_columns("users")}
+        self.assertIn("last_known_lat", user_columns)
+        self.assertIn("last_known_lon", user_columns)
+        self.assertIn("last_position_at", user_columns)
+
     def test_migrates_legacy_report_status_to_new_workflow(self) -> None:
         with self.engine.begin() as connection:
             connection.execute(text("""
@@ -321,6 +340,10 @@ class SchemaBootstrapTest(unittest.TestCase):
         self.assertIn("notification_type", column_names)
         self.assertIn("sent_at", column_names)
         self.assertIn("estimated_recipients", column_names)
+        self.assertIn("fcm_sent_count", column_names)
+        self.assertIn("fcm_failed_count", column_names)
+        self.assertIn("fcm_status", column_names)
+        self.assertIn("fcm_error_reason", column_names)
 
         index_names = {
             index["name"] for index in inspector.get_indexes("broadcast_history")

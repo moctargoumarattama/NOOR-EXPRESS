@@ -36,8 +36,10 @@ class OfferCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final hasActionInProgress = isBusy || isAccepting || isRejecting;
     final actionsDisabled = isDisabled || hasActionInProgress;
-    final padding = compact ? 14.0 : 18.0;
-    final avatarSize = compact ? 44.0 : 50.0;
+    final padding = compact ? 12.0 : 18.0;
+    final avatarSize = compact ? 40.0 : 50.0;
+    final hasDistance = _reliableDistanceKm != null;
+    final plateLabel = _plateLabel;
 
     return AppSurfaceCard(
       padding: EdgeInsets.all(padding),
@@ -51,41 +53,59 @@ class OfferCard extends StatelessWidget {
                 photo: offer.vehiclePhoto,
                 size: avatarSize,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(child: _DriverInfo(offer: offer, compact: compact)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               _PriceBlock(
                 price: _formatFcfa(offer.proposedPrice),
                 compact: compact,
               ),
             ],
           ),
-          SizedBox(height: compact ? 12 : 16),
-          Row(
+          SizedBox(height: compact ? 8 : 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
             children: [
-              Expanded(
-                child: _MetricBox(
-                  label: 'Distance chauffeur',
-                  value: _distanceLabel,
+              _InfoPill(
+                icon: Icons.star_rounded,
+                label: _ratingLabel,
+              ),
+              if (_completedRidesLabel != null)
+                _InfoPill(
+                  icon: Icons.route_rounded,
+                  label: _completedRidesLabel!,
+                ),
+              if (offer.isDriverVerified)
+                const _InfoPill(
+                  icon: Icons.verified_rounded,
+                  label: 'Verifie',
+                ),
+              if (hasDistance && compact)
+                _InfoPill(
                   icon: Icons.near_me_rounded,
-                  compact: compact,
+                  label: _distanceLabel,
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _MetricBox(
-                  label: 'ETA',
-                  value: _etaLabel,
-                  icon: Icons.schedule_rounded,
-                  compact: compact,
+              if (compact && plateLabel != null)
+                _InfoPill(
+                  icon: Icons.directions_car_filled_rounded,
+                  label: plateLabel,
                 ),
-              ),
+              if (!compact) StatusBadge(status: offer.status),
             ],
           ),
-          if (offer.plateNumber != null &&
-              offer.plateNumber!.trim().isNotEmpty) ...[
+          if (!compact && hasDistance) ...[
             const SizedBox(height: 12),
-            _PlateBadge(value: offer.plateNumber!.trim()),
+            _MetricBox(
+              label: 'Distance chauffeur',
+              value: _distanceLabel,
+              icon: Icons.near_me_rounded,
+              compact: compact,
+            ),
+          ],
+          if (!compact && plateLabel != null) ...[
+            const SizedBox(height: 12),
+            _PlateBadge(value: plateLabel),
           ],
           if (hasActionInProgress) ...[
             SizedBox(height: compact ? 10 : 14),
@@ -97,47 +117,75 @@ class OfferCard extends StatelessWidget {
               isLoading: true,
             ),
           ],
-          SizedBox(height: compact ? 12 : 16),
-          Row(
-            children: [
-              if (onReject != null) ...[
+          SizedBox(height: compact ? 10 : 16),
+          if (compact)
+            _CompactActionsRow(
+              showReject: onReject != null,
+              isAccepting: isAccepting || isBusy,
+              isRejecting: isRejecting || (isBusy && !isAccepting),
+              onAccept: actionsDisabled ? null : onSelect,
+              onReject: actionsDisabled ? null : onReject,
+            )
+          else
+            Row(
+              children: [
+                if (onReject != null) ...[
+                  Expanded(
+                    child: AppButton.secondary(
+                      label: 'Refuser',
+                      isLoading: isRejecting || (isBusy && !isAccepting),
+                      onPressed: actionsDisabled ? null : onReject,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                ],
                 Expanded(
-                  child: AppButton.secondary(
-                    label: 'Refuser',
-                    isLoading: isRejecting || (isBusy && !isAccepting),
-                    onPressed: actionsDisabled ? null : onReject,
+                  child: AppButton(
+                    label: 'Accepter',
+                    isLoading: isAccepting || isBusy,
+                    onPressed: actionsDisabled ? null : onSelect,
                   ),
                 ),
-                const SizedBox(width: 12),
               ],
-              Expanded(
-                child: AppButton(
-                  label: 'Accepter',
-                  isLoading: isAccepting || isBusy,
-                  onPressed: actionsDisabled ? null : onSelect,
-                ),
-              ),
-            ],
-          ),
+            ),
         ],
       ),
     );
   }
 
-  String get _distanceLabel {
+  double? get _reliableDistanceKm {
     final distance = offer.driverDistanceKm;
     if (distance == null || !distance.isFinite || distance <= 0) {
-      return 'Distance chauffeur indisponible';
+      return null;
     }
-    return '${distance.toStringAsFixed(1)} km';
+    return distance;
   }
 
-  String get _etaLabel {
-    final eta = offer.driverEtaMinutes;
-    if (eta == null || eta <= 0) {
-      return 'ETA indisponible';
+  String get _distanceLabel {
+    return '${_reliableDistanceKm!.toStringAsFixed(1)} km';
+  }
+
+  String get _ratingLabel {
+    if (offer.driverRating <= 0) {
+      return 'Note a confirmer';
     }
-    return '$eta min';
+    return offer.driverRating.toStringAsFixed(1);
+  }
+
+  String? get _completedRidesLabel {
+    final count = offer.driverCompletedRides;
+    if (count <= 0) {
+      return null;
+    }
+    return count == 1 ? '1 course' : '$count courses';
+  }
+
+  String? get _plateLabel {
+    final plate = offer.plateNumber?.trim();
+    if (plate == null || plate.isEmpty) {
+      return null;
+    }
+    return plate;
   }
 
   String _formatFcfa(double value) {
@@ -162,57 +210,29 @@ class _DriverInfo extends StatelessWidget {
       children: [
         Text(
           offer.driverName,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                color: AppColors.ink,
-                fontWeight: FontWeight.w900,
-              ),
+          style: (compact
+                  ? Theme.of(context).textTheme.titleSmall
+                  : Theme.of(context).textTheme.titleMedium)
+              ?.copyWith(
+            color: AppColors.ink,
+            fontWeight: FontWeight.w900,
+          ),
         ),
-        const SizedBox(height: 4),
+        const SizedBox(height: 3),
         Text(
           offer.vehicleLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: AppColors.stone,
-                fontWeight: FontWeight.w600,
-              ),
-        ),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _InfoPill(
-              icon: Icons.star_rounded,
-              label: _ratingLabel,
-            ),
-            if (offer.driverCompletedRides > 0)
-              _InfoPill(
-                icon: Icons.route_rounded,
-                label: _completedRidesLabel,
-              ),
-            if (offer.isDriverVerified)
-              const _InfoPill(
-                icon: Icons.verified_rounded,
-                label: 'Verifie',
-              ),
-            StatusBadge(status: offer.status),
-          ],
+          style: (compact
+                  ? Theme.of(context).textTheme.bodySmall
+                  : Theme.of(context).textTheme.bodyMedium)
+              ?.copyWith(
+            color: AppColors.stone,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ],
     );
-  }
-
-  String get _ratingLabel {
-    if (offer.driverRating <= 0) {
-      return 'Note a confirmer';
-    }
-    return offer.driverRating.toStringAsFixed(1);
-  }
-
-  String get _completedRidesLabel {
-    final count = offer.driverCompletedRides;
-    return count == 1 ? '1 course' : '$count courses';
   }
 }
 
@@ -264,10 +284,13 @@ class _PriceBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 12 : 14,
+        vertical: compact ? 10 : 12,
+      ),
       decoration: BoxDecoration(
         color: AppColors.mint,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(compact ? 14 : 18),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
@@ -413,6 +436,78 @@ class _PlateBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactActionsRow extends StatelessWidget {
+  const _CompactActionsRow({
+    required this.showReject,
+    required this.isAccepting,
+    required this.isRejecting,
+    required this.onAccept,
+    required this.onReject,
+  });
+
+  final bool showReject;
+  final bool isAccepting;
+  final bool isRejecting;
+  final VoidCallback? onAccept;
+  final VoidCallback? onReject;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (showReject) ...[
+          Expanded(
+            child: SizedBox(
+              height: 52,
+              child: OutlinedButton(
+                onPressed: onReject,
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Color(0xFFDDE3DE)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: isRejecting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Refuser'),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+        ],
+        Expanded(
+          child: SizedBox(
+            height: 52,
+            child: FilledButton(
+              onPressed: onAccept,
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.emerald,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: isAccepting
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.pearl,
+                      ),
+                    )
+                  : const Text('Accepter'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -69,6 +69,9 @@ class User(Base):
     vehicle_photo: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
     plate_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
     max_radius_km: Mapped[int | None] = mapped_column(Integer, nullable=True, default=5)
+    last_known_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_known_lon: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_position_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     is_available: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     pause_started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     driver_status: Mapped[DriverStatus | None] = mapped_column(

@@ -37,6 +37,10 @@ class DriverProfileDatasource {
       final response = await _apiClient.dio.post<Map<String, dynamic>>(
         '/driver-profile/submit',
         data: input.toJson(),
+        options: Options(
+          sendTimeout: const Duration(seconds: 60),
+          receiveTimeout: const Duration(seconds: 60),
+        ),
       );
       final payload = response.data;
       if (payload == null) {
@@ -52,12 +56,34 @@ class DriverProfileDatasource {
     } on DriverProfileFailure {
       rethrow;
     } on DioException catch (error) {
+      if (error.type == DioExceptionType.connectionTimeout ||
+          error.type == DioExceptionType.sendTimeout ||
+          error.type == DioExceptionType.receiveTimeout) {
+        throw const DriverProfileFailure(
+          'Connexion lente. Reessayez dans quelques secondes.',
+        );
+      }
       final data = error.response?.data;
       if (data is Map<String, dynamic>) {
         final detail = data['detail'];
         if (detail is String && detail.isNotEmpty) {
           throw DriverProfileFailure(detail);
         }
+        if (detail is List && detail.isNotEmpty) {
+          final first = detail.first;
+          if (first is Map<String, dynamic>) {
+            final message = first['msg'];
+            if (message is String && message.isNotEmpty) {
+              throw DriverProfileFailure(message);
+            }
+          }
+        }
+      }
+      final statusCode = error.response?.statusCode;
+      if (statusCode != null) {
+        throw DriverProfileFailure(
+          'Service verification indisponible (HTTP $statusCode).',
+        );
       }
       throw const DriverProfileFailure('Service verification indisponible.');
     }

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.api_errors import ApiError
+from app.core.messages import Messages
 from app.models.driver_profile import (
     DRIVER_DOCUMENT_FIELD_MAP,
     DriverProfile,
@@ -62,7 +63,7 @@ PROFILE_PHOTO_PUBLIC_PREFIX = "/uploads/profile_photos/"
 async def create_user(session: AsyncSession, user_in: UserCreate) -> User:
     existing_user = await get_user_by_phone_number(session, user_in.phone_number)
     if existing_user is not None:
-        raise UserPhoneAlreadyExistsError("Phone number already exists")
+        raise UserPhoneAlreadyExistsError("Ce numero existe deja")
 
     user = User(
         phone_number=user_in.phone_number,
@@ -79,7 +80,7 @@ async def create_user(session: AsyncSession, user_in: UserCreate) -> User:
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise UserPhoneAlreadyExistsError("Phone number already exists") from exc
+        raise UserPhoneAlreadyExistsError("Ce numero existe deja") from exc
     await session.refresh(user)
     return user
 
@@ -105,13 +106,13 @@ async def authenticate_user(session: AsyncSession, phone_number: str) -> User | 
         raise ApiError(
             status_code=403,
             code="account_deleted",
-            message="Account is deleted.",
+            message=Messages.ACCOUNT_DELETED,
         )
     if user.is_blocked:
         raise ApiError(
             status_code=403,
             code="account_blocked",
-            message="Account is blocked.",
+            message=Messages.ACCOUNT_BLOCKED,
         )
     await ensure_user_not_suspended(session, user)
     return user
@@ -247,7 +248,7 @@ async def update_driver_presence_status(
         raise ApiError(
             status_code=403,
             code="driver_not_verified",
-            message="Driver verification is required.",
+            message=Messages.DRIVER_NOT_VERIFIED,
         )
 
     is_available = None
@@ -770,7 +771,7 @@ async def ensure_user_not_suspended(
 
 
 def build_suspension_message(user: User) -> str:
-    reason = (user.suspension_reason or "").strip() or "Motif non precisé"
+    reason = (user.suspension_reason or "").strip() or "Motif non precise"
     if user.suspended_until is None:
         return f"Compte suspendu: {reason}. Suspension permanente."
     return (

@@ -6,10 +6,13 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../../app/app_routes.dart';
 import '../../../../../core/models/app_role.dart';
+import '../../../../../core/network/api_error.dart';
 import '../../../../../core/services/support_contact_service.dart';
 import '../../../../../core/state/session_controller.dart';
+import '../../../../../core/location/location_quality.dart';
 import '../../../../../shared/copy/ride_ui_copy.dart';
 import '../../../../../shared/widgets/app_snackbar.dart';
+import '../../../../../shared/widgets/connectivity_fallback_view.dart';
 import '../../../../../shared/widgets/notification_card.dart';
 import '../../../../address_search/data/datasources/address_datasource.dart';
 import '../../../../address_search/domain/entities/address_result.dart';
@@ -29,6 +32,7 @@ import '../controllers/client_home_controller.dart';
 import '../controllers/client_realtime_controller.dart';
 import '../widgets/floating_top_bar.dart';
 import '../widgets/hamburger_menu.dart';
+import '../widgets/home_idle_sheet.dart';
 import '../widgets/home_map_view.dart';
 import '../widgets/search_bottom_sheet.dart';
 
@@ -62,6 +66,9 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
   bool _isLoadingHomeOffers = false;
   int? _acceptingHomeOfferId;
   int? _rejectingHomeOfferId;
+  bool _isDisposed = false;
+
+  bool get _isUiMounted => mounted && !_isDisposed;
 
   @override
   void initState() {
@@ -69,29 +76,22 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     _listenToRealtime();
     _priceController.addListener(_markPriceAsEdited);
 
-    Future.microtask(() async {
-      await ref.read(clientHomeControllerProvider.notifier).loadRides();
-      final userId = ref.read(sessionControllerProvider).userId;
-      if (userId != null) {
-        await ref.read(clientRealtimeProvider.notifier).start(userId);
-      }
-      await ref.read(mapControllerProvider(MapMode.client).notifier).start();
-      _driversRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
-        ref.read(mapControllerProvider(MapMode.client).notifier).refreshDrivers(
-              silent: true,
-            );
-      });
-    });
+    Future.microtask(_bootstrapHome);
   }
 
   @override
   void dispose() {
+    _isDisposed = true;
     _realtimeSubscription?.close();
     _notificationTimer?.cancel();
     _priceEstimateDebounce?.cancel();
     _driversRefreshTimer?.cancel();
-    ref.read(clientRealtimeProvider.notifier).stop();
-    ref.read(mapControllerProvider(MapMode.client).notifier).stop();
+    try {
+      ref.read(clientRealtimeProvider.notifier).stop();
+      ref.read(mapControllerProvider(MapMode.client).notifier).stop();
+    } catch (_) {
+      // Guard against late lifecycle callbacks when widget is tearing down.
+    }
     _priceController.dispose();
     super.dispose();
   }
@@ -103,8 +103,23 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     final mapState = ref.watch(mapControllerProvider(MapMode.client));
     final routeState = ref.watch(noorMapControllerProvider);
     final activeRide = homeState.activeRide;
+    final pickupLocationQuality = _resolvedPickupLocationQuality(mapState);
+    final pickupAccuracyMeters = _resolvedPickupAccuracyMeters(mapState);
+    final showUnknownPositionCard =
+        _shouldShowUnknownPositionCard(activeRide, pickupLocationQuality);
+    final showApproximateBanner =
+        _shouldShowApproximateBanner(activeRide, pickupLocationQuality);
+    final canSubmitRideRequest = pickupLocationQuality != LocationQuality.unknown;
+    final submitDisabledReason =
+        _submitDisabledReasonForQuality(pickupLocationQuality);
+    final addressSearchState = ref.watch(addressSearchControllerProvider);
+    final favorites = addressSearchState.favorites;
+    final recentAddresses = addressSearchState.recents;
     final displayName = _displayName(session);
     final initials = _initials(displayName);
+    final startupIssueType = _startupIssueType(homeState);
+    final startupIssueMessage = _startupIssueMessage(homeState.loadError);
+    final showIdleSheet = activeRide == null && _dropoffAddress == null;
     _scheduleHomeOfferSync(activeRide);
 
     return Scaffold(
@@ -115,6 +130,8 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
             child: HomeMapView(
               key: _mapKey,
               clientPosition: mapState.currentPosition,
+              locationQuality: pickupLocationQuality,
+              locationAccuracyMeters: pickupAccuracyMeters,
               drivers: mapState.drivers,
               pickup: _pickupAddress,
               dropoff: _dropoffAddress,
@@ -173,39 +190,77 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               right: 0,
               child: Center(child: EtaOverlay(route: routeState.route)),
             ),
-          SearchBottomSheet(
-            pickup: _pickupAddress,
-            dropoff: _dropoffAddress,
-            priceController: _priceController,
-            isCreating: homeState.isCreating,
-            isEstimatingPrice: homeState.isEstimatingPrice,
-            estimate: homeState.priceEstimate,
-            estimateError: homeState.priceEstimateError,
-            route: routeState.route,
-            routeError: routeState.errorMessage,
-            activeRideRoute: activeRide?.id == _activeRideRouteSnapshotRideId
-                ? _activeRideRouteSnapshot
-                : null,
-            nearbyDriversCount: mapState.drivers.length,
-            offers:
-                activeRide?.id == _homeOffersRideId ? _homeOffers : const [],
-            isLoadingOffers: _isLoadingHomeOffers,
-            acceptingOfferId: _acceptingHomeOfferId,
-            rejectingOfferId: _rejectingHomeOfferId,
-            activeRide: activeRide,
-            recentDepartureLabels: _recentDepartureLabels(homeState.rides),
-            onPickupTap: () => _openAddressSearch(AddressSearchMode.pickup),
-            onDropoffTap: () => _openAddressSearch(AddressSearchMode.dropoff),
-            onClearPickup: _clearPickup,
-            onClearDropoff: _clearDropoff,
-            onSubmit: _submitRide,
-            onOpenActiveRide: () => _openRide(activeRide),
-            onCancelActiveRide: () => _cancelActiveRide(activeRide),
-            onAcceptOffer: _acceptHomeOffer,
-            onRejectOffer: _rejectHomeOffer,
-            onViewAllOffers: () => _openRide(activeRide),
-            onAddToFavorites: _addDropoffToFavorites,
-          ),
+          if (showApproximateBanner)
+            Positioned(
+              left: 16,
+              right: 16,
+              bottom: showIdleSheet ? 108 : 238,
+              child: const _ApproximateLocationBanner(),
+            ),
+          if (showUnknownPositionCard)
+            Positioned.fill(
+              child: IgnorePointer(
+                ignoring: false,
+                child: Center(
+                  child: _UnknownLocationCard(
+                    onTap: () => _openAddressSearch(AddressSearchMode.pickup),
+                  ),
+                ),
+              ),
+            ),
+          if (showIdleSheet)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: HomeIdleSheet(
+                favorites: favorites,
+                recents: recentAddresses,
+                onSearchTap: () =>
+                    _openAddressSearch(AddressSearchMode.dropoff),
+                onFavoriteTap: _selectQuickDestination,
+                onRecentTap: _selectQuickDestination,
+              ),
+            )
+          else
+            SearchBottomSheet(
+              pickup: _pickupAddress,
+              dropoff: _dropoffAddress,
+              priceController: _priceController,
+              isCreating: homeState.isCreating,
+              isEstimatingPrice: homeState.isEstimatingPrice,
+              estimate: homeState.priceEstimate,
+              estimateError: homeState.priceEstimateError,
+              route: routeState.route,
+              routeError: routeState.errorMessage,
+              activeRideRoute: activeRide?.id == _activeRideRouteSnapshotRideId
+                  ? _activeRideRouteSnapshot
+                  : null,
+              recentAddresses: recentAddresses,
+              nearbyDriversCount: mapState.drivers.length,
+              offers:
+                  activeRide?.id == _homeOffersRideId ? _homeOffers : const [],
+              isLoadingOffers: _isLoadingHomeOffers,
+              acceptingOfferId: _acceptingHomeOfferId,
+              rejectingOfferId: _rejectingHomeOfferId,
+              activeRide: activeRide,
+              recentDepartureLabels: _recentDepartureLabels(homeState.rides),
+              onPickupTap: () => _openAddressSearch(AddressSearchMode.pickup),
+              onDropoffTap: () => _openAddressSearch(AddressSearchMode.dropoff),
+              onRecentTap: _selectQuickDestination,
+              onClearPickup: _clearPickup,
+              onClearDropoff: _clearDropoff,
+              onSubmit: _submitRide,
+              onOpenActiveRide: () => _openRide(activeRide),
+              onCancelActiveRide: () => _cancelActiveRide(activeRide),
+              onAcceptOffer: _acceptHomeOffer,
+              onRejectOffer: _rejectHomeOffer,
+              onViewAllOffers: () => _openRide(activeRide),
+              onAddToFavorites: _addDropoffToFavorites,
+              pickupLocationQuality: pickupLocationQuality,
+              canSubmitRideRequest: canSubmitRideRequest,
+              submitDisabledReason: submitDisabledReason,
+            ),
           HamburgerMenu(
             isOpen: _isMenuOpen,
             displayName: displayName,
@@ -250,13 +305,21 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
               ref.read(sessionControllerProvider.notifier).logout();
             },
           ),
+          if (startupIssueType != null)
+            Positioned.fill(
+              child: ConnectivityFallbackView(
+                issueType: startupIssueType,
+                message: startupIssueMessage,
+                onRetry: _retryHomeBootstrap,
+              ),
+            ),
         ],
       ),
     );
   }
 
   void _updateUi(VoidCallback callback) {
-    if (mounted) {
+    if (_isUiMounted) {
       setState(callback);
     }
   }
@@ -265,7 +328,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
     final result = await ref
         .read(supportContactServiceProvider)
         .openSupportChat(AppRole.client);
-    if (!mounted || result.type != SupportContactResultType.failed) {
+    if (!mounted || !_isUiMounted || result.type != SupportContactResultType.failed) {
       return;
     }
     AppSnackbar.show(
@@ -282,7 +345,7 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
       tone: AppSnackbarTone.info,
     );
     await ref.read(mapControllerProvider(MapMode.client).notifier).start();
-    if (!mounted) {
+    if (!mounted || !_isUiMounted) {
       return;
     }
     _mapKey.currentState?.recenter();
@@ -294,6 +357,71 @@ class _ClientHomeScreenState extends ConsumerState<ClientHomeScreen> {
           ? AppSnackbarTone.success
           : AppSnackbarTone.error,
     );
+  }
+
+  Future<void> _bootstrapHome() async {
+    if (!_isUiMounted) {
+      return;
+    }
+    await ref.read(clientHomeControllerProvider.notifier).loadRides();
+    if (!_isUiMounted) {
+      return;
+    }
+    final userId = ref.read(sessionControllerProvider).userId;
+    if (userId != null) {
+      await ref.read(clientRealtimeProvider.notifier).start(userId);
+      if (!_isUiMounted) {
+        return;
+      }
+    }
+    final addressSearchController =
+        ref.read(addressSearchControllerProvider.notifier);
+    await addressSearchController.loadFavorites();
+    await addressSearchController.loadRecents();
+    if (!_isUiMounted) {
+      return;
+    }
+    await ref.read(mapControllerProvider(MapMode.client).notifier).start();
+    if (!_isUiMounted) {
+      return;
+    }
+    _driversRefreshTimer?.cancel();
+    _driversRefreshTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_isUiMounted) {
+        return;
+      }
+      ref.read(mapControllerProvider(MapMode.client).notifier).refreshDrivers(
+            silent: true,
+          );
+    });
+  }
+
+  Future<void> _retryHomeBootstrap() async {
+    AppSnackbar.show(
+      context,
+      message: RideUiCopy.refreshing,
+      tone: AppSnackbarTone.info,
+    );
+    await _bootstrapHome();
+  }
+
+  ApiIssueType? _startupIssueType(ClientHomeState homeState) {
+    if (homeState.isLoading) {
+      return null;
+    }
+    if (homeState.activeRide != null || homeState.rides.isNotEmpty) {
+      return null;
+    }
+    final issue = ApiErrorPayload.classifyMessage(homeState.loadError);
+    return issue == ApiIssueType.unknown ? null : issue;
+  }
+
+  String? _startupIssueMessage(String? rawMessage) {
+    final trimmed = rawMessage?.trim();
+    if (trimmed == null || trimmed.isEmpty) {
+      return null;
+    }
+    return trimmed;
   }
 }
 
@@ -316,6 +444,95 @@ class _RecenterButton extends StatelessWidget {
           height: 52,
           child: Icon(Icons.my_location_rounded, color: Color(0xFF1B8A5A)),
         ),
+      ),
+    );
+  }
+}
+
+class _ApproximateLocationBanner extends StatelessWidget {
+  const _ApproximateLocationBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF4E5),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: const Color(0xFFF3B34C)),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, color: Color(0xFFAD6800)),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Votre position est approximative. Verifiez votre point de depart avant de continuer.',
+              style: TextStyle(
+                color: Color(0xFF6A4B00),
+                fontWeight: FontWeight.w700,
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _UnknownLocationCard extends StatelessWidget {
+  const _UnknownLocationCard({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 320,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Position non disponible',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF151B26),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Votre GPS ne repond pas. Recherchez votre adresse de depart manuellement.',
+            style: TextStyle(
+              color: Color(0xFF4A5568),
+              height: 1.35,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 14),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton(
+              onPressed: onTap,
+              child: const Text('Saisir mon adresse de depart'),
+            ),
+          ),
+        ],
       ),
     );
   }

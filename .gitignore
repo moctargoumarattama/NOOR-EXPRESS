@@ -4,3 +4,25 @@ tools/jdk17.zip
 "__pycache__/" 
 "*.pyc" 
 .worktrees/
+
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+# Environnement local
+.env
+.env.*
+*.log
+
+# Flutter / Dart
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# VS Code / Windows
+.vscode/
+*.lnk
