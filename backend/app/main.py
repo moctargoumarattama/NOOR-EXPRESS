@@ -36,6 +36,7 @@ from app.core.api_errors import (
     api_error_response,
     http_exception_response,
 )
+from app.core.config import settings
 from app.core.firebase import is_firebase_ready
 from app.db.database import AsyncSessionLocal
 from app.db.schema_bootstrap import ensure_database_schema
@@ -87,7 +88,8 @@ app.include_router(legal_router)
 
 @app.on_event("startup")
 async def bootstrap_database_schema() -> None:
-    await ensure_database_schema()
+    if settings.RUN_SCHEMA_BOOTSTRAP_ON_STARTUP:
+        await ensure_database_schema()
     is_firebase_ready()
     global _daily_cancellation_reset_task
     if _daily_cancellation_reset_task is None:

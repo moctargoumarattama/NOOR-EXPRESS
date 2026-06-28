@@ -9,6 +9,7 @@ DEFAULT_SQLITE_DATABASE_URL = "sqlite+aiosqlite:///NOOREXPRESS.BD"
 class Settings(BaseSettings):
     ENV: str = "development"
     FORCE_SQLITE: bool = False
+    RUN_SCHEMA_BOOTSTRAP_ON_STARTUP: bool = True
     DATABASE_URL: str = DEFAULT_SQLITE_DATABASE_URL
     SECRET_KEY: str
     ADMIN_SECRET_KEY: str

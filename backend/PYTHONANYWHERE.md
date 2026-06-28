@@ -29,6 +29,8 @@ Dans l'onglet Web de PythonAnywhere, déclarer:
 - `SECRET_KEY`
 - `ADMIN_SECRET_KEY`
 - `DATABASE_URL`
+- `RUN_SCHEMA_BOOTSTRAP_ON_STARTUP=0`
+- `FORCE_SQLITE=1`
 
 ## Limites
 
