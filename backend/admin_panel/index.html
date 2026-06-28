@@ -9,6 +9,9 @@
 </head>
 <body class="login-page">
   <main class="login-card">
+    <h1>Noor Express Admin</h1>
+    <p class="hint">Connecte-toi pour ouvrir le panneau d'administration.</p>
+    <p id="message" class="message" aria-live="polite"></p>
     <form id="login-form">
       <label>Identifiant (email ou téléphone)</label>
       <input id="username" autocomplete="username" required>
@@ -16,6 +19,10 @@
       <input id="password" type="password" autocomplete="current-password" required>
       <button type="submit">Se connecter</button>
     </form>
+    <p class="hint" style="margin-top:14px;">
+      Si aucun compte admin n'existe encore, crée-le avec
+      <code>backend/scripts/create_admin.py</code>.
+    </p>
   </main>
   <script src="assets/api.js?v=20260425-simulations"></script>
   <script>
