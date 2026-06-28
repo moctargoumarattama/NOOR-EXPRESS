@@ -1,5 +1,19 @@
 ﻿const AdminApi = (() => {
-  const API_BASE = window.location.origin;
+  const API_BASE = (() => {
+    const override = localStorage.getItem('noor_admin_api_base');
+    if (override) return override.replace(/\/$/, '');
+
+    if (window.location.protocol === 'file:') {
+      return 'http://127.0.0.1:8000';
+    }
+
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+    if (localHosts.has(window.location.hostname) && window.location.port !== '8000') {
+      return 'http://127.0.0.1:8000';
+    }
+
+    return window.location.origin;
+  })();
   let zonesCache = [];
   let faresCache = [];
   let timeRulesCache = [];

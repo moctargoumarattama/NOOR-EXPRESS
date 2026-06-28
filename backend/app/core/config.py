@@ -10,6 +10,8 @@ class Settings(BaseSettings):
     ENV: str = "development"
     FORCE_SQLITE: bool = False
     RUN_SCHEMA_BOOTSTRAP_ON_STARTUP: bool = True
+    RUN_SCHEMA_CREATE_ALL_ON_STARTUP: bool = False
+    SKIP_FIREBASE_STARTUP_CHECK: bool = False
     DATABASE_URL: str = DEFAULT_SQLITE_DATABASE_URL
     SECRET_KEY: str
     ADMIN_SECRET_KEY: str

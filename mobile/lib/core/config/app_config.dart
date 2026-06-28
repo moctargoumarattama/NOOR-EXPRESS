@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 abstract final class AppConfig {
+  static const _productionApiBaseUrl = 'https://forlife.pythonanywhere.com';
   static const _apiBaseUrlOverride = String.fromEnvironment(
     'NOOR_API_BASE_URL',
   );
@@ -16,7 +17,9 @@ abstract final class AppConfig {
     }
 
     if (kIsWeb) {
-      return 'http://localhost:$_backendPort';
+      return _isLocalWebHost(Uri.base.host)
+          ? 'http://localhost:$_backendPort'
+          : _productionApiBaseUrl;
     }
 
     switch (defaultTargetPlatform) {
@@ -30,6 +33,10 @@ abstract final class AppConfig {
   static String get wsBaseUrl {
     if (_wsBaseUrlOverride.trim().isNotEmpty) {
       return _withoutTrailingSlash(_wsBaseUrlOverride);
+    }
+
+    if (kIsWeb && !_isLocalWebHost(Uri.base.host)) {
+      return 'wss://forlife.pythonanywhere.com';
     }
 
     final uri = Uri.parse(apiBaseUrl);
@@ -47,6 +54,14 @@ abstract final class AppConfig {
 
   static String _withoutTrailingSlash(String value) {
     return value.replaceAll(RegExp(r'/$'), '');
+  }
+
+  static bool _isLocalWebHost(String host) {
+    final normalized = host.trim().toLowerCase();
+    return normalized.isEmpty ||
+        normalized == 'localhost' ||
+        normalized == '127.0.0.1' ||
+        normalized == '::1';
   }
 }
 

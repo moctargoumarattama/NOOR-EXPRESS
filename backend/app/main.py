@@ -38,7 +38,7 @@ from app.core.api_errors import (
 )
 from app.core.config import settings
 from app.core.firebase import is_firebase_ready
-from app.db.database import AsyncSessionLocal
+from app.db.database import AsyncSessionLocal, Base, engine
 from app.db.schema_bootstrap import ensure_database_schema
 from app.services.user_service import reset_daily_cancellation_counters
 
@@ -88,9 +88,16 @@ app.include_router(legal_router)
 
 @app.on_event("startup")
 async def bootstrap_database_schema() -> None:
+    if settings.RUN_SCHEMA_BOOTSTRAP_ON_STARTUP or settings.RUN_SCHEMA_CREATE_ALL_ON_STARTUP:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
     if settings.RUN_SCHEMA_BOOTSTRAP_ON_STARTUP:
         await ensure_database_schema()
-    is_firebase_ready()
+    elif settings.RUN_SCHEMA_CREATE_ALL_ON_STARTUP:
+        async with engine.begin() as connection:
+            await connection.run_sync(Base.metadata.create_all)
+    if not settings.SKIP_FIREBASE_STARTUP_CHECK:
+        is_firebase_ready()
     global _daily_cancellation_reset_task
     if _daily_cancellation_reset_task is None:
         _daily_cancellation_reset_task = asyncio.create_task(

@@ -106,9 +106,9 @@ class ConnectivityFallbackView extends StatelessWidget {
     switch (type) {
       case ApiIssueType.offline:
         return const _IssueDescriptor(
-          title: 'Pas de connexion',
+          title: 'Backend injoignable',
           description:
-              'Internet semble coupe. Reconnectez-vous puis appuyez sur Reessayer.',
+              'Le serveur Noor Express ne repond pas. Verifiez votre connexion ou l URL du backend puis reessayez.',
           icon: Icons.wifi_off_rounded,
           iconColor: AppColors.warning,
           softColor: AppColors.warningSoft,

@@ -30,9 +30,12 @@ Dans l'onglet Web de PythonAnywhere, déclarer:
 - `ADMIN_SECRET_KEY`
 - `DATABASE_URL`
 - `RUN_SCHEMA_BOOTSTRAP_ON_STARTUP=0`
+- `RUN_SCHEMA_CREATE_ALL_ON_STARTUP=1`
 - `FORCE_SQLITE=1`
+- `SKIP_FIREBASE_STARTUP_CHECK=1`
 
 ## Limites
 
 - Le mode WSGI ne couvre pas les WebSockets temps réel.
 - C'est donc adapté pour un déploiement temporaire ou partiel, pas pour valider tout le temps réel en production.
+- Le wrapper WSGI charge l'app FastAPI de manière paresseuse pour réduire le temps de reload.

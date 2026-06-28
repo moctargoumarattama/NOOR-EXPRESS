@@ -4,6 +4,23 @@ import 'package:noor_express_mobile/core/network/api_error.dart';
 
 void main() {
   group('ApiErrorPayload.messageOrFallback', () {
+    test('explains that the backend is unreachable on connection errors', () {
+      final error = DioException.connectionError(
+        requestOptions: RequestOptions(path: '/ride-requests/'),
+        reason: 'Failed host lookup',
+      );
+
+      final message = ApiErrorPayload.messageOrFallback(
+        error,
+        fallbackMessage: 'Creation impossible.',
+      );
+
+      expect(
+        message,
+        'Impossible de joindre le backend Noor Express. Verifiez votre connexion ou l URL de l API.',
+      );
+    });
+
     test('translates active ride conflict to French', () {
       final error = _dioError(
         code: 'client_already_has_active_ride',

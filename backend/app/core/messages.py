@@ -109,6 +109,10 @@ class Messages:
 
     # Admin / Simulations
     ADMIN_ALREADY_INITIALIZED = "Un administrateur existe déjà"
+    ADMIN_NOT_INITIALIZED = (
+        "Aucun administrateur n'a encore été créé. "
+        "Lance backend/scripts/create_admin.py en local."
+    )
     ADMIN_TOKEN_REQUIRED = "Jeton administrateur requis"
     INVALID_ADMIN_TOKEN = "Jeton administrateur invalide"
     INVALID_ADMIN_CREDENTIALS = "Identifiants administrateur incorrects"

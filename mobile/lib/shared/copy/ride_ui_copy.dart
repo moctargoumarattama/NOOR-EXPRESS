@@ -2,7 +2,7 @@ abstract final class RideUiCopy {
   static const refreshing = 'On remet tout a jour...';
   static const reconnecting = 'La connexion revient...';
   static const networkError =
-      'La connexion est instable pour le moment. Reessayez dans un instant.';
+      'Le backend Noor Express est inaccessible pour le moment. Verifiez votre connexion ou l URL du serveur.';
   static const noDriverAvailable =
       'Aucun chauffeur n est disponible pour le moment.';
   static const offerExpired = 'Cette proposition n est plus disponible.';

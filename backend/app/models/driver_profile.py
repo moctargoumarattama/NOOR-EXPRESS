@@ -10,7 +10,6 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -79,9 +78,9 @@ class DriverProfile(Base):
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
-    id_card_photo: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
-    selfie_photo: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
-    driver_license_file: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
+    id_card_photo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    selfie_photo: Mapped[str | None] = mapped_column(Text, nullable=True)
+    driver_license_file: Mapped[str | None] = mapped_column(Text, nullable=True)
     driver_license_expires_at: Mapped[date | None] = mapped_column(Date, nullable=True)
     driver_license_status: Mapped[DriverDocumentStatus] = mapped_column(
         SqlEnum(
@@ -91,10 +90,7 @@ class DriverProfile(Base):
         default=DriverDocumentStatus.PENDING,
         nullable=False,
     )
-    vehicle_registration_file: Mapped[str | None] = mapped_column(
-        MEDIUMTEXT,
-        nullable=True,
-    )
+    vehicle_registration_file: Mapped[str | None] = mapped_column(Text, nullable=True)
     vehicle_registration_expires_at: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
@@ -107,10 +103,7 @@ class DriverProfile(Base):
         default=DriverDocumentStatus.PENDING,
         nullable=False,
     )
-    vehicle_insurance_file: Mapped[str | None] = mapped_column(
-        MEDIUMTEXT,
-        nullable=True,
-    )
+    vehicle_insurance_file: Mapped[str | None] = mapped_column(Text, nullable=True)
     vehicle_insurance_expires_at: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
@@ -123,10 +116,7 @@ class DriverProfile(Base):
         default=DriverDocumentStatus.PENDING,
         nullable=False,
     )
-    technical_inspection_file: Mapped[str | None] = mapped_column(
-        MEDIUMTEXT,
-        nullable=True,
-    )
+    technical_inspection_file: Mapped[str | None] = mapped_column(Text, nullable=True)
     technical_inspection_expires_at: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,

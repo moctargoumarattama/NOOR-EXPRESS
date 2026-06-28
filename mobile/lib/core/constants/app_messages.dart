@@ -3,7 +3,7 @@ class AppMessages {
 
   // Erreurs réseau / API (génériques)
   static const apiOffline =
-      'Pas de connexion internet. Vérifiez votre réseau puis réessayez.';
+      'Impossible de joindre le backend Noor Express. Verifiez votre connexion ou l URL de l API.';
   static const apiTimeout =
       'Délai dépassé. La connexion est trop lente pour le moment.';
   static const apiServerUnavailable =

@@ -136,6 +136,12 @@ async def create_admin(session: AsyncSession, username: str, password: str) -> A
 
 
 async def login_admin(session: AsyncSession, username: str, password: str) -> str:
+    count_result = await session.execute(select(func.count(Admin.id)))
+    if count_result.scalar_one() == 0:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            Messages.ADMIN_NOT_INITIALIZED,
+        )
     result = await session.execute(select(Admin).where(Admin.username == username))
     admin = result.scalar_one_or_none()
     if admin is None or not bcrypt.checkpw(

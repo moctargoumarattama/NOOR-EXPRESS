@@ -12,7 +12,6 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.mysql import MEDIUMTEXT
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.database import Base
@@ -35,7 +34,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False, unique=True)
     name: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    profile_photo: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
+    profile_photo: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[UserRole] = mapped_column(SqlEnum(UserRole), nullable=False)
     refresh_token: Mapped[str | None] = mapped_column(String(255), nullable=True)
     fcm_token: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -66,7 +65,7 @@ class User(Base):
     vehicle_brand: Mapped[str | None] = mapped_column(String(100), nullable=True)
     vehicle_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     vehicle_color: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    vehicle_photo: Mapped[str | None] = mapped_column(MEDIUMTEXT, nullable=True)
+    vehicle_photo: Mapped[str | None] = mapped_column(Text, nullable=True)
     plate_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
     max_radius_km: Mapped[int | None] = mapped_column(Integer, nullable=True, default=5)
     last_known_lat: Mapped[float | None] = mapped_column(Float, nullable=True)
