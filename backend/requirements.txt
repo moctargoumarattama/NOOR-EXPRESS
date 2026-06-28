@@ -6,7 +6,7 @@ pydantic
 python-multipart
 websockets
 sqlalchemy
-asyncmy
+a2wsgi
 cryptography
 bcrypt
 python-dotenv
@@ -15,3 +15,4 @@ firebase-admin
 upstash-redis
 alembic
 Pillow
+aiosqlite

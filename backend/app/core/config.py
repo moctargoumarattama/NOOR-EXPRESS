@@ -3,9 +3,12 @@ from pathlib import Path
 from pydantic_settings import BaseSettings
 
 
+DEFAULT_SQLITE_DATABASE_URL = "sqlite+aiosqlite:///NOOREXPRESS.BD"
+
+
 class Settings(BaseSettings):
     ENV: str = "development"
-    DATABASE_URL: str
+    DATABASE_URL: str = DEFAULT_SQLITE_DATABASE_URL
     SECRET_KEY: str
     ADMIN_SECRET_KEY: str
     ENABLE_DEV_SIMULATIONS: bool = False

@@ -1,5 +1,6 @@
 .env
 firebase_credentials.json
+NOOREXPRESS.BD
 __pycache__/
 *.py[cod]
 .pytest_cache/
