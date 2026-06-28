@@ -14,6 +14,8 @@ class Base(DeclarativeBase):
 
 _backend_dir = Path(__file__).resolve().parents[2]
 _database_url = make_url(settings.DATABASE_URL)
+if settings.FORCE_SQLITE:
+    _database_url = make_url("sqlite+aiosqlite:///NOOREXPRESS.BD")
 if _database_url.get_backend_name() == "sqlite" and _database_url.database:
     database_path = Path(_database_url.database)
     if not database_path.is_absolute() and _database_url.database != ":memory:":

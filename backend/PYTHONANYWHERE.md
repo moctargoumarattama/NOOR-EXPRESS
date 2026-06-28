@@ -11,6 +11,7 @@ Ce projet peut tourner sur PythonAnywhere en mode temporaire, avec SQLite et san
 
 - Utiliser `backend/wsgi.py` comme point d'entrée
 - Le callable exposé est `application`
+- Ce fichier force SQLite même si un ancien `.env` distant pointe encore vers MySQL
 
 ## Dépendances
 
